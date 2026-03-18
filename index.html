@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>MAZZIE</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="toast-container" id="toast-container"></div>
+<div id="particles-layer" style="position:fixed;inset:0;pointer-events:none;z-index:50;"></div>
+
+<!-- CONNECTING -->
+<div id="connecting">
+  <div class="conn-logo">MAZZIE</div>
+  <div class="conn-spinner"></div>
+  <div id="conn-txt">CONNECTING…</div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth" class="screen hidden">
+  <div class="auth-screen-card">
+    <div class="auth-logo">MAZZIE</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="auth-tab-login"    onclick="authSwitchTab('login')">Sign In</button>
+      <button class="auth-tab"        id="auth-tab-reg"      onclick="authSwitchTab('register')">Register</button>
+    </div>
+    <div class="auth-heading" id="auth-heading">Welcome Back</div>
+    <div class="auth-sub"     id="auth-sub">Enter your name and PIN</div>
+    <div class="auth-form">
+      <div class="auth-field">
+        <div class="auth-lbl">Username</div>
+        <input class="auth-input" id="auth-name-input" maxlength="16" placeholder="YourName"
+          autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
+          oninput="authCheckName()" style="touch-action:auto;user-select:text;">
+        <div class="auth-name-check-row" id="auth-name-check-row" style="display:none;">
+          <span class="auth-name-status" id="auth-name-status"></span>
+        </div>
+      </div>
+      <div class="auth-field">
+        <div class="auth-lbl">PIN <span style="opacity:.5;font-size:9px;">(4+ digits)</span></div>
+        <input class="auth-input" id="auth-pin-input" type="password" inputmode="numeric"
+          maxlength="12" placeholder="••••"
+          autocomplete="off" spellcheck="false"
+          style="letter-spacing:6px;touch-action:auto;user-select:text;">
+      </div>
+    </div>
+    <div class="auth-err" id="auth-err"></div>
+    <button class="auth-submit-btn" id="auth-submit-btn" onclick="authSubmit()">Sign In →</button>
+    <div class="auth-note">Your name is globally unique across all players.</div>
+  </div>
+</div>
+
+<!-- MENU -->
+<div id="menu" class="screen hidden">
+  <div class="logo">MAZZIE</div>
+  <div class="tagline">Connect the numbers</div>
+  <div class="profile-card" onclick="openNameEdit()">
+    <div class="profile-ava-wrap">
+      <div class="profile-ava" id="menu-ava">?</div>
+      <div class="profile-lvl-badge" id="menu-lvl-badge-wrap"></div>
+    </div>
+    <div class="profile-info">
+      <div class="profile-name-row">
+        <div class="profile-name" id="menu-name">Racer</div>
+        <div class="profile-uid" id="menu-uid" style="display:none;"></div>
+      </div>
+      <div class="profile-rank" id="menu-rank">🌱 Newbie · 0 cleared</div>
+      <div class="profile-xp-row">
+        <div class="profile-xp-txt" id="menu-xp-txt">LVL 1</div>
+        <div class="xp-bar-wrap" style="flex:1;"><div class="xp-bar-fill" id="menu-xp-bar" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+      <div class="profile-edit-hint">Edit →</div>
+      <div class="menu-offline-badge" id="menu-offline-badge" style="display:none;">OFFLINE</div>
+    </div>
+  </div>
+  <button class="continue-btn hidden" id="continue-btn" onclick="continueGame()">
+    Continue <span id="continue-info"></span>
+  </button>
+  <div class="diff-grid">
+    <button class="diff-btn" onclick="startFresh('baby')">Baby</button>
+    <button class="diff-btn" onclick="startFresh('easy')">Easy</button>
+    <button class="diff-btn" onclick="startFresh('medium')">Medium</button>
+    <button class="diff-btn" onclick="startFresh('hard')">Hard</button>
+    <button class="diff-btn full" onclick="startFresh('expert')">⚡ Expert</button>
+  </div>
+  <button class="menu-battle-btn" onclick="show('battle-mode')">⚔ Battle Mode</button>
+  <button class="menu-logout-btn" onclick="logoutAccount()">Sign Out</button>
+</div>
+
+<!-- NAME EDIT -->
+<div id="name-edit" class="screen hidden">
+  <div class="name-card">
+    <h2>Change Username</h2>
+    <input class="name-input" id="name-input" maxlength="16" placeholder="NewUsername"
+      autocomplete="off" autocorrect="off" spellcheck="false"
+      oninput="onNameInputChange()" style="touch-action:auto;user-select:text;">
+    <div class="name-checking" id="name-checking"></div>
+    <div class="name-err" id="name-err"></div>
+    <div class="rank-preview">
+      <div class="rp-icon" id="rp-icon">🌱</div>
+      <div class="rp-info">
+        <div class="rp-rank" id="rp-rank">Newbie</div>
+        <div class="rp-desc" id="rp-desc">0 levels cleared</div>
+      </div>
+    </div>
+    <div class="name-actions">
+      <button class="b-btn secondary" onclick="cancelNameEdit()">Cancel</button>
+      <button class="b-btn primary" onclick="saveName()">Save →</button>
+    </div>
+  </div>
+</div>
+
+<!-- BATTLE MODE -->
+<div id="battle-mode" class="screen hidden">
+  <div class="bm-card">
+    <div class="bm-title">⚔ BATTLE</div>
+    <div class="bm-sub">Play against anyone</div>
+    <button class="bm-btn" onclick="openHostLobby()">🏠 Host a Room</button>
+    <button class="bm-btn red" onclick="show('join-screen')">🔗 Join a Room</button>
+    <button class="bm-back" onclick="show('menu')">← Back</button>
+  </div>
+</div>
+
+<!-- JOIN SCREEN -->
+<div id="join-screen" class="screen hidden">
+  <div class="join-card">
+    <h2>Join Room</h2>
+    <div class="code-wrap">
+      <div class="code-lbl">Enter the 4-letter room code</div>
+      <input class="code-input" id="join-input" maxlength="4" placeholder="ABCD"
+        autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <div class="join-status" id="join-status"></div>
+    <div class="join-actions">
+      <button class="b-btn secondary" onclick="show('battle-mode')">Back</button>
+      <button class="b-btn primary" onclick="doJoin()">Join →</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" class="screen hidden">
+  <div class="lob-card">
+    <h2 id="lob-title">Your Room</h2>
+    <div class="room-code-box" id="host-code-box">
+      <div class="rc-lbl">Share this code with friends</div>
+      <div class="rc-code-row">
+        <div class="rc-code" id="room-code-disp">----</div>
+        <button class="copy-code-btn" id="copy-code-btn" onclick="copyRoomCode()">⎘ Copy</button>
+      </div>
+    </div>
+    <div id="host-settings" style="width:100%;display:none;flex-direction:column;gap:11px;">
+      <div class="lbl">Difficulty</div>
+      <div class="bdiff-row">
+        <button class="bdiff-btn sel" onclick="pickDiff(this,'baby')">Baby</button>
+        <button class="bdiff-btn" onclick="pickDiff(this,'easy')">Easy</button>
+        <button class="bdiff-btn" onclick="pickDiff(this,'medium')">Medium</button>
+        <button class="bdiff-btn" onclick="pickDiff(this,'hard')">Hard</button>
+        <button class="bdiff-btn" onclick="pickDiff(this,'expert')">Expert</button>
+      </div>
+      <div class="rounds-row">
+        <div class="rounds-label">Rounds</div>
+        <div class="rounds-stepper">
+          <button class="rounds-btn" onclick="changeRounds(-1)">−</button>
+          <div class="rounds-val" id="rounds-disp">3</div>
+          <button class="rounds-btn" onclick="changeRounds(1)">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="lbl">Players — <span id="p-count">1</span></div>
+    <div class="players-box" id="players-box"></div>
+    <div class="wait-msg" id="wait-msg">Waiting for players <span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="status-line" id="lob-status"></div>
+    <div class="b-actions">
+      <button class="b-btn secondary" onclick="leaveLobby()">Leave</button>
+      <button class="b-btn primary" id="start-btn" style="display:none;" onclick="hostStart()" disabled>Start!</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen hidden">
+  <div class="top-bar">
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <div class="diff-label" id="diff-label">—</div>
+      <div id="battle-pill">⚔ BATTLE</div>
+    </div>
+    <div id="timer">00:00</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+      <div class="lvl-badge" id="lvl-badge">LVL 1</div>
+      <div class="round-pill" id="round-pill">R1/3</div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <svg id="grid-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="grid"></div>
+  </div>
+  <div class="bottom-bar">
+    <button class="ctrl-btn" onclick="resetPath()">↩ Reset</button>
+    <button class="chat-btn" id="game-chat-btn" onclick="openChat()" title="Chat" style="display:none;">💬</button>
+    <button class="ctrl-btn acc" id="battle-game-btn" onclick="show('battle-mode')" style="display:none;">⚔ Battle</button>
+    <button class="ctrl-btn" onclick="goMenu()">Menu</button>
+  </div>
+</div>
+
+<!-- WIN (solo) -->
+<div id="win" class="screen hidden">
+  <div class="win-card">
+    <div class="win-title">WIN!</div>
+    <div class="win-sub">Level cleared</div>
+    <div class="win-time" id="win-time">00:00</div>
+    <div class="win-xp-row" id="win-xp-row"></div>
+    <button class="next-btn" id="next-btn" onclick="nextLevel()">Next Level →</button>
+    <button class="b-btn secondary" style="width:100%;margin-top:4px;" onclick="goMenu()">Menu</button>
+  </div>
+</div>
+
+<!-- SPECTATE -->
+<div id="spectate" class="screen hidden">
+  <div class="spec-card">
+    <div class="spec-title">👁 SPEC</div>
+    <div class="spec-sub">You finished!</div>
+    <div class="spec-round-badge" id="spec-round-badge">Round 1 of 3</div>
+    <div class="spec-live-wrap" id="spec-live-wrap" style="display:none;">
+      <div class="spec-live-label"><span class="spec-live-dot"></span><span id="spec-live-name">Player</span>'s board</div>
+      <div class="spec-mini-grid-wrap"><div class="spec-mini-grid" id="spec-mini-grid"></div></div>
+    </div>
+    <div class="spec-list" id="spec-list"></div>
+  </div>
+  <div class="spec-nav-row">
+    <button class="spec-nav-arrow" id="spec-prev-btn" onclick="specNavigate(-1)">◀</button>
+    <div class="spec-viewer-info">
+      <div class="spec-viewer-name" id="spec-viewer-name">All Players</div>
+      <div class="spec-viewer-sub" id="spec-viewer-sub">Tap a player to watch live</div>
+    </div>
+    <button class="spec-nav-arrow" id="spec-next-btn" onclick="specNavigate(1)">▶</button>
+  </div>
+  <div style="position:fixed;top:20px;right:20px;z-index:20;">
+    <button class="chat-btn" id="spec-chat-btn" onclick="openChat()">💬</button>
+  </div>
+</div>
+
+<!-- ROUND RESULTS -->
+<div id="round-results" class="screen hidden">
+  <div class="rr-card">
+    <div class="rr-title" id="rr-title">Round 1 of 3</div>
+    <div class="rr-sub" id="rr-sub">Round Complete</div>
+    <div class="rr-list" id="rr-list"></div>
+    <div class="rr-countdown" id="rr-countdown" style="display:none;">Next round in<span id="rr-countdown-num">10</span></div>
+    <button class="b-btn primary" id="next-round-btn" style="display:none;" onclick="hostNextRound()">Next Round →</button>
+    <div class="wait-msg" id="waiting-next" style="display:none;">Waiting for host <span class="dots"><i></i><i></i><i></i></span></div>
+    <button class="b-btn secondary" id="final-leaderboard-btn" style="display:none;" onclick="hostShowFinal()">Final Leaderboard →</button>
+  </div>
+</div>
+
+<!-- FINAL RESULTS -->
+<div id="final-results" class="screen hidden">
+  <div class="fin-card">
+    <div class="fin-title">🏆 FINISH!</div>
+    <div class="fin-sub">Final Standings</div>
+    <div class="fin-winner" id="fin-winner"></div>
+    <div class="fin-list" id="fin-list"></div>
+    <button class="b-btn primary" style="width:100%;margin-top:8px;" onclick="goMenu()">← Back to Menu</button>
+    <button class="b-btn secondary" style="width:100%;" id="fin-play-again-btn" onclick="playAgain()" style="display:none;">Play Again ↺</button>
+    <div class="wait-msg" id="fin-wait-host" style="display:none;">Waiting for host <span class="dots"><i></i><i></i><i></i></span></div>
+  </div>
+</div>
+
+<!-- CHAT OVERLAY -->
+<div id="chat-overlay" class="hidden">
+  <div style="flex:1;" onclick="closeChat()"></div>
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="chat-title">💬 Battle Chat</div>
+      <button class="chat-close" onclick="closeChat()">✕</button>
+    </div>
+    <div class="chat-msgs" id="chat-msgs"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" maxlength="80" placeholder="Say something…"
+        autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="chat-send-btn" onclick="sendChat()">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN AUTH -->
+<div id="admin-auth" class="adm-hidden">
+  <div class="auth-card">
+    <div class="auth-title">🔐 Admin</div>
+    <div class="auth-sub">Enter PIN to continue</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="auth-err" id="auth-err"></div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key wide" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <button class="auth-cancel" onclick="adminClose()">Cancel</button>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="admin-panel" class="adm-hidden">
+  <div class="adm-scroll">
+    <div class="adm-header">
+      <div class="adm-logo">⚙ Admin</div>
+      <div class="adm-badge" id="adm-mode-badge">SOLO</div>
+      <button class="adm-close-btn" onclick="adminClose()">✕ Close</button>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">Status</div>
+      <div class="adm-status-bar">
+        <div class="adm-stat"><div class="adm-stat-val" id="adm-lvl-disp">—</div><div class="adm-stat-lbl">Level</div></div>
+        <div class="adm-stat"><div class="adm-stat-val" id="adm-timer-disp">—</div><div class="adm-stat-lbl">Timer</div></div>
+        <div class="adm-stat"><div class="adm-stat-val" id="adm-players-disp">—</div><div class="adm-stat-lbl">Players</div></div>
+      </div>
+    </div>
+    <div class="adm-section" id="adm-target-section" style="display:none;">
+      <div class="adm-section-title">Target Player</div>
+      <div class="adm-target-row" id="adm-target-row"></div>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">Set Level</div>
+      <div class="adm-input-row">
+        <input class="adm-input" id="adm-lvl-input" type="number" min="1" max="999" value="1" style="touch-action:auto;user-select:text;">
+        <button class="adm-input-apply" onclick="adminSetLevel()">Set</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="adm-btn green" style="flex:1" onclick="adminDeltaLevel(-1)"><span class="adm-icon">◀</span><span class="adm-lbl">Prev</span></button>
+        <button class="adm-btn green" style="flex:1" onclick="adminDeltaLevel(1)"><span class="adm-icon">▶</span><span class="adm-lbl">Next</span></button>
+        <button class="adm-btn green" style="flex:1" onclick="adminDeltaLevel(5)"><span class="adm-icon">⏭</span><span class="adm-lbl">Skip 5</span></button>
+      </div>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">XP / Stats</div>
+      <div class="adm-grid">
+        <button class="adm-btn gold" onclick="adminAddXp(100)"><span class="adm-icon">⬡</span><span class="adm-lbl">+100 XP</span></button>
+        <button class="adm-btn gold" onclick="adminAddXp(500)"><span class="adm-icon">⬡⬡</span><span class="adm-lbl">+500 XP</span></button>
+        <button class="adm-btn danger" onclick="adminResetXp()"><span class="adm-icon">↺</span><span class="adm-lbl">Reset XP</span></button>
+        <button class="adm-btn gold" onclick="adminAddCleared(10)"><span class="adm-icon">🏅</span><span class="adm-lbl">+10 Clears</span></button>
+      </div>
+      <div class="adm-input-row" style="margin-top:8px;">
+        <input class="adm-input" id="adm-xp-input" type="number" min="0" placeholder="XP amount" style="touch-action:auto;user-select:text;">
+        <button class="adm-input-apply" onclick="adminSetXpVal()">Set XP</button>
+      </div>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">Timer</div>
+      <div class="adm-grid cols3">
+        <button class="adm-btn" onclick="adminFreezeTimer()"><span class="adm-icon">⏸</span><span class="adm-lbl">Freeze</span></button>
+        <button class="adm-btn" onclick="adminResumeTimer()"><span class="adm-icon">▶</span><span class="adm-lbl">Resume</span></button>
+        <button class="adm-btn" onclick="adminResetTimer()"><span class="adm-icon">↺</span><span class="adm-lbl">Reset</span></button>
+        <button class="adm-btn" onclick="adminAddTime(-30)"><span class="adm-icon">⏪</span><span class="adm-lbl">−30s</span></button>
+        <button class="adm-btn" onclick="adminAddTime(30)"><span class="adm-icon">⏩</span><span class="adm-lbl">+30s</span></button>
+        <button class="adm-btn" onclick="adminAddTime(60)"><span class="adm-icon">⏭</span><span class="adm-lbl">+60s</span></button>
+      </div>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">Board</div>
+      <div class="adm-grid">
+        <button class="adm-btn green" onclick="adminAutoSolve()"><span class="adm-icon">⚡</span><span class="adm-lbl">Auto-Solve</span></button>
+        <button class="adm-btn" onclick="adminNewBoard()"><span class="adm-icon">🔀</span><span class="adm-lbl">New Puzzle</span></button>
+        <button class="adm-btn" onclick="adminRevealPath()"><span class="adm-icon">👁</span><span class="adm-lbl">Hint Path</span></button>
+        <button class="adm-btn danger" onclick="adminResetBoard()"><span class="adm-icon">✕</span><span class="adm-lbl">Clear Path</span></button>
+      </div>
+    </div>
+    <div class="adm-section" id="adm-battle-cmds" style="display:none;">
+      <div class="adm-section-title">Battle Commands</div>
+      <div class="adm-grid">
+        <button class="adm-btn green" onclick="adminForceWin()"><span class="adm-icon">🏆</span><span class="adm-lbl">Force Win</span></button>
+        <button class="adm-btn danger" onclick="adminForceLose()"><span class="adm-icon">💀</span><span class="adm-lbl">Force Lose</span></button>
+        <button class="adm-btn danger" onclick="adminFreezeTarget()"><span class="adm-icon">🧊</span><span class="adm-lbl">Freeze Target</span></button>
+        <button class="adm-btn" onclick="adminUnfreezeAll()"><span class="adm-icon">🔥</span><span class="adm-lbl">Unfreeze All</span></button>
+        <button class="adm-btn danger" onclick="adminKick()"><span class="adm-icon">👢</span><span class="adm-lbl">Kick Target</span></button>
+        <button class="adm-btn gold" onclick="adminSkipRound()"><span class="adm-icon">⏭</span><span class="adm-lbl">Skip Round</span></button>
+        <button class="adm-btn green" onclick="adminResetAllPaths()"><span class="adm-icon">↩</span><span class="adm-lbl">Reset Paths</span></button>
+        <button class="adm-btn gold" onclick="adminGrantXpToTarget()"><span class="adm-icon">⬡</span><span class="adm-lbl">Grant XP</span></button>
+      </div>
+      <!-- Grant XP amount -->
+      <div class="adm-input-row" style="margin-top:8px;">
+        <input class="adm-input" id="adm-grant-xp-input" type="number" min="1" value="50" placeholder="XP to grant" style="touch-action:auto;user-select:text;">
+        <button class="adm-input-apply" onclick="adminGrantXpToTarget()">Grant →</button>
+      </div>
+      <!-- Difficulty selector -->
+      <div class="adm-input-row" style="margin-top:8px;">
+        <select class="adm-input" id="adm-diff-select" style="touch-action:auto;">
+          <option value="baby">Baby</option>
+          <option value="easy" selected>Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="expert">Expert</option>
+        </select>
+        <button class="adm-input-apply" onclick="adminSetDiff()">Set Diff</button>
+      </div>
+      <!-- Announce -->
+      <div class="adm-input-row" style="margin-top:8px;">
+        <input class="adm-input" id="adm-msg-input" type="text" maxlength="60" placeholder="Announcement…" style="font-size:13px;touch-action:auto;user-select:text;">
+        <button class="adm-input-apply" onclick="adminSendAnnounce()">📢</button>
+      </div>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">Danger Zone</div>
+      <div class="adm-grid">
+        <button class="adm-btn danger" onclick="adminResetAll()"><span class="adm-icon">🗑</span><span class="adm-lbl">Wipe Saves</span></button>
+        <button class="adm-btn danger" onclick="adminChangePIN()"><span class="adm-icon">🔑</span><span class="adm-lbl">Change PIN</span></button>
+      </div>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">Action Log</div>
+      <div class="adm-log" id="adm-log"><div class="adm-log-entry info">Admin ready. Press F2 to open.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts load in dependency order -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/save.js"></script>
+<script src="js/account.js"></script>
+<script src="js/game.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/ui.js"></script>
+
+</body>
+</html>
