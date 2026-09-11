@@ -1,4 +1,725 @@
 {
-  "icons": [],
+  "icons": [
+    {
+      "id": "cr-cat",
+      "name": "Cat",
+      "file": "cr-cat.png",
+      "lvl": 2
+    },
+    {
+      "id": "cr-pup",
+      "name": "Pup",
+      "file": "cr-pup.png",
+      "lvl": 2
+    },
+    {
+      "id": "cr-fox",
+      "name": "Fox",
+      "file": "cr-fox.png",
+      "lvl": 3
+    },
+    {
+      "id": "cr-panda",
+      "name": "Panda",
+      "file": "cr-panda.png",
+      "lvl": 4
+    },
+    {
+      "id": "cr-frog",
+      "name": "Frog",
+      "file": "cr-frog.png",
+      "lvl": 5
+    },
+    {
+      "id": "cr-owl",
+      "name": "Owl",
+      "file": "cr-owl.png",
+      "lvl": 6
+    },
+    {
+      "id": "cr-bunny",
+      "name": "Bunny",
+      "file": "cr-bunny.png",
+      "lvl": 7
+    },
+    {
+      "id": "cr-bear",
+      "name": "Bear",
+      "file": "cr-bear.png",
+      "lvl": 8
+    },
+    {
+      "id": "cr-penguin",
+      "name": "Penguin",
+      "file": "cr-penguin.png",
+      "lvl": 9
+    },
+    {
+      "id": "cr-koala",
+      "name": "Koala",
+      "file": "cr-koala.png",
+      "lvl": 10
+    },
+    {
+      "id": "cr-tiger",
+      "name": "Tiger",
+      "file": "cr-tiger.png",
+      "lvl": 12
+    },
+    {
+      "id": "cr-lion",
+      "name": "Lion",
+      "file": "cr-lion.png",
+      "lvl": 14
+    },
+    {
+      "id": "cr-monkey",
+      "name": "Monkey",
+      "file": "cr-monkey.png",
+      "lvl": 16
+    },
+    {
+      "id": "cr-piggy",
+      "name": "Piggy",
+      "file": "cr-piggy.png",
+      "lvl": 18
+    },
+    {
+      "id": "cr-duck",
+      "name": "Duck",
+      "file": "cr-duck.png",
+      "lvl": 20
+    },
+    {
+      "id": "cr-hedgehog",
+      "name": "Hedgehog",
+      "file": "cr-hedgehog.png",
+      "lvl": 22
+    },
+    {
+      "id": "cr-raccoon",
+      "name": "Raccoon",
+      "file": "cr-raccoon.png",
+      "lvl": 25
+    },
+    {
+      "id": "cr-sloth",
+      "name": "Sloth",
+      "file": "cr-sloth.png",
+      "lvl": 28
+    },
+    {
+      "id": "cr-axolotl",
+      "name": "Axolotl",
+      "file": "cr-axolotl.png",
+      "lvl": 32
+    },
+    {
+      "id": "cr-shark",
+      "name": "Shark",
+      "file": "cr-shark.png",
+      "lvl": 36
+    },
+    {
+      "id": "cr-turtle",
+      "name": "Turtle",
+      "file": "cr-turtle.png",
+      "lvl": 40
+    },
+    {
+      "id": "cr-bee",
+      "name": "Bee",
+      "file": "cr-bee.png",
+      "lvl": 45
+    },
+    {
+      "id": "cr-chick",
+      "name": "Chick",
+      "file": "cr-chick.png",
+      "lvl": 50
+    },
+    {
+      "id": "cr-wolf",
+      "name": "Wolf",
+      "file": "cr-wolf.png",
+      "lvl": 60
+    },
+    {
+      "id": "my-dragon",
+      "name": "Dragon",
+      "file": "my-dragon.png",
+      "lvl": 5
+    },
+    {
+      "id": "my-griffin",
+      "name": "Griffin",
+      "file": "my-griffin.png",
+      "lvl": 10
+    },
+    {
+      "id": "my-kraken",
+      "name": "Kraken",
+      "file": "my-kraken.png",
+      "lvl": 12
+    },
+    {
+      "id": "my-yeti",
+      "name": "Yeti",
+      "file": "my-yeti.png",
+      "lvl": 14
+    },
+    {
+      "id": "my-golem",
+      "name": "Golem",
+      "file": "my-golem.png",
+      "lvl": 16
+    },
+    {
+      "id": "my-witch",
+      "name": "Witch",
+      "file": "my-witch.png",
+      "lvl": 20
+    },
+    {
+      "id": "my-knight",
+      "name": "Knight",
+      "file": "my-knight.png",
+      "lvl": 22
+    },
+    {
+      "id": "my-ninja",
+      "name": "Ninja",
+      "file": "my-ninja.png",
+      "lvl": 24
+    },
+    {
+      "id": "my-samurai",
+      "name": "Samurai",
+      "file": "my-samurai.png",
+      "lvl": 26
+    },
+    {
+      "id": "my-pirate",
+      "name": "Pirate",
+      "file": "my-pirate.png",
+      "lvl": 28
+    },
+    {
+      "id": "my-viking",
+      "name": "Viking",
+      "file": "my-viking.png",
+      "lvl": 30
+    },
+    {
+      "id": "my-vampire",
+      "name": "Vampire",
+      "file": "my-vampire.png",
+      "lvl": 33
+    },
+    {
+      "id": "my-werewolf",
+      "name": "Werewolf",
+      "file": "my-werewolf.png",
+      "lvl": 36
+    },
+    {
+      "id": "my-mummy",
+      "name": "Mummy",
+      "file": "my-mummy.png",
+      "lvl": 40
+    },
+    {
+      "id": "my-zombie",
+      "name": "Zombie",
+      "file": "my-zombie.png",
+      "lvl": 44
+    },
+    {
+      "id": "my-spirit",
+      "name": "Spirit",
+      "file": "my-spirit.png",
+      "lvl": 48
+    },
+    {
+      "id": "my-imp",
+      "name": "Imp",
+      "file": "my-imp.png",
+      "lvl": 52
+    },
+    {
+      "id": "my-fairy",
+      "name": "Fairy",
+      "file": "my-fairy.png",
+      "lvl": 56
+    },
+    {
+      "id": "my-elf",
+      "name": "Elf",
+      "file": "my-elf.png",
+      "lvl": 60
+    },
+    {
+      "id": "my-troll",
+      "name": "Troll",
+      "file": "my-troll.png",
+      "lvl": 70
+    },
+    {
+      "id": "my-minotaur",
+      "name": "Minotaur",
+      "file": "my-minotaur.png",
+      "lvl": 85
+    },
+    {
+      "id": "cy-bot",
+      "name": "Bot",
+      "file": "cy-bot.png",
+      "lvl": 4
+    },
+    {
+      "id": "cy-android",
+      "name": "Android",
+      "file": "cy-android.png",
+      "lvl": 6
+    },
+    {
+      "id": "cy-mech",
+      "name": "Mech",
+      "file": "cy-mech.png",
+      "lvl": 8
+    },
+    {
+      "id": "cy-drone",
+      "name": "Drone",
+      "file": "cy-drone.png",
+      "lvl": 10
+    },
+    {
+      "id": "cy-alien",
+      "name": "Alien",
+      "file": "cy-alien.png",
+      "lvl": 12
+    },
+    {
+      "id": "cy-ufo",
+      "name": "UFO",
+      "file": "cy-ufo.png",
+      "lvl": 14
+    },
+    {
+      "id": "cy-astronaut",
+      "name": "Astronaut",
+      "file": "cy-astronaut.png",
+      "lvl": 16
+    },
+    {
+      "id": "cy-cyborg",
+      "name": "Cyborg",
+      "file": "cy-cyborg.png",
+      "lvl": 18
+    },
+    {
+      "id": "cy-hacker",
+      "name": "Hacker",
+      "file": "cy-hacker.png",
+      "lvl": 20
+    },
+    {
+      "id": "cy-ai-core",
+      "name": "AI Core",
+      "file": "cy-ai-core.png",
+      "lvl": 22
+    },
+    {
+      "id": "cy-space-cat",
+      "name": "Space Cat",
+      "file": "cy-space-cat.png",
+      "lvl": 24
+    },
+    {
+      "id": "cy-laser-bot",
+      "name": "Laser Bot",
+      "file": "cy-laser-bot.png",
+      "lvl": 26
+    },
+    {
+      "id": "cy-rover",
+      "name": "Rover",
+      "file": "cy-rover.png",
+      "lvl": 28
+    },
+    {
+      "id": "cy-satellite",
+      "name": "Satellite",
+      "file": "cy-satellite.png",
+      "lvl": 30
+    },
+    {
+      "id": "cy-rocket",
+      "name": "Rocket",
+      "file": "cy-rocket.png",
+      "lvl": 33
+    },
+    {
+      "id": "cy-nebula",
+      "name": "Nebula",
+      "file": "cy-nebula.png",
+      "lvl": 36
+    },
+    {
+      "id": "cy-void",
+      "name": "Void",
+      "file": "cy-void.png",
+      "lvl": 40
+    },
+    {
+      "id": "cy-comet",
+      "name": "Comet",
+      "file": "cy-comet.png",
+      "lvl": 44
+    },
+    {
+      "id": "cy-planet",
+      "name": "Planet",
+      "file": "cy-planet.png",
+      "lvl": 48
+    },
+    {
+      "id": "cy-moon-bun",
+      "name": "Moon Bun",
+      "file": "cy-moon-bun.png",
+      "lvl": 52
+    },
+    {
+      "id": "cy-glitch",
+      "name": "Glitch",
+      "file": "cy-glitch.png",
+      "lvl": 58
+    },
+    {
+      "id": "cy-pixel-spook",
+      "name": "Pixel Spook",
+      "file": "cy-pixel-spook.png",
+      "lvl": 64
+    },
+    {
+      "id": "cy-neon-skull",
+      "name": "Neon Skull",
+      "file": "cy-neon-skull.png",
+      "lvl": 72
+    },
+    {
+      "id": "cy-overlord",
+      "name": "Overlord",
+      "file": "cy-overlord.png",
+      "lvl": 90
+    },
+    {
+      "id": "sn-donut",
+      "name": "Donut",
+      "file": "sn-donut.png",
+      "lvl": 2
+    },
+    {
+      "id": "sn-pizza",
+      "name": "Pizza",
+      "file": "sn-pizza.png",
+      "lvl": 3
+    },
+    {
+      "id": "sn-burger",
+      "name": "Burger",
+      "file": "sn-burger.png",
+      "lvl": 4
+    },
+    {
+      "id": "sn-taco",
+      "name": "Taco",
+      "file": "sn-taco.png",
+      "lvl": 5
+    },
+    {
+      "id": "sn-sushi",
+      "name": "Sushi",
+      "file": "sn-sushi.png",
+      "lvl": 6
+    },
+    {
+      "id": "sn-ramen",
+      "name": "Ramen",
+      "file": "sn-ramen.png",
+      "lvl": 7
+    },
+    {
+      "id": "sn-boba",
+      "name": "Boba",
+      "file": "sn-boba.png",
+      "lvl": 8
+    },
+    {
+      "id": "sn-ice-cream",
+      "name": "Ice Cream",
+      "file": "sn-ice-cream.png",
+      "lvl": 9
+    },
+    {
+      "id": "sn-cupcake",
+      "name": "Cupcake",
+      "file": "sn-cupcake.png",
+      "lvl": 10
+    },
+    {
+      "id": "sn-cookie",
+      "name": "Cookie",
+      "file": "sn-cookie.png",
+      "lvl": 12
+    },
+    {
+      "id": "sn-croissant",
+      "name": "Croissant",
+      "file": "sn-croissant.png",
+      "lvl": 14
+    },
+    {
+      "id": "sn-hot-dog",
+      "name": "Hot Dog",
+      "file": "sn-hot-dog.png",
+      "lvl": 16
+    },
+    {
+      "id": "sn-fries",
+      "name": "Fries",
+      "file": "sn-fries.png",
+      "lvl": 18
+    },
+    {
+      "id": "sn-popcorn",
+      "name": "Popcorn",
+      "file": "sn-popcorn.png",
+      "lvl": 20
+    },
+    {
+      "id": "sn-melon",
+      "name": "Melon",
+      "file": "sn-melon.png",
+      "lvl": 22
+    },
+    {
+      "id": "sn-avocado",
+      "name": "Avocado",
+      "file": "sn-avocado.png",
+      "lvl": 25
+    },
+    {
+      "id": "sn-banana",
+      "name": "Banana",
+      "file": "sn-banana.png",
+      "lvl": 28
+    },
+    {
+      "id": "sn-berry",
+      "name": "Berry",
+      "file": "sn-berry.png",
+      "lvl": 31
+    },
+    {
+      "id": "sn-cherries",
+      "name": "Cherries",
+      "file": "sn-cherries.png",
+      "lvl": 34
+    },
+    {
+      "id": "sn-egg",
+      "name": "Egg",
+      "file": "sn-egg.png",
+      "lvl": 42
+    },
+    {
+      "id": "sn-toast",
+      "name": "Toast",
+      "file": "sn-toast.png",
+      "lvl": 46
+    },
+    {
+      "id": "sn-cheese",
+      "name": "Cheese",
+      "file": "sn-cheese.png",
+      "lvl": 50
+    },
+    {
+      "id": "sn-pretzel",
+      "name": "Pretzel",
+      "file": "sn-pretzel.png",
+      "lvl": 55
+    },
+    {
+      "id": "ar-dice",
+      "name": "Dice",
+      "file": "ar-dice.png",
+      "lvl": 3
+    },
+    {
+      "id": "ar-joystick",
+      "name": "Joystick",
+      "file": "ar-joystick.png",
+      "lvl": 5
+    },
+    {
+      "id": "ar-gamepad",
+      "name": "Gamepad",
+      "file": "ar-gamepad.png",
+      "lvl": 7
+    },
+    {
+      "id": "ar-trophy",
+      "name": "Trophy",
+      "file": "ar-trophy.png",
+      "lvl": 9
+    },
+    {
+      "id": "ar-crown",
+      "name": "Crown",
+      "file": "ar-crown.png",
+      "lvl": 11
+    },
+    {
+      "id": "ar-gem",
+      "name": "Gem",
+      "file": "ar-gem.png",
+      "lvl": 13
+    },
+    {
+      "id": "ar-coin",
+      "name": "Coin",
+      "file": "ar-coin.png",
+      "lvl": 15
+    },
+    {
+      "id": "ar-key",
+      "name": "Key",
+      "file": "ar-key.png",
+      "lvl": 17
+    },
+    {
+      "id": "ar-padlock",
+      "name": "Padlock",
+      "file": "ar-padlock.png",
+      "lvl": 19
+    },
+    {
+      "id": "ar-compass",
+      "name": "Compass",
+      "file": "ar-compass.png",
+      "lvl": 21
+    },
+    {
+      "id": "ar-treasure",
+      "name": "Treasure",
+      "file": "ar-treasure.png",
+      "lvl": 23
+    },
+    {
+      "id": "ar-hourglass",
+      "name": "Hourglass",
+      "file": "ar-hourglass.png",
+      "lvl": 25
+    },
+    {
+      "id": "ar-stopwatch",
+      "name": "Stopwatch",
+      "file": "ar-stopwatch.png",
+      "lvl": 27
+    },
+    {
+      "id": "ar-thunder",
+      "name": "Thunder",
+      "file": "ar-thunder.png",
+      "lvl": 30
+    },
+    {
+      "id": "ar-heart",
+      "name": "Heart",
+      "file": "ar-heart.png",
+      "lvl": 33
+    },
+    {
+      "id": "ar-superstar",
+      "name": "Superstar",
+      "file": "ar-superstar.png",
+      "lvl": 36
+    },
+    {
+      "id": "ar-shield",
+      "name": "Shield",
+      "file": "ar-shield.png",
+      "lvl": 40
+    },
+    {
+      "id": "ar-sword",
+      "name": "Sword",
+      "file": "ar-sword.png",
+      "lvl": 44
+    },
+    {
+      "id": "ar-bomb",
+      "name": "Bomb",
+      "file": "ar-bomb.png",
+      "lvl": 48
+    },
+    {
+      "id": "ar-potion",
+      "name": "Potion",
+      "file": "ar-potion.png",
+      "lvl": 52
+    },
+    {
+      "id": "ar-magnet",
+      "name": "Magnet",
+      "file": "ar-magnet.png",
+      "lvl": 56
+    },
+    {
+      "id": "ar-maze",
+      "name": "Maze",
+      "file": "ar-maze.png",
+      "lvl": 62
+    },
+    {
+      "id": "ar-cube",
+      "name": "Cube",
+      "file": "ar-cube.png",
+      "lvl": 70
+    },
+    {
+      "id": "ar-knight",
+      "name": "Knight",
+      "file": "ar-knight.png",
+      "lvl": 80
+    },
+    {
+      "id": "my-unicorn",
+      "name": "Unicorn",
+      "file": "my-unicorn.png",
+      "lvl": 6
+    },
+    {
+      "id": "my-phoenix",
+      "name": "Phoenix",
+      "file": "my-phoenix.png",
+      "lvl": 8
+    },
+    {
+      "id": "my-wizard",
+      "name": "Wizard",
+      "file": "my-wizard.png",
+      "lvl": 18
+    },
+    {
+      "id": "sn-pineapple",
+      "name": "Pineapple",
+      "file": "sn-pineapple.png",
+      "lvl": 38
+    }
+  ],
   "frames": []
 }

@@ -233,6 +233,9 @@ function cachePos() {
   const svg = document.getElementById('grid-svg');
   svg.setAttribute('width', wr.width); svg.setAttribute('height', wr.height);
   svg.setAttribute('viewBox', `0 0 ${wr.width} ${wr.height}`);
+  svg.style.setProperty('--cs', cellSize + 'px');   // trail thickness follows the cell size
+  const g = document.getElementById('trail-grad');
+  if (g) { g.setAttribute('x1', boardOffX); g.setAttribute('y1', boardOffY); g.setAttribute('x2', boardOffX + gr.width); g.setAttribute('y2', boardOffY + gr.height); paintTrailGradient(); }
 }
 
 function nbrs(i) {
@@ -361,7 +364,7 @@ function push(i, batch) {
   const el = cells[i];
   el.classList.add('active');
   if (v > 1) { el.classList.add('node-hit'); setTimeout(() => el.classList.remove('node-hit'), 350); sfx('node'); buzz(12); }
-  else sfx('step');
+  else sfxStep(pathIndices.length);
   if (pickupMap.has(i)) collectPickup(i);
   if (!batch) afterPathChange();
 }
@@ -420,12 +423,24 @@ document.addEventListener('keydown', e => {
 
 // ── Path drawing (one persistent SVG, geometry cached) ──
 const SVGNS = 'http://www.w3.org/2000/svg';
+// Trail = neon tube: blurred glow + coloured body + bright core (+ travelling sparks / head crackle)
 function initSvg() {
   const svg = document.getElementById('grid-svg');
-  svg.innerHTML = `<defs><linearGradient id="rainbow-grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ff4d6a"/><stop offset=".25" stop-color="#ffd700"/><stop offset=".5" stop-color="#2dff7f"/>
-      <stop offset=".75" stop-color="#4dfffe"/><stop offset="1" stop-color="#c084fc"/></linearGradient></defs>
-    <path id="p-glow" class="p-glow"/><path id="p-line" class="p-line"/><g id="p-hint"></g>`;
+  svg.innerHTML = `<defs>
+      <linearGradient id="trail-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="400" y2="400"></linearGradient>
+      <filter id="trail-blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5"/></filter>
+    </defs>
+    <path id="p-glow" class="p-glow"/><path id="p-line" class="p-line"/><path id="p-core" class="p-core"/>
+    <path id="p-flow" class="p-flow"/>
+    <g id="p-head" class="p-head"><circle r="1"/><path d="M-1.8 0H1.8M0 -1.8V1.8M-1.2 -1.2L1.2 1.2M1.2 -1.2L-1.2 1.2"/></g>
+    <g id="p-hint"></g>`;
+  paintTrailGradient();
+}
+function paintTrailGradient() {
+  const g = document.getElementById('trail-grad'); if (!g || typeof currentTrail === 'undefined') return;
+  const cx = (+g.getAttribute('x1') + +g.getAttribute('x2')) / 2, cy = (+g.getAttribute('y1') + +g.getAttribute('y2')) / 2;
+  const spin = currentTrail.spin ? `<animateTransform attributeName="gradientTransform" type="rotate" from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="4s" repeatCount="indefinite"/>` : '';
+  g.innerHTML = trailStops(currentTrail) + spin;
 }
 function cellCenter(idx) {
   const col = idx % cols, row = Math.floor(idx / cols);
@@ -443,9 +458,13 @@ function redrawPath() {
   requestAnimationFrame(() => {
     _drawQueued = false;
     const d = pathD(pathIndices);
-    const g = document.getElementById('p-glow'), l = document.getElementById('p-line');
-    if (g) g.setAttribute('d', d);
-    if (l) l.setAttribute('d', d);
+    ['p-glow', 'p-line', 'p-core', 'p-flow'].forEach(id => { const el = document.getElementById(id); if (el) el.setAttribute('d', d); });
+    const head = document.getElementById('p-head');
+    if (head) {
+      const h = headIdx();
+      if (h >= 0 && pathIndices.length > 1) { const p = cellCenter(h); head.setAttribute('transform', `translate(${p.x},${p.y}) scale(${cellSize * 0.2})`); head.style.display = ''; }
+      else head.style.display = 'none';
+    }
   });
 }
 function clearSvg() { const h = document.getElementById('p-hint'); if (h) h.innerHTML = ''; }
@@ -535,6 +554,7 @@ function onWin() {
   if (battleActive) {
     amSpectating = true; spawnParticles();
     addXp(DIFF_XP[battleDiff] || 20);
+    addCoins(Math.ceil(coinsForWin(battleDiff) / 2));
     if (isHost) { hostRegisterFinish(sec, time); showSpectateScreen(time); }
     else {
       if (hostConn && hostConn.open)
@@ -570,9 +590,11 @@ function onWin() {
                      : `<div class="win-best">Best ${fmtMs(prevBest)}</div>`;
   }
   const xpRes = addXp(total);
+  const coinsWon = coinsForWin(currentDiff, speed) + (dailyMode && !s.daily?.[todayKey()] ? 20 : 0);
+  addCoins(coinsWon);
   updateMenuProfile();
   document.getElementById('win-time').innerText = time;
-  document.getElementById('win-xp-row').innerHTML = `<span class="xp-gain">+${xpRes.gained} XP</span>${bonusTxt}`;
+  document.getElementById('win-xp-row').innerHTML = `<span class="xp-gain">+${xpRes.gained} XP</span><span class="coin-gain">${coinHtml('+' + coinsWon)}</span>${bonusTxt}`;
   document.getElementById('win-best').innerHTML = bestHtml;
   const nb = document.getElementById('next-btn');
   nb.style.display = dailyMode ? 'none' : 'block';

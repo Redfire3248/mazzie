@@ -828,7 +828,13 @@ function showFinalResults() {
   // Placement XP bonus (once per match)
   const bonus = [60, 30, 15][myPlace] || 0;
   const bEl = document.getElementById('fin-bonus');
-  if (bonus && battleActive) { addXp(bonus); bEl.innerText = '+' + bonus + ' XP placement bonus'; bEl.style.display = ''; }
+  const placeCoins = [30, 18, 10][myPlace] || 5;
+  if (battleActive && myPlace >= 0) {
+    if (bonus) addXp(bonus);
+    addCoins(placeCoins);
+    bEl.innerHTML = (bonus ? '+' + bonus + ' XP · ' : '') + coinHtml('+' + placeCoins) + ' for ' + (['1st', '2nd', '3rd'][myPlace] || 'playing');
+    bEl.style.display = '';
+  }
   else bEl.style.display = 'none';
   battleActive = false;
   syncAccountToCloud().catch(() => {});

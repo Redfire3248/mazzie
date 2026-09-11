@@ -70,6 +70,14 @@ const ICONS = {
   grid:     '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
   play:     '<path d="M7.5 5v14l11-7z"/>',
   medal:    '<circle cx="12" cy="14.5" r="5.8"/><path d="M8.6 9.8L6 3.5h4l2 4.5M15.4 9.8L18 3.5h-4l-2 4.5"/>',
+  coin:     '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5.2"/><path d="M12 9.2v5.6"/>',
+  bag:      '<path d="M5 8.5h14l-1.2 11a1.8 1.8 0 0 1-1.8 1.5H8a1.8 1.8 0 0 1-1.8-1.5z"/><path d="M8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5"/>',
+  shop:     '<path d="M4 9.5L5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12v8.5h13V12M10 20.5v-5h4v5"/>',
+  chest:    '<path d="M3.5 10.5h17v9a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M3.5 10.5V9a5 5 0 0 1 5-5h7a5 5 0 0 1 5 5v1.5"/><path d="M10.5 10.5v3.5h3v-3.5M3.5 14h17"/>',
+  gift:     '<rect x="3.5" y="9" width="17" height="4" rx="1"/><path d="M5 13v7.5h14V13M12 9v11.5"/><path d="M12 9C10 5 6.5 5.5 7.5 7.5 8.2 9 12 9 12 9zM12 9c2-4 5.5-3.5 4.5-1.5C15.8 9 12 9 12 9z"/>',
+  megaphone:'<path d="M4 10v4h3l7 4.5v-13L7 10z"/><path d="M17.5 9a4 4 0 0 1 0 6M7 14l1.5 5.5h2.5L10 14.5"/>',
+  expand:   '<path d="M7 14l5-5 5 5"/>',
+  collapse: '<path d="M7 10l5 5 5-5"/>',
   google:   '<g fill="none" stroke-width="3.3" stroke-linecap="butt"><path d="M12 12h8" stroke="#4285F4"/><path d="M20 12a8 8 0 0 1-2.34 5.66" stroke="#4285F4"/><path d="M17.66 17.66A8 8 0 0 1 6.34 17.66" stroke="#34A853"/><path d="M6.34 17.66A8 8 0 0 1 4.48 9.26" stroke="#FBBC05"/><path d="M4.48 9.26A8 8 0 0 1 17.66 6.34" stroke="#EA4335"/></g>'
 };
 // Filled (not stroked) icons

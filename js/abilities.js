@@ -45,7 +45,7 @@ function collectPickup(ci) {
   abilityInv.push(kind);
   renderAbilityBar(abilityInv.length - 1);
   sfx('pickup'); buzz(20);
-  pushToast(ABILITIES[kind].name + ' ready', 'acc', ABILITIES[kind].icon);
+  showReward({ icon: ABILITIES[kind].icon, tone: ABILITIES[kind].attack ? 'cyan' : 'gold', kicker: 'Boost found', title: ABILITIES[kind].name, sub: ABILITIES[kind].desc, quick: true });
 }
 
 // ── Ability bar UI ──
@@ -60,9 +60,9 @@ function renderAbilityBar(flashSlot) {
     b.className = 'ab-slot' + (kind ? ' filled' : '') + (kind && ABILITIES[kind].attack ? ' attack' : '') + (i === flashSlot ? ' pop' : '');
     b.innerHTML = kind
       ? `<span class="ab-icon">${ic(ABILITIES[kind].icon)}</span><span class="ab-name">${ABILITIES[kind].name}</span><span class="ab-key">${i + 1}</span>`
-      : `<span class="ab-empty">${ic('plus')}</span>`;
-    b.title = kind ? ABILITIES[kind].desc : 'Collect boosts on the board';
-    b.onclick = () => useAbilitySlot(i);
+      : `<span class="ab-empty">${ic('bag')}<small>${bagTotal(usableKinds()) || ''}</small></span>`;
+    b.title = kind ? ABILITIES[kind].desc : 'Collect boosts on the board, or tap to use one from your bag';
+    b.onclick = () => kind ? useAbilitySlot(i) : openBag();
     bar.appendChild(b);
   }
 }

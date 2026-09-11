@@ -21,6 +21,7 @@ function show(id) {
   // Any real screen means loading is over (safety net for every sign-in path)
   document.getElementById('connecting').classList.add('hidden');
   if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); }
+  if (el && typeof fitText === 'function') { requestAnimationFrame(() => fitText(el)); setTimeout(() => fitText(el), 350); }   // shrink long titles to fit
 }
 function isScreen(id) { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }
 
@@ -60,6 +61,13 @@ function updateMenuProfile() {
   if (qb && typeof bracketFor === 'function') { const i = bracketFor(xpp.lvl); qb.innerHTML = bracketIcon(i) + MM_BRACKETS[i].name; }
   const adm = document.getElementById('menu-admin-btn');
   if (adm) adm.hidden = !isAdminUser();
+  if (typeof updateCoinUI === 'function') {
+    updateCoinUI();
+    const si = document.getElementById('store-info');
+    const chestReady = s.chestDay !== todayKey();
+    si.innerText = chestReady ? 'Free chest!' : 'Boosts';
+    si.classList.toggle('done', chestReady);
+  }
 }
 
 function updateDailyBtn() {
@@ -227,6 +235,43 @@ function pushToast(msg, type = 'info', icon) {
   t.innerHTML = ic(icon || TOAST_ICON[type] || 'info') + '<span>' + escapeHtml(msg) + '</span>';
   c.appendChild(t);
   setTimeout(() => t.remove(), 2700);
+}
+
+// ── Reward cards: show exactly what you got (level-ups, unlocks, coins, boosts, messages) ──
+// showReward({ icon | iconHtml, title, sub, chips:[{html,label}], tone:'gold'|'xp'|'cyan'|'acc'|'world', ms, quick })
+const _rewardQ = [];
+let _rewardBusy = false;
+function showReward(r) {
+  _rewardQ.push(r);
+  if (!_rewardBusy) nextReward();
+}
+function nextReward() {
+  const r = _rewardQ.shift();
+  if (!r) { _rewardBusy = false; return; }
+  _rewardBusy = true;
+  const layer = document.getElementById('reward-layer');
+  const card = document.createElement('div');
+  card.className = 'reward ' + (r.tone || 'gold');
+  const chips = (r.chips || []).slice(0, 6);
+  const more = (r.chips || []).length - chips.length;
+  card.innerHTML = `<div class="rw-shine"></div>
+    <div class="rw-ic">${r.iconHtml || ic(r.icon || 'star')}</div>
+    <div class="rw-body">
+      ${r.kicker ? `<div class="rw-kicker">${escapeHtml(r.kicker)}</div>` : ''}
+      <div class="rw-title">${escapeHtml(r.title || '')}</div>
+      ${r.sub ? `<div class="rw-sub">${escapeHtml(r.sub)}</div>` : ''}
+      ${chips.length ? `<div class="rw-chips">${chips.map((c, i) => `<div class="rw-chip" style="animation-delay:${180 + i * 70}ms">${c.html}${c.label ? `<small>${escapeHtml(c.label)}</small>` : ''}</div>`).join('')}${more > 0 ? `<div class="rw-chip more">+${more}</div>` : ''}</div>` : ''}
+    </div>`;
+  layer.appendChild(card);
+  if (typeof fitText === 'function') fitText(card);
+  let done = false;
+  const close = () => {
+    if (done) return; done = true;
+    card.classList.add('out');
+    setTimeout(() => { card.remove(); nextReward(); }, 260);
+  };
+  card.onclick = close;
+  setTimeout(close, r.ms || (r.quick ? 1800 : chips.length ? 3600 : 2600));
 }
 
 // ── Particles ──

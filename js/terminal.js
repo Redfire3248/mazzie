@@ -13,6 +13,7 @@ const TERM_HIST_KEY = 'mazzie_term_hist';
 let termHist = (() => { try { return JSON.parse(localStorage.getItem(TERM_HIST_KEY) || '[]'); } catch (e) { return []; } })();
 let termHistIdx = -1, termDraft = '', termBooted = false, tabState = null;
 let accountCache = [];   // admin: last fetched account list (for completion)
+let onlineCache  = [];   // admin: last "online" result (for troll completion)
 
 function adminOpen()  { if (isAdminUser()) openTerminal(); }
 function adminClose() {
@@ -131,6 +132,35 @@ const CMDS = {
     tInfo('auth mode: ' + authMode());
   } },
 
+  broadcast: { desc:'Message EVERY online player', args:[H('<message…>', null, true)], async run(a) {
+    needSecure(); const msg = a.join(' ').trim(); if (!msg) throw new Error('what should everyone see?');
+    await adminBroadcast(msg); tOk('sent to everyone: ' + msg);
+  } },
+  online: { desc:'Who is playing right now', async run() {
+    needSecure(); const list = await adminOnline();
+    if (!list.length) return tInfo('nobody online in the last 2 minutes');
+    termPrint(pad('NAME', 17) + pad('LVL', 6) + 'WHERE', 'dim');
+    list.forEach(o => termPrint(pad(o.name, 17) + pad(o.lvl || '?', 6) + (o.where || '')));
+    tInfo(list.length + ' online');
+    onlineCache = list;
+  } },
+  troll: { desc:'Prank a player (or "all" online)', args:[H('<player|all>', () => ['all', ...new Set([...onlineCache.map(o => o.name), ...accountNames()])]), H('<effect>', () => Object.keys(TROLLS)), H('[text|number]', null, true)], async run(a) {
+    needSecure();
+    const kind = (a[1] || '').toLowerCase();
+    if (!TROLLS[kind]) { tWarn('effects:'); Object.entries(TROLLS).forEach(([k, v]) => termPrint('  ' + pad(k, 11) + v.desc, 'dim')); return; }
+    const extra = TROLLS[kind].text ? { text: a.slice(2).join(' ').slice(0, 160) } : TROLLS[kind].value ? { value: parseInt(a[2]) || 0 } : {};
+    if (TROLLS[kind].text && !extra.text) throw new Error('add a message: troll <player> msg hello there');
+    let targets;
+    if ((a[0] || '').toLowerCase() === 'all') targets = (await adminOnline()).filter(o => o.id !== currentAccount.id);
+    else { const hit = onlineCache.find(o => o.name.toLowerCase() === (a[0] || '').toLowerCase()); targets = [hit || await findAccount(a[0])]; }
+    if (!targets.length) return tWarn('nobody to troll');
+    await Promise.all(targets.map(x => adminTroll(x.id, kind, extra)));
+    tOk(kind + ' → ' + targets.map(x => x.name).join(', ') + (targets.length === 1 && !onlineCache.some(o => o.id === targets[0].id) ? '  (fires if they are online in the next 3 min)' : ''));
+  } },
+  coins: { desc:'Your coins (admin)', sub:{
+    add: { args:[NUM('<amount>')], desc:'Add coins to yourself', run(a) { addCoins(needInt(a[0], 'amount')); updateMenuProfile(); syncAccountToCloud(); tOk('coins = ' + getCoins()); } },
+    set: { args:[NUM('<amount>')], desc:'Set your coins', run(a) { writeSave({ coins: Math.max(0, needInt(a[0], 'amount')) }); updateCoinUI(); syncAccountToCloud(); tOk('coins = ' + getCoins()); } }
+  } },
   accounts: { desc:'List every account (admin)', args:[H('[search]')], async run(a) {
     needSecure();
     termPrint('loading…', 'dim');
@@ -174,6 +204,20 @@ const CMDS = {
       termPrint('they may need to sign out and in again to see it', 'dim');
       refreshAccountCache(true);
     } },
+    setlevel: { args:[H('<name>', accountNames), NUM('<level>')], desc:'Move a player to a puzzle level (live if online)', async run(a) {
+      const x = await findAccount(a[0]); const n = Math.max(1, needInt(a[1], 'level'));
+      await dbPatch('/accounts/' + x.id, { level: n });
+      await adminTroll(x.id, 'level', { value: n }).catch(() => {});
+      tOk(x.name + ' → level ' + n);
+    } },
+    coins:    { args:[H('<name>', accountNames), NUM('<amount>')], desc:'Gift (or remove, negative) coins', async run(a) {
+      const x = await findAccount(a[0]); const n = needInt(a[1], 'amount');
+      const acc = await dbGet('/accounts/' + x.id);
+      const next = Math.max(0, (acc && acc.coins || 0) + n);
+      await dbPatch('/accounts/' + x.id, { coins: next });
+      if (n > 0) await adminTroll(x.id, 'gift', { value: n }).catch(() => {});
+      tOk(x.name + ' now has ' + next + ' coins');
+    } },
     unban:    { args:[H('<name>', accountNames)], desc:'Lift a ban', async run(a) { const x = await findAccount(a[0]); await adminUnban(x.id); tOk('unbanned ' + x.name); refreshAccountCache(true); } },
     unlock:   { args:[H('<name>', accountNames)], desc:'Clear the 5-wrong-PIN lock', async run(a) { const x = await findAccount(a[0]); await adminUnlock(x.nameLower); tOk('lock cleared for ' + x.name); refreshAccountCache(true); } },
     resetpin: { args:[H('<name>', accountNames)], desc:'Give a player a temporary PIN', async run(a) {
@@ -197,6 +241,11 @@ const CMDS = {
 
   level: { desc:'Change the solo puzzle level', sub:{
     set:  { args:[NUM()], desc:'Jump to level n', run(a) { level = Math.max(1, needInt(a[0], 'level')); soloRegen(); tOk('level → ' + level); } },
+    clear:{ args:[NUM('[n]')], desc:'Clear a level (this one, or jump to n) with the solver', run(a) {
+      if (a[0] != null) { level = Math.max(1, needInt(a[0], 'level')); soloRegen(); }
+      else if (!inGame() || !cells.length) soloRegen();
+      setTimeout(() => { try { adminAutoSolve(); tOk('clearing level ' + level + '…'); } catch (e) { tErr('error: ' + e.message); } }, 250);
+    } },
     next: { desc:'Next level', run() { level++; soloRegen(); tOk('level → ' + level); } },
     prev: { desc:'Previous level', run() { level = Math.max(1, level - 1); soloRegen(); tOk('level → ' + level); } },
     skip: { args:[NUM()], desc:'Skip n levels', run(a) { level = Math.max(1, level + needInt(a[0] || 5)); soloRegen(); tOk('level → ' + level); } }
@@ -575,6 +624,13 @@ function termKey(k) {
   if (k === 'clear') { termSetValue(''); tabState = null; termUpdateAssist(); }
   if (k === 'enter') { const v = inp.value; termSetValue(''); tabState = null; termRun(v); termUpdateAssist(); }
 }
+function termToggleSize() {
+  const t = document.getElementById('admin-term');
+  const tall = t.classList.toggle('tall');
+  try { localStorage.setItem('mz_term_tall', tall ? '1' : ''); } catch (e) {}
+  document.getElementById('term-size').innerHTML = ic(tall ? 'collapse' : 'expand');
+}
+try { if (localStorage.getItem('mz_term_tall')) document.getElementById('admin-term').classList.add('tall'); } catch (e) {}
 function termFocus(e) {
   if (e.target.closest('button') || e.target.closest('.term-out')) return;
   document.getElementById('term-input').focus();

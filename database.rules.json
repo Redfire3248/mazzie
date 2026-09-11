@@ -22,7 +22,33 @@
       "$acc": {
         ".read": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || !data.child('owner').exists() || (auth != null && data.child('owner').val() == auth.uid && (!root.child('bans').child($acc).exists() || root.child('bans').child($acc).child('until').val() < now) && (!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + 900000 < now))",
         ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (auth != null && newData.child('owner').val() == auth.uid && ( (data.child('owner').val() == auth.uid && (!root.child('bans').child($acc).exists() || root.child('bans').child($acc).child('until').val() < now) && (!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + 900000 < now)) || !data.exists() || (data.exists() && !data.child('owner').exists() && newData.child('legacyProof').val() == data.child('pinHash').val()) || (root.child('recovery').child($acc).child('code').isString() && newData.child('recoveryProof').val() == root.child('recovery').child($acc).child('code').val())))",
-        ".validate": "newData.child('name').isString() && newData.child('nameLower').isString()",
+        ".validate": "newData.child('name').isString() && newData.child('nameLower').isString() && ((auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || ((newData.child('coins').isNumber() ? newData.child('coins').val() : 0) + ((newData.child('boosts').child('hint').isNumber() ? newData.child('boosts').child('hint').val() : 0) > (data.child('boosts').child('hint').isNumber() ? data.child('boosts').child('hint').val() : 0) ? ((newData.child('boosts').child('hint').isNumber() ? newData.child('boosts').child('hint').val() : 0) - (data.child('boosts').child('hint').isNumber() ? data.child('boosts').child('hint').val() : 0)) * 25 : 0) + ((newData.child('boosts').child('dash').isNumber() ? newData.child('boosts').child('dash').val() : 0) > (data.child('boosts').child('dash').isNumber() ? data.child('boosts').child('dash').val() : 0) ? ((newData.child('boosts').child('dash').isNumber() ? newData.child('boosts').child('dash').val() : 0) - (data.child('boosts').child('dash').isNumber() ? data.child('boosts').child('dash').val() : 0)) * 40 : 0) + ((newData.child('boosts').child('stop').isNumber() ? newData.child('boosts').child('stop').val() : 0) > (data.child('boosts').child('stop').isNumber() ? data.child('boosts').child('stop').val() : 0) ? ((newData.child('boosts').child('stop').isNumber() ? newData.child('boosts').child('stop').val() : 0) - (data.child('boosts').child('stop').isNumber() ? data.child('boosts').child('stop').val() : 0)) * 35 : 0) + ((newData.child('boosts').child('shield').isNumber() ? newData.child('boosts').child('shield').val() : 0) > (data.child('boosts').child('shield').isNumber() ? data.child('boosts').child('shield').val() : 0) ? ((newData.child('boosts').child('shield').isNumber() ? newData.child('boosts').child('shield').val() : 0) - (data.child('boosts').child('shield').isNumber() ? data.child('boosts').child('shield').val() : 0)) * 45 : 0) + ((newData.child('boosts').child('frost').isNumber() ? newData.child('boosts').child('frost').val() : 0) > (data.child('boosts').child('frost').isNumber() ? data.child('boosts').child('frost').val() : 0) ? ((newData.child('boosts').child('frost').isNumber() ? newData.child('boosts').child('frost').val() : 0) - (data.child('boosts').child('frost').isNumber() ? data.child('boosts').child('frost').val() : 0)) * 50 : 0) + ((newData.child('boosts').child('fog').isNumber() ? newData.child('boosts').child('fog').val() : 0) > (data.child('boosts').child('fog').isNumber() ? data.child('boosts').child('fog').val() : 0) ? ((newData.child('boosts').child('fog').isNumber() ? newData.child('boosts').child('fog').val() : 0) - (data.child('boosts').child('fog').isNumber() ? data.child('boosts').child('fog').val() : 0)) * 45 : 0) - (data.child('coins').isNumber() ? data.child('coins').val() : 0)) <= 0 || (newData.child('xpAt').val() == now && ((newData.child('coins').isNumber() ? newData.child('coins').val() : 0) + ((newData.child('boosts').child('hint').isNumber() ? newData.child('boosts').child('hint').val() : 0) > (data.child('boosts').child('hint').isNumber() ? data.child('boosts').child('hint').val() : 0) ? ((newData.child('boosts').child('hint').isNumber() ? newData.child('boosts').child('hint').val() : 0) - (data.child('boosts').child('hint').isNumber() ? data.child('boosts').child('hint').val() : 0)) * 25 : 0) + ((newData.child('boosts').child('dash').isNumber() ? newData.child('boosts').child('dash').val() : 0) > (data.child('boosts').child('dash').isNumber() ? data.child('boosts').child('dash').val() : 0) ? ((newData.child('boosts').child('dash').isNumber() ? newData.child('boosts').child('dash').val() : 0) - (data.child('boosts').child('dash').isNumber() ? data.child('boosts').child('dash').val() : 0)) * 40 : 0) + ((newData.child('boosts').child('stop').isNumber() ? newData.child('boosts').child('stop').val() : 0) > (data.child('boosts').child('stop').isNumber() ? data.child('boosts').child('stop').val() : 0) ? ((newData.child('boosts').child('stop').isNumber() ? newData.child('boosts').child('stop').val() : 0) - (data.child('boosts').child('stop').isNumber() ? data.child('boosts').child('stop').val() : 0)) * 35 : 0) + ((newData.child('boosts').child('shield').isNumber() ? newData.child('boosts').child('shield').val() : 0) > (data.child('boosts').child('shield').isNumber() ? data.child('boosts').child('shield').val() : 0) ? ((newData.child('boosts').child('shield').isNumber() ? newData.child('boosts').child('shield').val() : 0) - (data.child('boosts').child('shield').isNumber() ? data.child('boosts').child('shield').val() : 0)) * 45 : 0) + ((newData.child('boosts').child('frost').isNumber() ? newData.child('boosts').child('frost').val() : 0) > (data.child('boosts').child('frost').isNumber() ? data.child('boosts').child('frost').val() : 0) ? ((newData.child('boosts').child('frost').isNumber() ? newData.child('boosts').child('frost').val() : 0) - (data.child('boosts').child('frost').isNumber() ? data.child('boosts').child('frost').val() : 0)) * 50 : 0) + ((newData.child('boosts').child('fog').isNumber() ? newData.child('boosts').child('fog').val() : 0) > (data.child('boosts').child('fog').isNumber() ? data.child('boosts').child('fog').val() : 0) ? ((newData.child('boosts').child('fog').isNumber() ? newData.child('boosts').child('fog').val() : 0) - (data.child('boosts').child('fog').isNumber() ? data.child('boosts').child('fog').val() : 0)) * 45 : 0) - (data.child('coins').isNumber() ? data.child('coins').val() : 0)) <= 150 + (now - (data.child('xpAt').isNumber() ? data.child('xpAt').val() : now)) / 1000 * 2))",
+        "coins": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000"
+        },
+        "boosts": {
+          "hint": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+          },
+          "dash": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+          },
+          "stop": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+          },
+          "shield": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+          },
+          "frost": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+          },
+          "fog": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
         "xp": {
           ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 50000000 && ((auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (data.exists() ? (newData.val() <= data.val() || (newData.parent().child('xpAt').val() == now && newData.val() - data.val() <= 300 + (now - (data.parent().child('xpAt').isNumber() ? data.parent().child('xpAt').val() : now)) / 1000 * 12)) : newData.val() == 0))"
         },
@@ -62,6 +88,25 @@
         ".read": true,
         ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
         ".validate": "!newData.exists() || (newData.child('until').isNumber() && (!newData.child('reason').exists() || newData.child('reason').isString()))"
+      }
+    },
+    "broadcast": {
+      ".read": "auth != null",
+      ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
+      ".validate": "newData.child('msg').isString() && newData.child('msg').val().length <= 200 && newData.child('at').val() == now"
+    },
+    "troll": {
+      "$acc": {
+        ".read": "auth != null && root.child('accounts').child($acc).child('owner').val() == auth.uid",
+        ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (auth != null && !newData.exists() && root.child('accounts').child($acc).child('owner').val() == auth.uid)",
+        ".validate": "newData.child('kind').isString() && newData.child('kind').val().length <= 16 && newData.child('at').val() == now"
+      }
+    },
+    "online": {
+      ".read": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
+      "$acc": {
+        ".write": "auth != null && root.child('accounts').child($acc).child('owner').val() == auth.uid",
+        ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('at').val() == now"
       }
     }
   }

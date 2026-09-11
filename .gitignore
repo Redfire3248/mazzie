@@ -1,0 +1,4 @@
+# dev tool dependencies + scratch output (not part of the website)
+tools/node_modules/
+tools/sheets/
+*.preview.png

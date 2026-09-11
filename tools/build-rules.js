@@ -14,7 +14,18 @@ const NOT_LOCKED_NOW = `(${OLD_L} + ${LOCK_MS} < now)`;
 const acctOwnerOf = (accExpr) => `root.child('accounts').child(${accExpr}).child('owner').val()`;
 // Account read/write is refused while the owner is banned or under the 5-try lock
 const NOT_BANNED = "(!root.child('bans').child($acc).exists() || root.child('bans').child($acc).child('until').val() < now)";
-const NOT_PIN_LOCKED = `(!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + ${LOCK_MS} < now)`;
+// Coins: the Store sells boosts at fixed prices, so for any write
+//   earned = newCoins + cost of every boost added − oldCoins
+// must be ≤ 0 (a purchase / spending), or be stamped with server time and fit the earning speed.
+const BOOST_PRICES = { hint: 25, dash: 40, stop: 35, shield: 45, frost: 50, fog: 45 };
+const COIN_PER_SEC = 2, COIN_BURST = 150;
+const num = e => `(${e}.isNumber() ? ${e}.val() : 0)`;
+const BNEW = k => num(`newData.child('boosts').child('${k}')`), BOLD = k => num(`data.child('boosts').child('${k}')`);
+const BOOST_COST = Object.entries(BOOST_PRICES).map(([k, p]) => `(${BNEW(k)} > ${BOLD(k)} ? (${BNEW(k)} - ${BOLD(k)}) * ${p} : 0)`).join(' + ');
+const EARNED = `(${num("newData.child('coins')")} + ${BOOST_COST} - ${num("data.child('coins')")})`;
+const ACC_XPAT = "(data.child('xpAt').isNumber() ? data.child('xpAt').val() : now)";
+const ECONOMY = `(${ADMIN} || ${EARNED} <= 0 || (newData.child('xpAt').val() == now && ${EARNED} <= ${COIN_BURST} + (now - ${ACC_XPAT}) / 1000 * ${COIN_PER_SEC}))`;
+const NOT_PIN_LOCKED =`(!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + ${LOCK_MS} < now)`;
 
 const rules = {
   rules: {
@@ -47,7 +58,12 @@ const rules = {
          || !data.exists()
          || (data.exists() && !data.child('owner').exists() && newData.child('legacyProof').val() == data.child('pinHash').val())
          || (root.child('recovery').child($acc).child('code').isString() && newData.child('recoveryProof').val() == root.child('recovery').child($acc).child('code').val())))`,
-        '.validate': "newData.child('name').isString() && newData.child('nameLower').isString()",
+        '.validate': `newData.child('name').isString() && newData.child('nameLower').isString() && ${ECONOMY}`,
+        coins: { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000' },
+        boosts: {
+          ...Object.fromEntries(Object.keys(BOOST_PRICES).map(k => [k, { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 999' }])),
+          '$other': { '.validate': false }
+        },
         // Anti-cheat: progress can only grow at a humanly possible speed, measured with the
         // SERVER clock (xpAt must be stamped with server time whenever xp/clears go up).
         xp: { '.validate': `newData.isNumber() && newData.val() >= 0 && newData.val() <= 50000000 && (${ADMIN} || (data.exists()
@@ -102,6 +118,31 @@ const rules = {
         '.read': true,
         '.write': ADMIN,
         '.validate': "!newData.exists() || (newData.child('until').isNumber() && (!newData.child('reason').exists() || newData.child('reason').isString()))"
+      }
+    },
+
+    // Worldwide admin message (everyone signed in listens)
+    broadcast: {
+      '.read': 'auth != null',
+      '.write': ADMIN,
+      '.validate': "newData.child('msg').isString() && newData.child('msg').val().length <= 200 && newData.child('at').val() == now"
+    },
+
+    // One-shot admin effects aimed at a single player; the player deletes it after it fires
+    troll: {
+      '$acc': {
+        '.read': `auth != null && ${acctOwnerOf('$acc')} == auth.uid`,
+        '.write': `${ADMIN} || (auth != null && !newData.exists() && ${acctOwnerOf('$acc')} == auth.uid)`,
+        '.validate': "newData.child('kind').isString() && newData.child('kind').val().length <= 16 && newData.child('at').val() == now"
+      }
+    },
+
+    // Presence heartbeat (admins see who is online)
+    online: {
+      '.read': ADMIN,
+      '$acc': {
+        '.write': `auth != null && ${acctOwnerOf('$acc')} == auth.uid`,
+        '.validate': "newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('at').val() == now"
       }
     }
   }

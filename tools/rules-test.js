@@ -111,6 +111,36 @@ const SV = { '.sv': 'timestamp' };
   no('old code no longer works',          await req('PATCH', '/accounts/A', { owner: bob.uid, recoveryProof: 'ABCD-EFGH-JK' }, bob.tok));
   no('old login lost access',             await req('GET', '/accounts/A', undefined, alice.tok));
 
+  console.log('Coins + Store');
+  ok('bob earns 100 coins (stamped)',     await req('PATCH', '/accounts/B', { coins: 100, xpAt: SV }, bob.tok));
+  no('console cheat: +1,000,000 coins',   await req('PATCH', '/accounts/B', { coins: 1000100, xpAt: SV }, bob.tok));
+  no('coin raise without server stamp',   await req('PATCH', '/accounts/B', { coins: 150 }, bob.tok));
+  ok('buy a hint for 25',                 await req('PATCH', '/accounts/B', { coins: 75, boosts: { hint: 1 } }, bob.tok));
+  no('free boosts (patch)',               await req('PATCH', '/accounts/B', { boosts: { hint: 50 } }, bob.tok));
+  no('free boosts (deep write)',          await req('PUT', '/accounts/B/boosts/dash', 5, bob.tok));
+  no('underpriced purchase',              await req('PATCH', '/accounts/B', { coins: 70, boosts: { hint: 1, dash: 1 } }, bob.tok));
+  ok('using a boost',                     await req('PATCH', '/accounts/B', { boosts: { hint: 0 } }, bob.tok));
+  no('unknown boost kind',                await req('PATCH', '/accounts/B', { boosts: { hint: 0, god: 5 } }, bob.tok));
+  no('negative coins',                    await req('PATCH', '/accounts/B', { coins: -5 }, bob.tok));
+  ok('admin gifts coins',                 await req('PATCH', '/accounts/B', { coins: 5000 }, admin.tok));
+
+  console.log('Live: broadcast / troll / online');
+  ok('signed-in player reads broadcast',  await req('GET', '/broadcast', undefined, bob.tok));
+  no('anonymous cannot read broadcast',   await req('GET', '/broadcast'));
+  no('player cannot broadcast',           await req('PUT', '/broadcast', { msg: 'hi all', at: SV }, bob.tok));
+  ok('admin broadcasts',                  await req('PUT', '/broadcast', { msg: 'hello world', at: SV, by: 'Admin' }, admin.tok));
+  no('broadcast needs server time',       await req('PUT', '/broadcast', { msg: 'x', at: 5 }, admin.tok));
+  ok('admin trolls bob',                  await req('PUT', '/troll/B', { kind: 'flip', at: SV, by: 'Admin' }, admin.tok));
+  no('player cannot troll others',        await req('PUT', '/troll/B', { kind: 'fakeban', at: SV }, aliceNew.tok));
+  ok('bob reads his troll inbox',         await req('GET', '/troll/B', undefined, bob.tok));
+  no('others cannot read bob inbox',      await req('GET', '/troll/B', undefined, aliceNew.tok));
+  no('bob cannot troll himself',          await req('PUT', '/troll/B', { kind: 'gift', at: SV, value: 9999 }, bob.tok));
+  ok('bob clears his inbox',              await req('DELETE', '/troll/B', undefined, bob.tok));
+  ok('bob heartbeat',                     await req('PUT', '/online/B', { name: 'Bob', lvl: 3, at: SV, where: 'menu' }, bob.tok));
+  no('bob cannot fake alice online',      await req('PUT', '/online/A', { name: 'Alice', at: SV }, bob.tok));
+  no('players cannot list who is online', await req('GET', '/online', undefined, bob.tok));
+  ok('admin sees who is online',          await req('GET', '/online', undefined, admin.tok));
+
   console.log('Legacy account migration');
   await req('PUT', '/accounts/mz_legacy', { name: 'Old', nameLower: 'old', pinHash: 'HASH123', xp: 700 }, null, true);
   await req('PUT', '/usernames/old', { uid: 'mz_legacy', createdAt: 1 }, null, true);

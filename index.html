@@ -11,7 +11,8 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307070e'/%3E%3Cpath d='M8 9v14M8 9l8 9 8-9v14' stroke='%232dff7f' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260911b">
+<link href="https://fonts.googleapis.com/css2?family=Righteous&family=Russo+One&family=Pacifico&family=Orbitron:wght@700;900&family=Bungee&family=Press+Start+2P&family=Cinzel+Decorative:wght@700;900&family=Permanent+Marker&family=Creepster&family=Monoton&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/style.css?v=20260911c">
 </head>
 <body>
 
@@ -19,6 +20,7 @@
 <div class="orb orb2"></div>
 <div class="toast-container" id="toast-container"></div>
 <div id="particles-layer" style="position:fixed;inset:0;pointer-events:none;z-index:50;"></div>
+<div id="reward-layer" aria-live="polite"></div>
 
 <!-- CONNECTING -->
 <div id="connecting">
@@ -127,6 +129,7 @@
   <div class="menu-top">
     <button class="icon-btn admin" id="menu-admin-btn" hidden onclick="adminOpen()" title="Admin terminal"><i data-ic="terminal"></i></button>
     <span class="flex"></span>
+    <button class="coin-chip" onclick="openStore()" title="Coins — open the Store"><i data-ic="coin"></i><span class="coin-count">0</span><i data-ic="plus" class="cc-plus"></i></button>
     <button class="icon-btn" id="sound-btn" onclick="toggleSound()" title="Sound"><i data-ic="sound"></i></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings"><i data-ic="gear"></i></button>
   </div>
@@ -169,7 +172,23 @@
       <button class="tile" onclick="show('battle-mode')"><i data-ic="swords"></i><b>Rooms</b><small>Host · Join</small></button>
       <button class="tile daily" onclick="startDaily()"><i data-ic="calendar"></i><b>Daily</b><small id="daily-info">New</small></button>
       <button class="tile locker" onclick="openLocker()"><i data-ic="palette"></i><b>Locker</b><small>Customize</small></button>
+      <button class="tile store" onclick="openStore()"><i data-ic="shop"></i><b>Store</b><small id="store-info">Boosts</small></button>
     </div>
+  </div>
+</div>
+
+<!-- STORE -->
+<div id="store" class="screen hidden">
+  <div class="panel-card store-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="show('menu')" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Store</div>
+      <span class="coin-chip static"><i data-ic="coin"></i><span class="coin-count">0</span></span>
+    </div>
+    <div class="store-chest" id="store-chest"></div>
+    <div class="set-group-lbl">Boosts</div>
+    <div class="store-grid" id="store-grid"></div>
+    <div class="store-foot"><i data-ic="info"></i>Bought boosts go in your bag. In a game, tap an empty boost slot to use one. Earn coins by clearing levels, the daily challenge, battles and leveling up.</div>
   </div>
 </div>
 
@@ -242,8 +261,9 @@
       <div class="locker-preview" id="locker-preview"></div>
       <div class="locker-meta">
         <div class="locker-name" id="locker-name">Racer</div>
-        <div class="locker-title" id="locker-title"></div>
+        <div class="locker-title fit" data-max="16" data-min="8" id="locker-title"></div>
         <div class="locker-lvl" id="locker-lvl"></div>
+        <div class="locker-trail" id="locker-trail"></div>
       </div>
     </div>
     <div class="seg locker-tabs">
@@ -369,6 +389,7 @@
     <div class="chat-peek" id="chat-peek"></div>
   </div>
   <div class="ability-bar" id="ability-bar"></div>
+  <div class="bag-pop hidden" id="bag"></div>
   <div class="bottom-bar">
     <button class="ctrl-btn" onclick="undoStep()" title="Undo (Backspace)"><i data-ic="undo"></i>Undo</button>
     <button class="ctrl-btn" onclick="resetPath()" title="Reset (R)"><i data-ic="reset"></i>Reset</button>
@@ -381,7 +402,7 @@
 <div id="win" class="screen hidden">
   <div class="win-card">
     <div class="win-badge"><i data-ic="flag"></i></div>
-    <div class="win-title">SOLVED</div>
+    <div class="win-title fit" data-max="42" data-min="22">SOLVED</div>
     <div class="win-time" id="win-time">0:00.0</div>
     <div id="win-best"></div>
     <div class="win-xp-row" id="win-xp-row"></div>
@@ -503,6 +524,7 @@
     <div class="term-bar">
       <span class="term-lights"><i class="r" onclick="adminClose()"></i><i class="y"></i><i class="g"></i></span>
       <span class="term-title">admin@mazzie — <span id="term-mode">SOLO</span></span>
+      <button class="term-close" id="term-size" onclick="termToggleSize()" title="Taller / shorter"><i data-ic="expand"></i></button>
       <button class="term-close" onclick="adminClose()"><i data-ic="x"></i></button>
     </div>
     <div class="term-out" id="term-out"></div>
@@ -528,18 +550,20 @@
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js?v=secure1"></script>
-<script src="js/icons.js?v=20260911b"></script>
-<script src="js/state.js?v=20260911b"></script>
-<script src="js/save.js?v=20260911b"></script>
-<script src="js/cosmetics.js?v=20260911b"></script>
-<script src="js/account.js?v=20260911b"></script>
-<script src="js/auth-ui.js?v=20260911b"></script>
-<script src="js/game.js?v=20260911b"></script>
-<script src="js/abilities.js?v=20260911b"></script>
-<script src="js/battle.js?v=20260911b"></script>
-<script src="js/matchmaking.js?v=20260911b"></script>
-<script src="js/ui.js?v=20260911b"></script>
-<script src="js/terminal.js?v=20260911b"></script>
+<script src="js/icons.js?v=20260911c"></script>
+<script src="js/state.js?v=20260911c"></script>
+<script src="js/save.js?v=20260911c"></script>
+<script src="js/cosmetics.js?v=20260911c"></script>
+<script src="js/account.js?v=20260911c"></script>
+<script src="js/auth-ui.js?v=20260911c"></script>
+<script src="js/game.js?v=20260911c"></script>
+<script src="js/abilities.js?v=20260911c"></script>
+<script src="js/store.js?v=20260911c"></script>
+<script src="js/live.js?v=20260911c"></script>
+<script src="js/battle.js?v=20260911c"></script>
+<script src="js/matchmaking.js?v=20260911c"></script>
+<script src="js/ui.js?v=20260911c"></script>
+<script src="js/terminal.js?v=20260911c"></script>
 
 </body>
 </html>

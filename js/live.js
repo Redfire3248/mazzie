@@ -1,0 +1,175 @@
+// ══════════════════════════════════════════════════
+// js/live.js — Live channels (secure mode only)
+//   /broadcast      → worldwide admin messages, shown to everyone online
+//   /troll/<acc>    → admin effects aimed at one player (flip, spin, fake ban, auto-solve…)
+//   /online/<acc>   → presence heartbeat so admins can see who is playing
+// Everyone listens with Firebase's REST streaming (EventSource); only admins can write
+// /broadcast and /troll — the database rules enforce it.
+// ══════════════════════════════════════════════════
+
+let _bcES = null, _trES = null, _hbT = null, _liveOn = false;
+const TROLLS = {
+  flip:      { desc: 'Turns their board upside down (10s)' },
+  spin:      { desc: 'Spins their board (6s)' },
+  mirror:    { desc: 'Mirrors the board left↔right (10s)' },
+  shake:     { desc: 'Earthquake (4s)' },
+  tiny:      { desc: 'Shrinks the board (8s)' },
+  invert:    { desc: 'Inverts all colours (8s)' },
+  party:     { desc: 'Disco lights + confetti (6s)' },
+  honk:      { desc: 'Plays a silly honk' },
+  frost:     { desc: 'Freezes their board (4s)' },
+  fog:       { desc: 'Hides their numbers (6s)' },
+  fakeban:   { desc: 'Fake "you are banned" screen, then "just kidding"' },
+  fakecoins: { desc: 'Fake "+1,000,000 coins", then "just kidding"' },
+  msg:       { desc: 'Private message popup', text: true },
+  solve:     { desc: 'Clears their current level for them' },
+  skip:      { desc: 'Sends them to the next level' },
+  level:     { desc: 'Moves them to level N', value: true },
+  gift:      { desc: 'Gift coins (already added by the admin)', value: true }
+};
+
+async function streamUrl(path) {
+  const u = new URL(await dbUrl(path));
+  return u.toString();
+}
+function startLive() {
+  if (_liveOn || authMode() !== 'secure' || !currentAccount || currentAccount.offline || typeof EventSource === 'undefined') return;
+  _liveOn = true;
+  listenBroadcast(); listenTroll(); heartbeat();
+  clearInterval(_hbT); _hbT = setInterval(heartbeat, 45000);
+  document.addEventListener('visibilitychange', onVis);
+}
+function stopLive() {
+  _liveOn = false;
+  if (_bcES) _bcES.close(); if (_trES) _trES.close(); _bcES = _trES = null;
+  clearInterval(_hbT);
+  document.removeEventListener('visibilitychange', onVis);
+}
+function onVis() { if (document.visibilityState === 'visible') heartbeat(); }
+
+// ── Streams: apply 'put'/'patch' events to a local copy of the node ──
+function streamNode(url, onChange, onAuthRevoked) {
+  const es = new EventSource(url);
+  let cur = null;
+  const apply = (ev, merge) => {
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (!msg) return;
+    if (msg.path === '/') cur = merge && cur ? { ...cur, ...msg.data } : msg.data;
+    else {
+      const k = msg.path.replace(/^\//, '').split('/')[0];
+      cur = cur && typeof cur === 'object' ? { ...cur } : {};
+      if (msg.data === null) delete cur[k]; else cur[k] = msg.data;
+    }
+    onChange(cur);
+  };
+  es.addEventListener('put', e => apply(e, false));
+  es.addEventListener('patch', e => apply(e, true));
+  es.addEventListener('auth_revoked', () => { es.close(); if (onAuthRevoked) onAuthRevoked(); });
+  es.addEventListener('cancel', () => { es.close(); if (onAuthRevoked) setTimeout(onAuthRevoked, 5000); });
+  return es;
+}
+async function listenBroadcast() {
+  if (_bcES) _bcES.close();
+  _bcES = streamNode(await streamUrl('/broadcast'), b => {
+    if (!b || !b.msg || typeof b.at !== 'number') return;
+    const seen = +localStorage.getItem('mz_bc_seen') || 0;
+    if (b.at <= seen || Date.now() - b.at > 20 * 60000) return;   // already seen, or older than 20 min
+    localStorage.setItem('mz_bc_seen', String(b.at));
+    showWorldMessage(String(b.msg).slice(0, 200), b.by);
+  }, () => { if (_liveOn) listenBroadcast(); });          // token expired → reconnect with a fresh one
+}
+async function listenTroll() {
+  if (_trES) _trES.close();
+  if (!currentAccount || !currentAccount.id) return;
+  const path = '/troll/' + currentAccount.id;
+  _trES = streamNode(await streamUrl(path), t => {
+    if (!t || !t.kind || typeof t.at !== 'number') return;
+    dbDelete(path).catch(() => {});                      // one-shot: clear it so it never replays
+    if (Date.now() - t.at > 3 * 60000) return;
+    applyTroll(t);
+  }, () => { if (_liveOn) listenTroll(); });              // token expired → reconnect with a fresh one
+}
+async function heartbeat() {
+  if (!_liveOn || document.visibilityState === 'hidden' || !currentAccount) return;
+  dbPut('/online/' + currentAccount.id, {
+    name: myName, lvl: myXpLevel(), at: SERVER_TIME,
+    where: battleActive ? 'battle' : (document.body.dataset.screen || 'menu')
+  }).catch(() => {});
+}
+
+// ── World message banner ──
+function showWorldMessage(msg, by) {
+  sfx('world'); buzz([30, 40, 30]);
+  showReward({ icon: 'megaphone', tone: 'world', kicker: 'Message to everyone' + (by ? ' · ' + by : ''), title: msg, ms: 7000 });
+  if (inBattleSession()) addChatMsg('World: ' + msg, null, true);
+}
+
+// ── Troll effects ──
+function tempClass(el, cls, ms) {
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  clearTimeout(el['_t_' + cls]); el['_t_' + cls] = setTimeout(() => el.classList.remove(cls), ms);
+}
+function applyTroll(t) {
+  const board = document.querySelector('.board-wrap'), root = document.documentElement, grid = document.getElementById('grid');
+  const by = cleanName(t.by || 'Admin');
+  switch (t.kind) {
+    case 'flip':   tempClass(board, 'troll-flip', 10000); sfx('hit'); break;
+    case 'spin':   tempClass(board, 'troll-spin', 6000); break;
+    case 'mirror': tempClass(board, 'troll-mirror', 10000); break;
+    case 'shake':  tempClass(document.body, 'troll-shake', 4000); buzz([80, 40, 80, 40, 120]); break;
+    case 'tiny':   tempClass(board, 'troll-tiny', 8000); break;
+    case 'invert': tempClass(root, 'troll-invert', 8000); break;
+    case 'party':  tempClass(root, 'troll-party', 6000); for (let i = 0; i < 6; i++) setTimeout(spawnParticles, i * 500); sfx('win'); break;
+    case 'honk':   sfx('honk'); setTimeout(() => sfx('honk'), 700); break;
+    case 'frost':  if (inGame() && !amSpectating) { inputLockedUntil = performance.now() + 4000; isDrawing = false; grid.classList.add('frosted'); sfx('hit'); } break;
+    case 'fog':    grid.classList.add('fogged'); clearTimeout(window._fogT); window._fogT = setTimeout(() => grid.classList.remove('fogged'), 6000); break;
+    case 'fakeban': fakeBan(by); break;
+    case 'fakecoins':
+      sfx('reward'); spawnParticles();
+      showReward({ icon: 'coin', tone: 'gold', kicker: 'Jackpot!', title: '+1,000,000 coins', chips: [{ html: coinHtml('1,000,000'), label: 'coins' }], ms: 2600 });
+      setTimeout(() => showReward({ icon: 'info', tone: 'world', title: 'Just kidding', sub: 'Greetings from ' + by, quick: true }), 200);
+      break;
+    case 'msg': sfx('world'); showReward({ icon: 'chat', tone: 'world', kicker: 'Message from ' + by, title: String(t.text || '').slice(0, 160), ms: 6000 }); break;
+    case 'solve':
+      if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); pushToast(by + ' cleared this level for you', 'acc', 'sparkle'); } catch (e) {} }
+      break;
+    case 'skip':
+      if (inGame() && !battleActive && !dailyMode) { nextLevel(); pushToast(by + ' skipped you ahead', 'acc', 'arrowR'); }
+      break;
+    case 'level': {
+      const n = Math.max(1, Math.min(9999, parseInt(t.value) || 1));
+      writeSave({ level: n });
+      if (inGame() && !battleActive && !dailyMode) { level = n; updateInGameLevelBadge(); generate(); startTimer(); }
+      _setupContinueBtn();
+      pushToast(by + ' moved you to level ' + n, 'info', 'arrowR');
+      break;
+    }
+    case 'gift': refreshFromCloud().then(() => {
+      sfx('reward'); spawnParticles();
+      showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + by, title: '+' + (parseInt(t.value) || 0) + ' coins', chips: [{ html: coinHtml(getCoins()), label: 'balance' }] });
+    }); break;
+  }
+}
+function fakeBan(by) {
+  const o = document.createElement('div');
+  o.className = 'fake-ban';
+  o.innerHTML = `<div class="panel-card center"><div class="lock-ring" style="--p:100">${ic('lock')}</div>
+    <div class="panel-title">Account banned</div><div class="panel-sub">Reason: being way too good at this game</div>
+    <div class="lock-time">99:59</div></div>`;
+  document.body.appendChild(o); sfx('hit');
+  setTimeout(() => { o.classList.add('reveal'); o.querySelector('.panel-title').textContent = 'Just kidding'; o.querySelector('.panel-sub').textContent = 'Greetings from ' + by; o.querySelector('.lock-time').textContent = ':)'; sfx('reward'); }, 4200);
+  setTimeout(() => o.remove(), 6200);
+}
+// Re-read coins/boosts after an admin changed them server-side
+async function refreshFromCloud() {
+  try { const a = await dbGet('/accounts/' + currentAccount.id); if (a) { writeSave({ coins: a.coins || 0, boosts: a.boosts || {}, xp: a.xp || 0, level: a.level || loadSave().level }); updateMenuProfile(); updateCoinUI(); } } catch (e) {}
+}
+
+// ── Admin side ──
+const adminBroadcast = msg => dbPut('/broadcast', { msg: String(msg).slice(0, 200), at: SERVER_TIME, by: myName });
+const adminTroll = (acc, kind, extra) => dbPut('/troll/' + acc, { kind, at: SERVER_TIME, by: myName, ...(extra || {}) });
+async function adminOnline() {
+  const all = (await dbGet('/online')) || {};
+  const now = Date.now();
+  return Object.entries(all).filter(([, o]) => o && now - o.at < 120000).map(([id, o]) => ({ id, ...o })).sort((a, b) => a.name.localeCompare(b.name));
+}

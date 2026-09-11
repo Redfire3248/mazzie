@@ -533,8 +533,8 @@ async function syncAccountToCloud() {
   // A rejected jump simply retries on later syncs, once enough real time has passed.
   try {
     await dbPatch('/accounts/' + id, secure
-      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, xpAt: SERVER_TIME }
-      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0 });
+      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, xpAt: SERVER_TIME }
+      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {} });
   } catch (e) { /* offline or over the speed limit — next sync */ }
 }
 
@@ -580,6 +580,7 @@ async function initAccount(onReady) {
 
 function logoutAccount() {
   syncAccountToCloud().catch(() => {});
+  if (typeof stopLive === 'function') { if (_liveOn && currentAccount) dbDelete('/online/' + currentAccount.id).catch(() => {}); stopLive(); }
   const mode = authMode();
   currentAccount = null; accountReady = false; myName = 'Racer';
   if (mode === 'local') { writeSave({ name: '' }); updateMenuProfile(); show('menu'); setTimeout(openNameEdit, 200); return; }
@@ -610,6 +611,8 @@ function applyAccountLocally(account) {
     name:         account.name,
     xp:           secure ? (account.xp || 0) : Math.max(account.xp || 0, s.xp || 0),
     totalCleared: secure ? (account.totalCleared || 0) : Math.max(account.totalCleared || 0, s.totalCleared || 0),
+    coins:        secure ? (account.coins || 0) : Math.max(account.coins || 0, s.coins || 0),
+    boosts:       secure ? (account.boosts || {}) : (account.boosts || s.boosts || {}),
     level:        account.level || s.level || 1,
     diff:         account.diff  || s.diff  || 'easy'
   };

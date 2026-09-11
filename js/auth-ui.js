@@ -20,6 +20,7 @@ function enterGame(msg) {
   _setupContinueBtn();
   show('menu');
   if (msg) pushToast(msg, 'acc');
+  if (typeof startLive === 'function') startLive();
 }
 
 // Central handler for every auth result
@@ -278,7 +279,7 @@ function renderSettings() {
 function setToggle(id, on) { const b = $(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
 function settingToggle(key, def) {
   setSetting(key, !getSetting(key, def));
-  syncSoundBtn(); syncAutoNextToggle(); renderSettings(); sfx('step');
+  syncSoundBtn(); syncAutoNextToggle(); renderSettings(); sfx('tap');
 }
 async function settingsGoogle() {
   const btn = $('set-google-btn');
