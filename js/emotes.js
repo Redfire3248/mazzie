@@ -72,12 +72,15 @@ function showEmote(d) {
       return;
     }
   }
-  // In a match / spectating: a little card with their avatar + the emote
+  // In a match / spectating: the emote floats up from the bottom-left with a tiny "who" tag
   const layer = document.getElementById('emote-float');
-  while (layer.childElementCount >= 3) layer.firstChild.remove();
-  const card = document.createElement('div');
-  card.className = 'emote-card' + (d.id === myId ? ' me' : '');
-  card.innerHTML = `<div class="ec-ava">${renderAvatar(sanitizeAvatar(p.avatar || {}), name, 30)}</div><b>${escapeHtml(name)}</b>${emoteImg(e, 'ec-emote')}`;
-  layer.appendChild(card);
-  setTimeout(() => { card.classList.add('out'); setTimeout(() => card.remove(), 300); }, 2600);
+  while (layer.childElementCount >= 5) layer.firstChild.remove();
+  const b = document.createElement('div');
+  b.className = 'emote-rise' + (d.id === myId ? ' me' : '');
+  b.style.left = Math.round(Math.random() * 36) + 'px';
+  b.style.setProperty('--sway', (Math.random() < .5 ? -1 : 1) * (8 + Math.random() * 10) + 'px');
+  b.innerHTML = emoteImg(e, 'er-emote')
+    + `<div class="er-who">${renderAvatar(sanitizeAvatar(p.avatar || {}), name, 18)}<b>${escapeHtml(d.id === myId ? 'You' : name)}</b></div>`;
+  layer.appendChild(b);
+  setTimeout(() => b.remove(), 3200);
 }

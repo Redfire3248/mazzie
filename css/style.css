@@ -1243,3 +1243,20 @@ html.troll-party .screen:not(.hidden){animation:trollHue 1s linear infinite;}
 .emote-float .emote-card.out{animation-name:emoteOutL;}
 @keyframes emoteInL{from{transform:translateX(-40px) scale(.6);opacity:0;}to{transform:none;opacity:1;}}
 @keyframes emoteOutL{to{transform:translateX(-30px);opacity:0;}}
+/* Spectate: space the emote + chat buttons */
+.spec-chat-wrap{display:flex;flex-direction:column;gap:10px;}
+/* Emotes float up from the bottom-left with a tiny sender tag */
+.emote-float{top:auto!important;right:auto!important;left:max(env(safe-area-inset-left),8px);bottom:calc(max(env(safe-area-inset-bottom),10px) + 150px);width:140px;height:220px;display:block;}
+body[data-screen="spectate"] .emote-float{bottom:calc(max(env(safe-area-inset-bottom),10px) + 90px);}
+.emote-rise{position:absolute;bottom:0;display:flex;flex-direction:column;align-items:center;gap:2px;animation:emoteRise 3.1s cubic-bezier(.25,.8,.35,1) forwards;}
+.er-emote{width:54px;height:54px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.55));}
+.er-who{display:flex;align-items:center;gap:4px;padding:2px 7px 2px 2px;border-radius:20px;background:rgba(15,15,24,.88);border:1px solid var(--cb2);max-width:120px;}
+.emote-rise.me .er-who{border-color:rgba(var(--acc-rgb),.45);}
+.er-who b{font-size:9.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@keyframes emoteRise{
+  0%{transform:translate(0,24px) scale(.4);opacity:0;}
+  10%{transform:translate(0,0) scale(1.15);opacity:1;}
+  18%{transform:translate(0,-6px) scale(1);}
+  50%{transform:translate(var(--sway),-70px);}
+  80%{opacity:1;}
+  100%{transform:translate(0,-150px) scale(.9);opacity:0;}}
