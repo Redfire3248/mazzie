@@ -1321,3 +1321,12 @@ button.fr-ava,button.fr-txt{text-align:left;}
 /* In-game controls: icons only */
 .ctrl-btn.icon-only{gap:0;}
 .ctrl-btn.icon-only .ic{width:22px;height:22px;}
+
+/* Compact boost bar (Power-ups matches only) */
+.ability-bar{justify-content:center;gap:8px;}
+.ab-slot{flex:0 0 46px;height:46px;border-radius:50%;padding:0;}
+.ab-slot .ab-icon .ic,.ab-empty .ic{width:20px;height:20px;}
+.ab-slot .ab-key{top:-3px;right:-2px;font-size:8px;background:var(--sf);border-radius:6px;padding:0 3px;}
+.ab-empty{position:relative;}
+.ab-count{position:absolute;top:-9px;right:-12px;min-width:17px;height:17px;font-size:9.5px;}
+@media (max-height:640px){.ab-slot{flex-basis:40px;height:40px;}}

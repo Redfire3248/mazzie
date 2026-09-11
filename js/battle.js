@@ -229,6 +229,7 @@ function broadcastLobbySettings() {
 // MODIFIERS — the host picks any mix; they apply to everyone's board for the whole match
 // ══════════════════════════════════════════════════
 const MODIFIERS = {
+  boosts: { name: 'Power-ups',     icon: 'bolt',    desc: 'Use boosts from your bag (Hint, Dash, Frost…)' },
   events: { name: 'Random Events', icon: 'sparkle', desc: 'Random trolls hit random players' },
   flip:   { name: 'Upside Down',   icon: 'flipv',   desc: 'The whole board is flipped' },
   mirror: { name: 'Mirror',        icon: 'mirror',  desc: 'Left and right are swapped' },
@@ -236,8 +237,8 @@ const MODIFIERS = {
   ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible' },
   fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is shown' }
 };
-const cleanMods = m => (Array.isArray(m) ? m : []).filter(k => MODIFIERS[k]).slice(0, 6);
-function setMods(list) { battleMods = cleanMods(list); partyMode = battleMods.includes('events'); }
+const cleanMods = m => (Array.isArray(m) ? m : []).filter(k => MODIFIERS[k]).slice(0, 8);
+function setMods(list) { battleMods = cleanMods(list); partyMode = battleMods.includes('events'); abilitiesEnabled = battleMods.includes('boosts'); }
 function toggleMod(k) {
   if (!isHost || !MODIFIERS[k]) return;
   setMods(battleMods.includes(k) ? battleMods.filter(x => x !== k) : [...battleMods, k]);
@@ -498,7 +499,6 @@ function handleHostMsg(d) {
     case 'lobby_settings':
       battleDiffSetting = DIFFS.includes(d.diff) || d.diff === 'random' || d.diff === 'mm' ? d.diff : 'easy';
       maxRounds = Math.max(1, Math.min(10, parseInt(d.rounds) || 3));
-      abilitiesEnabled = d.abilities !== false;
       setMods(d.mods);
       renderGuestSettings();
       break;
@@ -524,7 +524,6 @@ function handleHostMsg(d) {
     case 'start_round':
       battleActive = true; battleRound = d.round | 0; maxRounds = d.maxRounds | 0 || 3;
       battleSeed = d.seed >>> 0; battleDiff = DIFFS.includes(d.diff) ? d.diff : 'easy';
-      abilitiesEnabled = d.abilities !== false;
       setMods(d.mods);
       level = d.level || 1; dailyMode = false; roundEnded = false;
       finishOrder = []; progressState = {}; remotePaths = {}; quitPlayers.clear();
@@ -621,7 +620,7 @@ function handleHostMsg(d) {
 function renderGuestSettings() {
   const el = document.getElementById('guest-settings'); if (!el) return;
   const diff = battleDiffSetting === 'random' ? 'Random' : battleDiffSetting === 'mm' ? 'Level-based' : battleDiffSetting.toUpperCase();
-  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>${battleMods.map(k => `<span class="chaos-chip">${MODIFIERS[k].name}</span>`).join('')}`;
+  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span>${battleMods.map(k => `<span class="chaos-chip">${MODIFIERS[k].name}</span>`).join('')}`;
 }
 
 // ── Host game management ──
@@ -968,7 +967,7 @@ function showLobbyAsHost() {
   document.getElementById('guest-settings').style.display = 'none';
   document.getElementById('start-btn').style.display     = 'block';
   document.getElementById('wait-msg').style.display      = 'flex';
-  syncBoostToggle(); renderModRow();
+  renderModRow();
   renderLobby();
 }
 

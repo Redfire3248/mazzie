@@ -22,8 +22,9 @@ function continueGame() {
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 function startDaily(force) {
   const key = todayKey();
-  const done = (loadSave().daily || {})[key];
-  if (done && !force) {
+  const daily = loadSave().daily || {};
+  const done = daily[key];
+  if (key in daily && !force) {
     sfx('err'); buzz(20);
     pushToast(`Daily done in ${fmtMs(done)} — next one in ${untilTomorrow()}`, 'info', 'calendar');
     return;
@@ -128,7 +129,9 @@ function calcSize() {
 // ══════════════════════════════════════════════════
 // PUZZLE GENERATOR  (seeded random walk)
 // ══════════════════════════════════════════════════
+let _boardId = 0;   // bumps with every new board (stale timers from an old board check it)
 function generate() {
+  _boardId++;
   const g = document.getElementById('grid');
   g.innerHTML = ''; g.classList.remove('fogged', 'frosted');
   cells = []; hiddenSet.clear(); pathIndices = []; pathSet = new Set(); curHigh = 0;
@@ -583,7 +586,8 @@ function onWin() {
   setTimeout(() => nb.classList.add('ready'), 250);
   document.getElementById('auto-next-row').style.display = dailyMode ? 'none' : 'flex';
   syncAutoNextToggle();
-  setTimeout(() => { show('win'); spawnParticles(); }, 260);
+  const bid = _boardId;                              // only if this board is still the current one
+  setTimeout(() => { if (bid !== _boardId) return; show('win'); spawnParticles(); }, 260);
   syncAccountToCloud().catch(() => {});
   if (!dailyMode && getSetting('autoNext', false)) {
     clearTimeout(window._autoNextT);

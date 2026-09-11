@@ -76,7 +76,7 @@ function renderStore() {
       <div class="shop-top"><span class="shop-ic">${ic(a.icon)}</span><span class="shop-owned${bag[kind] ? ' has' : ''}">${ic('bag')}${bag[kind]}</span></div>
       <b class="shop-name">${a.name}</b>
       <small class="shop-desc">${a.desc}</small>
-      <span class="shop-tag">${a.battle ? 'Battle only' : 'Solo + battle'}</span>
+      <span class="shop-tag">Power-ups matches</span>
       <button class="shop-buy${can ? '' : ' poor'}" ${can ? '' : 'aria-disabled="true"'}>${coinHtml(price)}</button>`;
     card.querySelector('.shop-buy').onclick = e => buyBoost(kind, card);
     grid.appendChild(card);
@@ -122,7 +122,7 @@ function claimChest() {
 // ══════════════════════════════════════════════════
 // BAG — tap an empty boost slot in a game to use a boost you bought
 // ══════════════════════════════════════════════════
-function usableKinds() { return Object.keys(BOOST_PRICES).filter(k => battleActive || !ABILITIES[k].battle); }
+function usableKinds() { return Object.keys(BOOST_PRICES); }
 
 function openBag() {
   const el = document.getElementById('bag');

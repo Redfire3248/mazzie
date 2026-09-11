@@ -74,9 +74,9 @@ function updateMenuProfile() {
 
 function updateDailyBtn() {
   const el = document.getElementById('daily-info'); if (!el) return;
-  const best = (loadSave().daily || {})[todayKey()];
-  el.innerText = best ? fmtMs(best) : 'New';
-  el.classList.toggle('done', !!best);
+  const daily = loadSave().daily || {}, played = todayKey() in daily;
+  el.innerText = played ? 'Done' : 'New';
+  el.classList.toggle('done', played);
 }
 
 function openNameEdit() {

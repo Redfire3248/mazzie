@@ -381,7 +381,7 @@ const CMDS = {
     lose:       { desc:'Quit to menu', run() { goMenu(); tWarn('left to menu'); } },
     resetpaths: { desc:'Reset every path (host)', run() { resetPath(); if (isHost) broadcastAll({ type:'reset_path' }); tOk('all paths reset'); } },
     rounds:     { args:[NUM()], desc:'Set round count (host)', run(a) { needHost(); maxRounds = Math.max(1, Math.min(10, needInt(a[0]))); document.getElementById('rounds-disp').innerText = maxRounds; broadcastLobbySettings(); tOk('rounds = ' + maxRounds); } },
-    boosts:     { args:[H('<on|off>', ['on', 'off'])], desc:'Toggle boosts (host)', run(a) { needHost(); abilitiesEnabled = a[0] !== 'off'; syncBoostToggle(); broadcastLobbySettings(); tOk('boosts ' + (abilitiesEnabled ? 'on' : 'off')); } }
+    boosts:     { args:[H('<on|off>', ['on', 'off'])], desc:'Power-ups modifier on/off (host)', run(a) { needHost(); setMods(a[0] === 'off' ? battleMods.filter(k => k !== 'boosts') : [...new Set([...battleMods, 'boosts'])]); renderModRow(); broadcastLobbySettings(); tOk('boosts ' + (abilitiesEnabled ? 'on' : 'off')); } }
   } },
   kick:     { desc:'Kick a player (host)', args:[H('<player>', playerNames)], run(a) {
     needHost(); const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player'); if (pid === myId) throw new Error('cannot kick yourself');

@@ -15,7 +15,8 @@ const SOLO_POOL   = ['hint', 'hint', 'dash', 'stop'];
 const BATTLE_POOL = ['hint', 'dash', 'stop', 'shield', 'frost', 'frost', 'fog', 'fog'];
 const MAX_SLOTS = 3;
 
-function boostsActive() { return battleActive ? abilitiesEnabled : !dailyMode; }
+// Boosts only exist in room matches with the "Power-ups" modifier on
+function boostsActive() { return battleActive && abilitiesEnabled; }
 
 // ── Place pickups on the solution path (deterministic from the board rng) ──
 // Boosts no longer appear on the board — they only come from the Store (your bag).
@@ -63,10 +64,10 @@ function renderAbilityBar(flashSlot) {
     const b = document.createElement('button');
     b.className = 'ab-slot' + (kind ? ' filled' : inBag ? ' has-bag' : '') + (kind && ABILITIES[kind].attack ? ' attack' : '') + (i === flashSlot ? ' pop' : '');
     b.innerHTML = kind
-      ? `<span class="ab-icon">${ic(ABILITIES[kind].icon)}</span><span class="ab-name">${ABILITIES[kind].name}</span><span class="ab-key">${i + 1}</span>`
+      ? `<span class="ab-icon">${ic(ABILITIES[kind].icon)}</span><span class="ab-key">${i + 1}</span>`
       : inBag
-        ? `<span class="ab-empty">${ic('bag')}<span class="ab-name">Bag</span><b class="ab-count">${inBag}</b></span>`
-        : `<span class="ab-empty">${ic('plus')}<span class="ab-name">Empty</span></span>`;
+        ? `<span class="ab-empty">${ic('bag')}<b class="ab-count">${inBag}</b></span>`
+        : `<span class="ab-empty">${ic('plus')}</span>`;
     b.title = kind ? ABILITIES[kind].desc : 'Tap to use a boost from your bag (buy them in the Store)';
     b.onclick = () => kind ? useAbilitySlot(i) : openBag();
     bar.appendChild(b);

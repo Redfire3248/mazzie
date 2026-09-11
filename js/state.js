@@ -32,7 +32,7 @@ let pickupMap = new Map();     // cell idx → ability kind (uncollected)
 let abilityInv = [];           // up to 3 ability kinds
 let inputLockedUntil = 0;      // Frost (hit by rival)
 let shieldUntil = 0;
-let abilitiesEnabled = true;   // battle lobby toggle
+let abilitiesEnabled = false;  // on when the room has the "Power-ups" modifier
 let partyMode = false;         // "Random Events" modifier is on (chaos trolls during the match)
 let battleMods = [];           // room modifiers the host picked (see MODIFIERS in battle.js)
 
