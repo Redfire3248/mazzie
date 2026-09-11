@@ -1,0 +1,124 @@
+{
+  "emotes": [
+    {
+      "id": "em-hi",
+      "name": "Hi",
+      "file": "em-hi.png"
+    },
+    {
+      "id": "em-lol",
+      "name": "LOL",
+      "file": "em-lol.png"
+    },
+    {
+      "id": "em-cry",
+      "name": "Cry",
+      "file": "em-cry.png"
+    },
+    {
+      "id": "em-angry",
+      "name": "Angry",
+      "file": "em-angry.png"
+    },
+    {
+      "id": "em-shock",
+      "name": "Shock",
+      "file": "em-shock.png"
+    },
+    {
+      "id": "em-cool",
+      "name": "Cool",
+      "file": "em-cool.png"
+    },
+    {
+      "id": "em-love",
+      "name": "Love",
+      "file": "em-love.png"
+    },
+    {
+      "id": "em-think",
+      "name": "Think",
+      "file": "em-think.png"
+    },
+    {
+      "id": "em-sleepy",
+      "name": "Sleepy",
+      "file": "em-sleepy.png"
+    },
+    {
+      "id": "em-thumbs-up",
+      "name": "Thumbs Up",
+      "file": "em-thumbs-up.png"
+    },
+    {
+      "id": "em-clap",
+      "name": "Clap",
+      "file": "em-clap.png"
+    },
+    {
+      "id": "em-facepalm",
+      "name": "Facepalm",
+      "file": "em-facepalm.png"
+    },
+    {
+      "id": "em-party",
+      "name": "Party",
+      "file": "em-party.png"
+    },
+    {
+      "id": "em-king",
+      "name": "King",
+      "file": "em-king.png"
+    },
+    {
+      "id": "em-on-fire",
+      "name": "On Fire",
+      "file": "em-on-fire.png"
+    },
+    {
+      "id": "em-dead",
+      "name": "Dead",
+      "file": "em-dead.png"
+    },
+    {
+      "id": "em-nervous",
+      "name": "Nervous",
+      "file": "em-nervous.png"
+    },
+    {
+      "id": "em-silly",
+      "name": "Silly",
+      "file": "em-silly.png"
+    },
+    {
+      "id": "em-rage",
+      "name": "Rage",
+      "file": "em-rage.png"
+    },
+    {
+      "id": "em-please",
+      "name": "Please",
+      "file": "em-please.png"
+    },
+    {
+      "id": "em-heart",
+      "name": "Heart",
+      "file": "em-heart.png"
+    },
+    {
+      "id": "em-winner",
+      "name": "Winner",
+      "file": "em-winner.png"
+    },
+    {
+      "id": "em-gg",
+      "name": "GG",
+      "file": "em-gg.png"
+    },
+    {
+      "id": "em-what",
+      "name": "What",
+      "file": "em-what.png"
+    }
+  ]
+}

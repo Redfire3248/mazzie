@@ -76,6 +76,27 @@ async function main() {
   const solid = new Uint8Array(W * H);
   const dist = i => Math.sqrt((px[i] - bg[0]) ** 2 + (px[i + 1] - bg[1]) ** 2 + (px[i + 2] - bg[2]) ** 2);
   let reach = null;
+  // tint – dark, glowing, uneven background with a teal/blue cast (and black characters on it):
+  //        background = pixels whose green+blue sit above red; flood it in from the border so blue
+  //        details INSIDE a character are kept. Soft alpha on the edges, no colour un-mixing.
+  let tintA = null;
+  if (MODE === 'tint') {
+    const bgLike = i => { const r = px[i], t = Math.min(px[i + 1], px[i + 2]) - r; return r > 24 || t < 2 ? 0 : Math.min(1, (t - 1) / 6) * Math.min(1, (26 - r) / 10); };
+    tintA = new Float32Array(W * H);
+    const q = new Int32Array(W * H); let qh = 0, qt = 0; const seen = new Uint8Array(W * H);
+    const seed = p => { if (!seen[p] && bgLike(p * 4) > 0.45) { seen[p] = 1; q[qt++] = p; } };
+    for (let x = 0; x < W; x++) { seed(x); seed((H - 1) * W + x); }
+    for (let y = 0; y < H; y++) { seed(y * W); seed(y * W + W - 1); }
+    // grid gaps are background too: seed every cell border line
+    for (let c = 1; c < COLS; c++) { const x = Math.round(W / COLS * c); for (let y = 0; y < H; y++) seed(y * W + x); }
+    for (let r = 1; r < ROWS; r++) { const y = Math.round(H / ROWS * r); for (let x = 0; x < W; x++) seed(y * W + x); }
+    while (qh < qt) {
+      const p = q[qh++], x = p % W;
+      tintA[p] = bgLike(p * 4);
+      const go = n => { if (!seen[n] && bgLike(n * 4) > 0.25) { seen[n] = 1; q[qt++] = n; } };
+      if (x > 0) go(p - 1); if (x < W - 1) go(p + 1); if (p >= W) go(p - W); if (p < W * (H - 1)) go(p + W);
+    }
+  }
   if (MODE === 'flood') {                       // mark background pixels reachable from the border
     reach = new Uint8Array(W * H);
     const q = new Int32Array(W * H); let qh = 0, qt = 0;
@@ -91,10 +112,11 @@ async function main() {
   for (let i = 0, p = 0; p < W * H; p++, i += 4) {
     let a;
     if (MODE === 'alpha') a = px[i + 3] / 255;
+    else if (MODE === 'tint') a = tintA[p] ? Math.max(0, 1 - tintA[p] * 1.4) : 1;
     else if (MODE === 'flood' && !reach[p]) a = px[i + 3] / 255;
     else a = Math.min(1, Math.max(0, (dist(i) - T0) / (T1 - T0))) * (px[i + 3] / 255);
     if (a <= 0) { px[i] = px[i + 1] = px[i + 2] = px[i + 3] = 0; continue; }
-    if (a < 1 && MODE !== 'alpha') for (let c = 0; c < 3; c++) px[i + c] = clamp255((px[i + c] - (1 - a) * bg[c]) / a);
+    if (a < 1 && MODE !== 'alpha' && MODE !== 'tint') for (let c = 0; c < 3; c++) px[i + c] = clamp255((px[i + c] - (1 - a) * bg[c]) / a);
     px[i + 3] = Math.round(a * 255);
     if (a > 0.35) solid[p] = 1;
   }

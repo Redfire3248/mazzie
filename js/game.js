@@ -60,6 +60,7 @@ function startGame(diff, seed) {
   const inBattle = battleActive;
   document.getElementById('battle-pill').style.display     = inBattle ? 'block' : 'none';
   document.getElementById('game-chat-btn').style.display   = inBattle ? 'flex'  : 'none';
+  document.getElementById('game-emote-btn').style.display  = inBattle ? 'flex'  : 'none';
   const rp = document.getElementById('round-pill');
   rp.style.display = inBattle ? 'block' : 'none';
   if (inBattle) rp.innerText = 'R' + battleRound + '/' + maxRounds;

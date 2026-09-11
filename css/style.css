@@ -1195,3 +1195,51 @@ html.troll-party .screen:not(.hidden){animation:trollHue 1s linear infinite;}
 .spec-trail .st-core{stroke-width:calc(var(--cs) * .08);}
 .spec-trail .st-flow{stroke-width:calc(var(--cs) * .09);stroke-dasharray:0 calc(var(--cs) * .7);opacity:.8;}
 .spec-trail .st-head{stroke:#fff;stroke-width:1.5;}
+
+/* ══════════ EMOTES ══════════ */
+.emote-pop{position:fixed;left:50%;transform:translateX(-50%);z-index:430;width:min(400px,calc(100% - 20px));max-height:min(52vh,420px);overflow-y:auto;padding:10px;border-radius:20px;background:rgba(15,15,24,.97);border:1px solid var(--cb2);box-shadow:0 20px 60px rgba(0,0,0,.6);backdrop-filter:blur(14px);animation:cardIn .2s ease;touch-action:pan-y;}
+.emote-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;}
+.emote-btn{aspect-ratio:1;border-radius:14px;display:flex;align-items:center;justify-content:center;transition:transform .1s,background var(--trans);}
+.emote-btn:hover{background:var(--cell);}
+.emote-btn:active{transform:scale(.88);}
+.emote-img{width:100%;height:100%;object-fit:contain;pointer-events:none;}
+.emote-float{position:fixed;right:max(env(safe-area-inset-right),10px);top:calc(max(env(safe-area-inset-top),12px) + 64px);z-index:120;display:flex;flex-direction:column;gap:6px;align-items:flex-end;pointer-events:none;}
+.emote-card{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 5px;border-radius:40px;background:rgba(15,15,24,.9);border:1px solid var(--cb2);box-shadow:0 8px 24px rgba(0,0,0,.5);animation:emoteIn .45s cubic-bezier(.34,1.7,.64,1);}
+.emote-card.me{border-color:rgba(var(--acc-rgb),.45);}
+.emote-card b{font-size:11px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.emote-card .ec-emote{width:52px;height:52px;animation:emoteBop .6s .15s ease-out;}
+.emote-card.out{animation:emoteOut .3s ease forwards;}
+@keyframes emoteIn{from{transform:translateX(40px) scale(.6);opacity:0;}to{transform:none;opacity:1;}}
+@keyframes emoteOut{to{transform:translateX(30px);opacity:0;}}
+@keyframes emoteBop{0%{transform:scale(.4) rotate(-15deg);}60%{transform:scale(1.2) rotate(6deg);}100%{transform:none;}}
+/* On a lobby player card */
+.p-ava-wrap{position:relative;}
+.emote-bubble{position:absolute;left:50%;bottom:70%;width:64px;height:64px;transform:translateX(-50%);z-index:5;pointer-events:none;animation:bubbleUp 2.6s ease forwards;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));}
+.emote-bubble .emote-img{width:100%;height:100%;}
+@keyframes bubbleUp{0%{transform:translate(-50%,20px) scale(.3);opacity:0;}12%{transform:translate(-50%,0) scale(1.15);opacity:1;}20%{transform:translate(-50%,0) scale(1);}85%{opacity:1;}100%{transform:translate(-50%,-14px) scale(.9);opacity:0;}}
+.lobby-extra{display:flex;gap:8px;width:100%;}
+.lobby-extra .invite-friends-btn{flex:1;}
+.lobby-emote{width:52px;flex:0 0 52px;padding:0;display:flex;align-items:center;justify-content:center;}
+.lobby-emote .ic{width:22px;height:22px;}
+.players-box{overflow:visible;}
+
+/* ══════════ SPECTATE = the player's real board ══════════ */
+.spec-board{position:relative;display:grid;background:var(--sf);border-radius:22px;box-shadow:0 0 0 1px var(--cb),0 0 0 1px rgba(255,255,255,.035) inset,0 24px 60px rgba(0,0,0,.55);}
+.spec-board .cell{transition:none;}
+.spec-board .node{position:relative;z-index:3;}
+.spec-board .cell.active{background:rgba(var(--trail-rgb),.22);box-shadow:inset 0 0 0 1.5px rgba(var(--trail-rgb),.55),0 0 14px rgba(var(--trail-rgb),.25);}
+.spec-board .cell.path-head{background:rgba(var(--trail-rgb),.5);box-shadow:0 0 0 2px var(--trail),0 0 22px rgba(var(--trail-rgb),.6);}
+.spec-board .cell.active .node{background:var(--trail);color:#07070e;box-shadow:0 0 10px rgba(var(--trail-rgb),.55);}
+.spec-board .cell.path-head .node{background:#07070e;color:var(--trail);}
+.spec-board .spec-trail{z-index:2;}
+.spec-board .spec-trail .st-glow{stroke-width:calc(var(--cs) * .62);opacity:.42;filter:blur(4px);}
+.spec-board .spec-trail .st-body{stroke-width:calc(var(--cs) * .3);opacity:.95;}
+.spec-board .spec-trail .st-core{stroke-width:calc(var(--cs) * .09);opacity:.85;}
+.spec-board .spec-trail .st-flow{stroke-width:calc(var(--cs) * .14);stroke-dasharray:0 calc(var(--cs) * .55);opacity:.95;}
+.spec-mini-grid-wrap{overflow:visible;}
+.spec-board .cell[data-num]{z-index:3;}
+.emote-float{right:auto;left:max(env(safe-area-inset-left),10px);align-items:flex-start;}
+.emote-float .emote-card{animation-name:emoteInL;}
+.emote-float .emote-card.out{animation-name:emoteOutL;}
+@keyframes emoteInL{from{transform:translateX(-40px) scale(.6);opacity:0;}to{transform:none;opacity:1;}}
+@keyframes emoteOutL{to{transform:translateX(-30px);opacity:0;}}

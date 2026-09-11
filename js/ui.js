@@ -32,6 +32,7 @@ function goMenu() {
   battleActive = false; amSpectating = false; dailyMode = false;
   document.getElementById('battle-pill').style.display   = 'none';
   document.getElementById('game-chat-btn').style.display = 'none';
+  document.getElementById('game-emote-btn').style.display = 'none';
   document.getElementById('round-pill').style.display    = 'none';
   stopTimer(); show('menu');
 }

@@ -302,7 +302,7 @@ function renderLobby() {
     const p = lobbyPlayers[pid];
     const isMe = pid === myId;
     const title = titleName(p.avatar);
-    const row = document.createElement('div'); row.className = 'p-row';
+    const row = document.createElement('div'); row.className = 'p-row'; row.dataset.pid = pid;
     row.innerHTML = `<div class="p-ava-wrap">${renderAvatar(p.avatar, p.name, 38)}
       <div class="p-lvl-wrap">${getLevelBadge(p.xpLevel || 1)}</div></div>
     <div class="p-info">
@@ -430,6 +430,9 @@ function handleGuestMsg(conn, d) {
     }
     case 'ability':
       relayAttack({ id:pid, name:lobbyPlayers[pid].name, kind:d.kind });
+      break;
+    case 'emote':
+      relayEmote(pid, String(d.e || ''));
       break;
   }
 }
@@ -575,6 +578,9 @@ function handleHostMsg(d) {
       break;
     case 'chat':
       receiveChatMsg({ id:d.id, name:cleanName(d.name), msg:String(d.msg || '').slice(0, 80) });
+      break;
+    case 'emote':
+      showEmote({ id:d.id, name:cleanName(d.name), e:String(d.e || '') });
       break;
   }
 }
@@ -764,49 +770,45 @@ function updateSpecNavBtns() {
   document.getElementById('spec-next-btn').disabled = !hasMult;
 }
 
+// Spectating: a read-only copy of the watched player's board, built with the SAME cell / node /
+// obstacle styles as the real board, and their own trail drawn with the same neon layers.
 function renderMiniBoardForPlayer(pid) {
   const wrap = document.getElementById('spec-mini-grid');
   if (!wrap || !cells.length) return;
   const path = remotePaths[pid] || [];
-  const mini = Math.max(10, Math.min(Math.floor((Math.min(window.innerWidth - 80, 360) - 12 - (cols - 1) * 2) / cols), 30));
-  wrap.style.gridTemplateColumns = `repeat(${cols},${mini}px)`;
-  const visible  = new Set(solutionPath);
-  const pSet     = new Set(path);
-  const pathHead = path.length > 0 ? path[path.length - 1] : -1;
+  const pad = GPAD, gap = GAP;
+  const maxW = Math.min(window.innerWidth - 56, 460), maxH = Math.max(200, window.innerHeight - 330);
+  const cs = Math.max(14, Math.min(56, Math.floor((maxW - pad * 2 - (cols - 1) * gap) / cols), Math.floor((maxH - pad * 2 - (rows - 1) * gap) / rows)));
+  const av = sanitizeAvatar((lobbyPlayers[pid] || playerCache[pid] || {}).avatar || {});
+  const t = _find(TRAILS, av.trail) || TRAILS[0];
+  wrap.className = 'spec-mini-grid spec-board';
+  wrap.style.cssText = `grid-template-columns:repeat(${cols},${cs}px);padding:${pad}px;gap:${gap}px;--trail-rgb:${t.rgb};--trail:rgb(${t.rgb});--trail-core:${t.core || '#fff'};--cs:${cs}px;--r:${Math.max(4, Math.round(cs * 0.2))}px`;
+  const visible = new Set(solutionPath), pSet = new Set(path);
+  const head = path.length ? path[path.length - 1] : -1;
   const frag = document.createDocumentFragment();
   for (let i = 0; i < rows * cols; i++) {
     const el = document.createElement('div');
-    el.className = 'mini-cell';
-    el.style.width = el.style.height = mini + 'px';
-    if (obstacleSet.has(i))      el.classList.add('obstacle');
-    else if (!visible.has(i))    el.classList.add('hidden-cell');
-    else if (i === pathHead)     el.classList.add('path-head');
-    else if (pSet.has(i))        el.classList.add('active');
+    el.className = 'cell';
+    el.style.width = el.style.height = cs + 'px';
+    if (obstacleSet.has(i)) el.classList.add('obstacle');
+    else if (!visible.has(i)) el.classList.add('hidden-cell');
+    else if (i === head) el.classList.add('active', 'path-head');
+    else if (pSet.has(i)) el.classList.add('active');
     const num = cells[i] && cells[i].dataset.num;
-    if (num) {
-      const nd = document.createElement('div');
-      nd.className = 'mini-node'; nd.innerText = num;
-      nd.style.fontSize = Math.max(6, mini * 0.32) + 'px';
-      el.appendChild(nd);
-    }
+    if (num) { el.dataset.num = num; el.innerHTML = `<div class="node" style="font-size:${Math.max(8, Math.round(cs * 0.3))}px">${num}</div>`; }
     frag.appendChild(el);
   }
   wrap.innerHTML = ''; wrap.appendChild(frag);
-  // Draw the player's OWN trail (colours + effects) on top of their mini board
-  const av = sanitizeAvatar((lobbyPlayers[pid] || playerCache[pid] || {}).avatar || {});
-  const t = _find(TRAILS, av.trail) || TRAILS[0];
-  wrap.style.setProperty('--trail-rgb', t.rgb);
   if (path.length > 1) {
-    const step = mini + 2, pad = 6, c = i => [pad + (i % cols) * step + mini / 2, pad + Math.floor(i / cols) * step + mini / 2];
+    const c = i => [pad + (i % cols) * (cs + gap) + cs / 2, pad + Math.floor(i / cols) * (cs + gap) + cs / 2];
     const d = path.map((i, k) => (k ? 'L' : 'M') + c(i).join(' ')).join(' ');
-    const W = pad * 2 + cols * step - 2, Hh = pad * 2 + rows * step - 2, gid = 'spg' + pid.replace(/[^a-z0-9]/gi, '');
+    const W = pad * 2 + cols * cs + (cols - 1) * gap, Hh = pad * 2 + rows * cs + (rows - 1) * gap;
+    const gid = 'spg' + String(pid).replace(/[^a-z0-9]/gi, '');
     const spin = t.spin ? `<animateTransform attributeName="gradientTransform" type="rotate" from="0 ${W / 2} ${Hh / 2}" to="360 ${W / 2} ${Hh / 2}" dur="3s" repeatCount="indefinite"/>` : '';
-    const svg = `<svg class="spec-trail${t.flow ? ' flow' : ''}${t.pulse ? ' pulse' : ''}${t.zap ? ' zap' : ''}${t.dash ? ' dash' : ''}" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" style="--trail-rgb:${t.rgb};--trail-core:${t.core || '#fff'};--cs:${mini}px">
+    wrap.insertAdjacentHTML('beforeend', `<svg class="spec-trail${t.flow ? ' flow' : ''}${t.pulse ? ' pulse' : ''}${t.zap ? ' zap' : ''}${t.dash ? ' dash' : ''}" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}">
       <defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${W}" y2="${Hh}">${trailStops(t)}${spin}</linearGradient></defs>
       <path class="st-glow" d="${d}" stroke="url(#${gid})"/><path class="st-body" d="${d}" stroke="url(#${gid})"/>
-      <path class="st-core" d="${d}"/>${t.flow ? `<path class="st-flow" d="${d}"/>` : ''}
-      <circle class="st-head" cx="${c(path[path.length - 1])[0]}" cy="${c(path[path.length - 1])[1]}" r="${mini * 0.22}" fill="url(#${gid})"/></svg>`;
-    wrap.insertAdjacentHTML('beforeend', svg);
+      <path class="st-core" d="${d}"/>${t.flow ? `<path class="st-flow" d="${d}"/>` : ''}</svg>`);
   }
 }
 

@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Righteous&family=Russo+One&family=Pacifico&family=Orbitron:wght@700;900&family=Bungee&family=Press+Start+2P&family=Cinzel+Decorative:wght@700;900&family=Permanent+Marker&family=Creepster&family=Monoton&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="css/style.css?v=20260912l">
+<link rel="stylesheet" href="css/style.css?v=20260912n">
 </head>
 <body>
 
@@ -23,6 +23,8 @@
 <div id="reward-layer" aria-live="polite"></div>
 <div id="crate-open" class="crate-overlay hidden"></div>
 <div id="invite-pop" class="invite-pop" hidden></div>
+<div id="emote-pop" class="emote-pop" hidden></div>
+<div id="emote-float" class="emote-float"></div>
 
 <!-- CONNECTING -->
 <div id="connecting">
@@ -392,7 +394,10 @@
     <div class="players-box" id="players-box"></div>
     <div class="wait-msg" id="wait-msg">Waiting for players <span class="dots"><i></i><i></i><i></i></span></div>
     <div class="status-line" id="lob-status"></div>
-    <button class="b-btn secondary invite-friends-btn" onclick="openFriends()"><i data-ic="users"></i>Invite friends</button>
+    <div class="lobby-extra">
+      <button class="b-btn secondary invite-friends-btn" onclick="openFriends()"><i data-ic="users"></i>Invite friends</button>
+      <button class="b-btn secondary emote-open lobby-emote" onclick="toggleEmotePicker(this)" title="Emotes"><i data-ic="smile"></i></button>
+    </div>
     <div class="b-actions">
       <button class="b-btn secondary" onclick="leaveLobby()"><i data-ic="logout"></i>Leave</button>
       <button class="b-btn primary" id="start-btn" style="display:none;" onclick="hostStart()" disabled><i data-ic="play"></i>Start</button>
@@ -424,6 +429,7 @@
   <div class="bottom-bar">
     <button class="ctrl-btn" onclick="undoStep()" title="Undo (Backspace)"><i data-ic="undo"></i>Undo</button>
     <button class="ctrl-btn" onclick="resetPath()" title="Reset (R)"><i data-ic="reset"></i>Reset</button>
+    <button class="chat-btn emote-open" id="game-emote-btn" onclick="toggleEmotePicker(this)" title="Emotes" style="display:none;"><i data-ic="smile"></i></button>
     <button class="chat-btn" id="game-chat-btn" onclick="openChat()" title="Chat" style="display:none;"><i data-ic="chat"></i></button>
     <button class="ctrl-btn" onclick="gameMenuBtn()"><i data-ic="menu"></i>Menu</button>
   </div>
@@ -468,6 +474,7 @@
     <button class="spec-nav-arrow" id="spec-next-btn" onclick="specNavigate(1)"><i data-ic="chevR"></i></button>
   </div>
   <div class="spec-chat-wrap">
+    <button class="chat-btn emote-open" onclick="toggleEmotePicker(this)" title="Emotes"><i data-ic="smile"></i></button>
     <button class="chat-btn" id="spec-chat-btn" onclick="openChat()"><i data-ic="chat"></i></button>
   </div>
 </div>
@@ -581,23 +588,24 @@
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js?v=secure1"></script>
-<script src="js/icons.js?v=20260912l"></script>
-<script src="js/state.js?v=20260912l"></script>
-<script src="js/save.js?v=20260912l"></script>
-<script src="js/cosmetics.js?v=20260912l"></script>
-<script src="js/account.js?v=20260912l"></script>
-<script src="js/auth-ui.js?v=20260912l"></script>
-<script src="js/puzzle.js?v=20260912l"></script>
-<script src="js/game.js?v=20260912l"></script>
-<script src="js/abilities.js?v=20260912l"></script>
-<script src="js/store.js?v=20260912l"></script>
-<script src="js/crates.js?v=20260912l"></script>
-<script src="js/friends.js?v=20260912l"></script>
-<script src="js/live.js?v=20260912l"></script>
-<script src="js/battle.js?v=20260912l"></script>
-<script src="js/matchmaking.js?v=20260912l"></script>
-<script src="js/ui.js?v=20260912l"></script>
-<script src="js/terminal.js?v=20260912l"></script>
+<script src="js/icons.js?v=20260912n"></script>
+<script src="js/state.js?v=20260912n"></script>
+<script src="js/save.js?v=20260912n"></script>
+<script src="js/cosmetics.js?v=20260912n"></script>
+<script src="js/account.js?v=20260912n"></script>
+<script src="js/auth-ui.js?v=20260912n"></script>
+<script src="js/puzzle.js?v=20260912n"></script>
+<script src="js/game.js?v=20260912n"></script>
+<script src="js/abilities.js?v=20260912n"></script>
+<script src="js/store.js?v=20260912n"></script>
+<script src="js/crates.js?v=20260912n"></script>
+<script src="js/friends.js?v=20260912n"></script>
+<script src="js/emotes.js?v=20260912n"></script>
+<script src="js/live.js?v=20260912n"></script>
+<script src="js/battle.js?v=20260912n"></script>
+<script src="js/matchmaking.js?v=20260912n"></script>
+<script src="js/ui.js?v=20260912n"></script>
+<script src="js/terminal.js?v=20260912n"></script>
 
 </body>
 </html>
