@@ -151,7 +151,7 @@ const CMDS = {
       termPrint('       inside it add   ' + key + ' : true   (dots become commas)', 'dim');
     }
     if (!dbAdmin) return;
-    const checks = [['/online', 'online list'], ['/broadcast', 'world messages'], ['/gifts/' + currentAccount.id, 'gift inbox']];
+    const checks = [['/online', 'online list'], ['/broadcast', 'world messages'], ['/gifts/' + currentAccount.id, 'gift inbox'], ['/friends/' + currentAccount.id, 'friends list'], ['/friendReq/' + currentAccount.id, 'friend requests'], ['/invites/' + currentAccount.id, 'room invites']];
     let stale = false;
     for (const [p, what] of checks) {
       try { await dbGet(p); tOk('rules: ' + pad(what, 14) + 'ok'); }

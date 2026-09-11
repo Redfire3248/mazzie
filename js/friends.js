@@ -139,19 +139,29 @@ async function sendFriendRequest() {
   const name = inp.value.trim(); err.innerText = '';
   if (!friendsReady()) return (err.innerText = 'Sign in online to add friends.');
   if (!name) return;
+  let to = null;
   try {
+    await loadFriends();                                           // make sure the friends list is fresh
     const u = await dbGet('/usernames/' + nameKey(name));
-    const to = u && (u.acc || u.uid);
+    to = u && (u.acc || u.uid);
     if (!to) return (err.innerText = 'No player called "' + name + '".');
     if (to === currentAccount.id) return (err.innerText = "That's you!");
     if (_friends[to]) return (err.innerText = 'You are already friends.');
     if (_reqIn[to]) return acceptFriend(to);                       // they already asked you
-    await dbPut('/friendReq/' + to + '/' + currentAccount.id, { name: myName, at: SERVER_TIME, av: getMyAvatar() });
+    // Already sent one? (you can read your own outgoing request)
+    let pending = null;
+    try { pending = await dbGet('/friendReq/' + to + '/' + currentAccount.id); } catch (e) { if (e.message === 'DENIED') return (err.innerText = 'The server refused — the database rules need publishing (admin: run "doctor").'); }
+    if (pending) { writeSave({ friendOut: { ...(loadSave().friendOut || {}), [to]: cleanName(name) } }); renderFriends(); return (err.innerText = 'Request already sent — waiting for ' + cleanName(name) + '.'); }
+    await dbPut('/friendReq/' + to + '/' + currentAccount.id, { name: cleanName(myName), at: SERVER_TIME, av: getMyAvatar() });
     writeSave({ friendOut: { ...(loadSave().friendOut || {}), [to]: cleanName(name) } });
     inp.value = ''; sfx('coin');
     pushToast('Friend request sent to ' + cleanName(name), 'acc', 'users');
     renderFriends();
-  } catch (e) { err.innerText = e.message === 'DENIED' ? 'Could not send (already sent?)' : 'Could not reach the server.'; }
+  } catch (e) {
+    err.innerText = e.message === 'DENIED'
+      ? (to && _friends[to] ? 'You are already friends.' : 'The server refused the request — the database rules may need publishing (admin: run "doctor").')
+      : 'Could not reach the server — check your internet.';
+  }
 }
 async function acceptFriend(id) {
   const r = _reqIn[id]; if (!r) return;
