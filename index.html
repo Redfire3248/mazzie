@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Righteous&family=Russo+One&family=Pacifico&family=Orbitron:wght@700;900&family=Bungee&family=Press+Start+2P&family=Cinzel+Decorative:wght@700;900&family=Permanent+Marker&family=Creepster&family=Monoton&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="css/style.css?v=20260912z">
+<link rel="stylesheet" href="css/style.css?v=20260913a">
 </head>
 <body>
 
@@ -159,6 +159,9 @@
         </div>
       </div>
       <i data-ic="chevR" class="profile-chev"></i>
+    </button>
+    <button class="continue-btn rejoin-btn hidden" onclick="rejoinRoom()">
+      <span class="cb-l"><i data-ic="login"></i>Rejoin room</span><span class="rejoin-code"></span>
     </button>
     <button class="continue-btn hidden" id="continue-btn" onclick="continueGame()">
       <span class="cb-l"><i data-ic="play"></i>Continue</span><span id="continue-info"></span>
@@ -330,6 +333,7 @@
       <div class="panel-title">Battle</div><span class="icon-btn ghost"></span>
     </div>
     <div class="panel-sub">Race friends or strangers on the same board</div>
+    <button class="big-opt rejoin-btn hidden" onclick="rejoinRoom()"><i data-ic="login"></i><span><b>Rejoin room <span class="rejoin-code"></span></b><small>Get back into the room you just left</small></span><i data-ic="chevR"></i></button>
     <button class="big-opt cyan" onclick="openFriends()"><i data-ic="users"></i><span><b>Play with friends</b><small>Invite in one tap · join their rooms</small></span><i data-ic="chevR"></i></button>
     <button class="big-opt gold" onclick="startQuickMatch()"><i data-ic="target"></i><span><b>Quick Match</b><small>Random players near your level</small></span><i data-ic="chevR"></i></button>
     <button class="big-opt" onclick="openHostLobby()"><i data-ic="home"></i><span><b>Host a room</b><small>Get a code to share</small></span><i data-ic="chevR"></i></button>
@@ -583,24 +587,24 @@
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js?v=secure1"></script>
-<script src="js/icons.js?v=20260912z"></script>
-<script src="js/state.js?v=20260912z"></script>
-<script src="js/save.js?v=20260912z"></script>
-<script src="js/cosmetics.js?v=20260912z"></script>
-<script src="js/account.js?v=20260912z"></script>
-<script src="js/auth-ui.js?v=20260912z"></script>
-<script src="js/puzzle.js?v=20260912z"></script>
-<script src="js/game.js?v=20260912z"></script>
-<script src="js/abilities.js?v=20260912z"></script>
-<script src="js/store.js?v=20260912z"></script>
-<script src="js/crates.js?v=20260912z"></script>
-<script src="js/friends.js?v=20260912z"></script>
-<script src="js/emotes.js?v=20260912z"></script>
-<script src="js/live.js?v=20260912z"></script>
-<script src="js/battle.js?v=20260912z"></script>
-<script src="js/matchmaking.js?v=20260912z"></script>
-<script src="js/ui.js?v=20260912z"></script>
-<script src="js/terminal.js?v=20260912z"></script>
+<script src="js/icons.js?v=20260913a"></script>
+<script src="js/state.js?v=20260913a"></script>
+<script src="js/save.js?v=20260913a"></script>
+<script src="js/cosmetics.js?v=20260913a"></script>
+<script src="js/account.js?v=20260913a"></script>
+<script src="js/auth-ui.js?v=20260913a"></script>
+<script src="js/puzzle.js?v=20260913a"></script>
+<script src="js/game.js?v=20260913a"></script>
+<script src="js/abilities.js?v=20260913a"></script>
+<script src="js/store.js?v=20260913a"></script>
+<script src="js/crates.js?v=20260913a"></script>
+<script src="js/friends.js?v=20260913a"></script>
+<script src="js/emotes.js?v=20260913a"></script>
+<script src="js/live.js?v=20260913a"></script>
+<script src="js/battle.js?v=20260913a"></script>
+<script src="js/matchmaking.js?v=20260913a"></script>
+<script src="js/ui.js?v=20260913a"></script>
+<script src="js/terminal.js?v=20260913a"></script>
 
 </body>
 </html>

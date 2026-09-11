@@ -267,9 +267,10 @@ function applyMods(list) {
 // ══════════════════════════════════════════════════
 const PARTY_TROLLS = { flip: 'flipped upside down', spin: 'sent spinning', mirror: 'mirrored', shake: 'an earthquake',
   tiny: 'shrunk', invert: 'colour-flipped', fog: 'fogged', frost: 'frozen', party: 'a disco', honk: 'honked' };
-let _chaosT = null;
+let _chaosT = null, _chaosHit = {}, _chaosLastId = null;
 function startChaos() {
   clearTimeout(_chaosT);
+  if (battleRound <= 1) { _chaosHit = {}; _chaosLastId = null; }
   if (!isHost || !partyMode) return;
   _chaosT = setTimeout(chaosTick, 7000 + Math.random() * 5000);
 }
@@ -277,8 +278,16 @@ function chaosTick() {
   if (!isHost || !partyMode || !battleActive || roundEnded) return;
   const done = new Set(finishOrder.map(f => f.id));
   const alive = Object.keys(lobbyPlayers).filter(pid => !quitPlayers.has(pid) && !done.has(pid));
-  if (alive.length) {
-    const id = alive[Math.floor(Math.random() * alive.length)];
+  // Fair rotation: never the same player twice in a row (when others are still playing),
+  // at least 18 s between hits on one player, and whoever waited longest goes first
+  const now = Date.now();
+  let pool = alive.filter(pid => now - (_chaosHit[pid] || 0) >= 18000);
+  if (pool.length > 1) pool = pool.filter(pid => pid !== _chaosLastId);
+  if (pool.length) {
+    pool.sort((a, b) => (_chaosHit[a] || 0) - (_chaosHit[b] || 0));
+    const oldest = pool.filter(pid => (_chaosHit[pid] || 0) === (_chaosHit[pool[0]] || 0));
+    const id = oldest[Math.floor(Math.random() * oldest.length)];
+    _chaosHit[id] = now; _chaosLastId = id;
     const kinds = Object.keys(PARTY_TROLLS), kind = kinds[Math.floor(Math.random() * kinds.length)];
     const msg = { type:'party_troll', id, kind, name: (lobbyPlayers[id] || {}).name || 'Someone' };
     broadcastAll(msg); onPartyTroll(msg);
@@ -384,6 +393,26 @@ function handleGuestMsg(conn, d) {
     if (pid) return;
     const id = String(d.id || '').slice(0, 48);
     if (!id || id === myId) { conn.send({ type:'name_conflict' }); return; }
+    // Someone who was already in this room is coming back (left by accident / lost signal)
+    if (lobbyPlayers[id]) {
+      for (const [c, cid] of connMap) if (cid === id && c !== conn) { connMap.delete(c); try { c.close(); } catch (e) {} }   // drop their old, dead link
+      connMap.set(conn, id);
+      const back = quitPlayers.delete(id);
+      lobbyPlayers[id].avatar = sanitizeAvatar(d.avatar);
+      broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
+      conn.send({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, mods:battleMods });
+      if (battleActive) {
+        const done = finishOrder.some(f => f.id === id);
+        conn.send({ type:'rejoin_state', round:battleRound, maxRounds, seed:battleSeed, diff:battleDiff, level, mods:battleMods,
+          finished:done, scores:roundScores, order:finishOrder, progress:progressState });
+        broadcastAll({ type:'player_back', id, name:lobbyPlayers[id].name });
+        if (back) { progressState[id] = { ...(progressState[id] || { pct:0 }), quit:false }; updateSpectateRow(id, progressState[id].pct || 0, !!done, '', false); }
+      }
+      renderLobby(); sfx('node');
+      pushToast(lobbyPlayers[id].name + ' rejoined', 'acc', 'login');
+      adminLog('ok', lobbyPlayers[id].name + ' rejoined');
+      return;
+    }
     if (battleActive) { conn.send({ type:'room_busy' }); setTimeout(() => conn.close(), 400); return; }
     if (Object.keys(lobbyPlayers).length >= MAX_ROOM_PLAYERS) { conn.send({ type:'room_full' }); setTimeout(() => conn.close(), 400); return; }
     let name = cleanName(d.name);
@@ -493,6 +522,7 @@ function handleHostMsg(d) {
   switch (d.type) {
     case 'lobby_update':
       lobbyPlayers = adoptPlayers(d.players);
+      rememberRoom();
       renderLobby();
       if (isScreen('join-screen')) showLobbyAsGuest();
       break;
@@ -561,6 +591,7 @@ function handleHostMsg(d) {
       break;
     }
     case 'host_left':
+      forgetRoom();
       if (!battleActive && mm && mm.phase === 'guest') { mmRetry(); break; }
       pushToast('Host left the room', 'warn');
       stopTimer();
@@ -579,6 +610,7 @@ function handleHostMsg(d) {
       break;
     case 'kick':
       if (d.id === myId) {
+        forgetRoom();
         pushToast('You were kicked from the room', 'warn');
         _destroyBattleSession(); stopTimer();
         setTimeout(() => show('menu'), 600);
@@ -604,6 +636,26 @@ function handleHostMsg(d) {
       break;
     case 'ability_hit':
       receiveAttack({ ...d, fromName:cleanName(d.fromName) });
+      break;
+    case 'rejoin_state':
+      battleActive = true; battleRound = d.round | 0; maxRounds = d.maxRounds | 0 || 3;
+      battleSeed = d.seed >>> 0; battleDiff = DIFFS.includes(d.diff) ? d.diff : 'easy';
+      setMods(d.mods);
+      level = d.level || 1; dailyMode = false; roundEnded = false; initialSeed = battleSeed;
+      roundScores = d.scores && typeof d.scores === 'object' ? d.scores : {};
+      finishOrder = (Array.isArray(d.order) ? d.order : []).map(e => ({ ...e, name:cleanName(e.name) }));
+      progressState = d.progress && typeof d.progress === 'object' ? d.progress : {};
+      remotePaths = {}; Object.entries(progressState).forEach(([k, v]) => { remotePaths[k] = Array.isArray(v && v.path) ? v.path : []; });
+      quitPlayers.clear();
+      if (typeof mmStop === 'function') mmStop(true);
+      rememberRoom();
+      if (d.finished) { amSpectating = true; showSpectateScreen(''); }
+      else { amSpectating = false; startGame(battleDiff, battleSeed); }
+      pushToast('Back in the match!', 'acc', 'login');
+      break;
+    case 'player_back':
+      quitPlayers.delete(d.id);
+      if (d.id !== myId) { pushToast(cleanName(d.name) + ' rejoined', 'acc', 'login'); addChatMsg(cleanName(d.name) + ' rejoined', null, true); }
       break;
     case 'party_troll':
       onPartyTroll(d);
@@ -982,4 +1034,26 @@ function showLobbyAsGuest() {
   document.getElementById('wait-msg').style.display       = 'flex';
   renderGuestSettings();
   renderLobby();
+}
+
+// ══════════════════════════════════════════════════
+// REJOIN — guests can get back into a room for 10 minutes after leaving by accident
+// ══════════════════════════════════════════════════
+const REJOIN_MS = 10 * 60000;
+function rememberRoom() { if (!isHost && roomCode && !isQuickMatch) try { localStorage.setItem('mz_lastRoom', JSON.stringify({ code: roomCode, at: Date.now() })); } catch (e) {} }
+function forgetRoom() { try { localStorage.removeItem('mz_lastRoom'); } catch (e) {} updateRejoinBtns(); }
+function lastRoom() {
+  try { const r = JSON.parse(localStorage.getItem('mz_lastRoom') || 'null'); return r && /^[A-Z]{4}$/.test(r.code) && Date.now() - r.at < REJOIN_MS ? r : null; } catch (e) { return null; }
+}
+function updateRejoinBtns() {
+  const r = !inBattleSession() && lastRoom();
+  document.querySelectorAll('.rejoin-btn').forEach(b => { b.classList.toggle('hidden', !r); const c = b.querySelector('.rejoin-code'); if (c && r) c.textContent = r.code; });
+}
+async function rejoinRoom() {
+  const r = lastRoom(); if (!r) return updateRejoinBtns();
+  if (inBattleSession()) _destroyBattleSession();
+  show('join-screen');
+  const inp = document.getElementById('join-input'); if (inp) inp.value = r.code;
+  const ok = await joinRoom(r.code, { onFail: () => { forgetRoom(); pushToast('That room is gone', 'warn'); } });
+  if (ok) sfx('node');
 }
