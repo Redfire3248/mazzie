@@ -209,6 +209,7 @@ const SV = { '.sv': 'timestamp' };
   no('profile cannot claim more clears',  await req('PUT', '/profiles/B', { name: 'Bob', xp: 500, cleared: 9999, at: SV }, bob.tok));
   no('alice cannot write bob profile',    await req('PUT', '/profiles/B', { name: 'Bobby', xp: 1, cleared: 1, at: SV }, aliceNew.tok));
   ok('any signed-in player can view it',  await req('GET', '/profiles/B', undefined, aliceNew.tok));
+  ok('look-only profile update',          await req('PATCH', '/profiles/B', { name: 'Bob', av: { icon: 'cr-fox' }, at: SV }, bob.tok));
   no('anonymous cannot view profiles',    await req('GET', '/profiles/B'));
 
   console.log('Legacy account migration');

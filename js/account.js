@@ -538,13 +538,22 @@ async function syncAccountToCloud() {
   } catch (e) { return; }
   // Progress is stamped with the server clock; the database rejects impossible jumps.
   // A rejected jump simply retries on later syncs, once enough real time has passed.
+  let progressOk = false;
   try {
     await dbPatch('/accounts/' + id, secure
       ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: keyMap(s.crateKeys), xpAt: SERVER_TIME }
       : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: keyMap(s.crateKeys) });
-    // Public profile (anyone signed in can view it; the rules cap xp/clears at the real account's values)
-    if (secure) dbPut('/profiles/' + id, { name: myName, xp: s.xp || 0, cleared: s.totalCleared || 0, av: getMyAvatar(), at: SERVER_TIME }).catch(() => {});
+    progressOk = true;
   } catch (e) { /* offline or over the speed limit — next sync */ }
+  // Public profile (anyone signed in can view it; the rules cap xp/clears at the real account's values).
+  // Your look + name always go out, even when the anti-cheat is holding your progress back for now.
+  if (secure) {
+    const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME };
+    try {
+      if (progressOk) await dbPut('/profiles/' + id, { ...look, xp: s.xp || 0, cleared: s.totalCleared || 0 });
+      else await dbPatch('/profiles/' + id, look).catch(() => dbPut('/profiles/' + id, { ...look, xp: 0, cleared: 0 }));
+    } catch (e) {}
+  }
 }
 
 async function initAccount(onReady) {

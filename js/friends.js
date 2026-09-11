@@ -7,7 +7,7 @@
 // friends can invite you or see when you're online.
 // ══════════════════════════════════════════════════
 
-let _friends = {}, _reqIn = {}, _invites = {}, _presence = {};
+let _friends = {}, _reqIn = {}, _invites = {}, _presence = {}, _profiles = {};
 let _rqES = null, _ivES = null, _presT = null, _frPollT = null, _seenInvites = new Set();
 const friendsReady = () => authMode() === 'secure' && currentAccount && !currentAccount.offline && !currentAccount.local && _authUser;
 
@@ -68,7 +68,10 @@ function friendsChanged() {
 async function refreshPresence() {
   await loadFriends();
   const ids = Object.keys(_friends);
-  await Promise.all(ids.map(async id => { try { _presence[id] = await dbGet('/online/' + id); } catch (e) { _presence[id] = null; } }));
+  await Promise.all(ids.map(async id => {
+    try { _presence[id] = await dbGet('/online/' + id); } catch (e) { _presence[id] = null; }
+    try { const p = await dbGet('/profiles/' + id); if (p) _profiles[id] = p; } catch (e) {}
+  }));
   if (isScreen('friends')) renderFriends();
 }
 function friendStatus(id) {
@@ -103,7 +106,7 @@ function renderFriends() {
   }
   const out = loadSave().friendOut || {};
   const reqs = Object.entries(_reqIn), invs = Object.entries(_invites);
-  const list = Object.entries(_friends).map(([id, f]) => ({ id, f, st: friendStatus(id) }))
+  const list = Object.entries(_friends).map(([id, f]) => ({ id, f: { ...f, ...(_profiles[id] ? { name: _profiles[id].name || f.name, av: _profiles[id].av || f.av } : {}) }, st: friendStatus(id) }))
     .sort((a, b) => b.st.on - a.st.on || String(a.f.name).localeCompare(String(b.f.name)));
   const row = (id, name, av, right, sub, cls) => `<div class="friend-row${cls ? ' ' + cls : ''}">
       <button class="fr-ava" onclick="openProfile('${id}')" title="View profile">${renderAvatar(sanitizeAvatar(av || {}), name, 40)}</button>
@@ -252,11 +255,13 @@ function hideInvite() { const el = document.getElementById('invite-pop'); if (el
 // ══════════════════════════════════════════════════
 // PROFILE VIEWER (friends list + room lobby)
 // ══════════════════════════════════════════════════
-async function openProfile(id, hint) {
+let _profT = null;
+async function openProfile(id, hint, quiet) {
   if (!id) return;
   hint = hint || {};
   let p = null;
-  if (friendsReady()) { try { p = await dbGet('/profiles/' + id); } catch (e) {} }
+  if (friendsReady()) { try { p = await dbGet('/profiles/' + id); if (p) _profiles[id] = p; } catch (e) {} }
+  if (quiet && document.getElementById('profile-pop').hidden) return;      // closed while loading
   const f = _friends[id] || {};
   const name = cleanName((p && p.name) || hint.name || f.name || 'Player');
   const av = sanitizeAvatar((p && p.av) || hint.avatar || f.av || {});
@@ -290,9 +295,13 @@ async function openProfile(id, hint) {
   </div>`;
   el.hidden = false;
   fitText(el);
-  sfx('tap');
+  if (!quiet) {
+    sfx('tap');
+    clearInterval(_profT);
+    _profT = setInterval(() => { if (document.getElementById('profile-pop').hidden) clearInterval(_profT); else openProfile(id, hint, true); }, 6000);
+  }
 }
-function closeProfile() { const el = document.getElementById('profile-pop'); if (el) el.hidden = true; }
+function closeProfile() { const el = document.getElementById('profile-pop'); if (el) el.hidden = true; clearInterval(_profT); }
 async function addFriendById(id, name) {
   try {
     await loadFriends();
