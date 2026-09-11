@@ -299,8 +299,10 @@ html{color-scheme:dark;}
 /* ══════════ LOCKER ══════════ */
 #locker{background:rgba(7,7,14,.97);backdrop-filter:blur(18px);}
 .locker-card{width:100%;max-width:420px;max-height:100%;background:var(--sf);border-radius:var(--rad-lg);border:1px solid var(--cb);padding:18px 16px;display:flex;flex-direction:column;gap:12px;animation:cardIn .28s cubic-bezier(.34,1.4,.64,1);box-shadow:var(--shadow);}
-.locker-head{display:flex;align-items:center;gap:20px;padding:6px 10px;border-radius:18px;background:radial-gradient(circle at 20% 50%,rgba(45,255,127,.08),transparent 60%);}
-.locker-preview{padding:12px;}
+.locker-head{display:flex;align-items:center;gap:20px;padding:6px 10px;border-radius:18px;background:var(--bg2);border:1px solid var(--cb);}
+.locker-preview{padding:12px;position:relative;}
+.locker-preview::before{content:'';position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle,rgba(var(--trail-rgb),.22),transparent 70%);pointer-events:none;}
+.locker-preview > *{position:relative;}
 .locker-meta{flex:1;min-width:0;}
 .locker-name{font-size:20px;font-weight:900;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .locker-title{min-height:20px;margin-top:3px;white-space:nowrap;overflow:hidden;}
