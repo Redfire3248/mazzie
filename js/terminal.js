@@ -353,7 +353,7 @@ const CMDS = {
     if (a[0] === 'reset') { writeSave({ unlockAll:false }); tWarn('cosmetics relocked'); }
     else { writeSave({ unlockAll:true }); tOk('every Locker item unlocked'); }
   } },
-  daily:    { desc:"Start today's daily challenge", run() { if (inBattleSession()) throw new Error('leave the room first'); startDaily(); adminClose(); } },
+  daily:    { desc:"Start today's daily challenge", run() { if (inBattleSession()) throw new Error('leave the room first'); startDaily(true); adminClose(); } },
   queue:    { desc:'Quick-match control', sub:{
     start:  { desc:'Join the level-based queue', run() { startQuickMatch(); adminClose(); } },
     cancel: { desc:'Leave the queue', run() { cancelQuickMatch(); tOk('queue cancelled'); } },

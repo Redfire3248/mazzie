@@ -54,13 +54,16 @@ function renderAbilityBar(flashSlot) {
   const on = boostsActive();
   bar.classList.toggle('off', !on);
   bar.innerHTML = '';
+  const inBag = bagTotal(usableKinds());
   for (let i = 0; i < MAX_SLOTS; i++) {
     const kind = abilityInv[i];
     const b = document.createElement('button');
-    b.className = 'ab-slot' + (kind ? ' filled' : '') + (kind && ABILITIES[kind].attack ? ' attack' : '') + (i === flashSlot ? ' pop' : '');
+    b.className = 'ab-slot' + (kind ? ' filled' : inBag ? ' has-bag' : '') + (kind && ABILITIES[kind].attack ? ' attack' : '') + (i === flashSlot ? ' pop' : '');
     b.innerHTML = kind
       ? `<span class="ab-icon">${ic(ABILITIES[kind].icon)}</span><span class="ab-name">${ABILITIES[kind].name}</span><span class="ab-key">${i + 1}</span>`
-      : `<span class="ab-empty">${ic('bag')}<small>${bagTotal(usableKinds()) || ''}</small></span>`;
+      : inBag
+        ? `<span class="ab-empty">${ic('bag')}<span class="ab-name">Bag</span><b class="ab-count">${inBag}</b></span>`
+        : `<span class="ab-empty">${ic('plus')}<span class="ab-name">Empty</span></span>`;
     b.title = kind ? ABILITIES[kind].desc : 'Collect boosts on the board, or tap to use one from your bag';
     b.onclick = () => kind ? useAbilitySlot(i) : openBag();
     bar.appendChild(b);

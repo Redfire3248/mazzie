@@ -35,7 +35,9 @@ const coinHtml = n => `<span class="coin-inline">${ic('coin')}${typeof n === 'st
 // ══════════════════════════════════════════════════
 // STORE SCREEN
 // ══════════════════════════════════════════════════
-function openStore() { show('store'); renderStore(); }
+let _storeQuery = '';
+function openStore() { _storeQuery = ''; document.getElementById('store-search').value = ''; show('store'); renderStore(); }
+function storeSearch(v) { _storeQuery = String(v || '').trim().toLowerCase(); renderStore(); }
 
 function renderStore() {
   updateCoinUI();
@@ -51,8 +53,13 @@ function renderStore() {
   // Boost cards
   const bag = getBag(), coins = getCoins();
   const grid = document.getElementById('store-grid'); grid.innerHTML = '';
+  const q = _storeQuery.split(/\s+/).filter(Boolean);
+  let shown = 0;
   Object.entries(BOOST_PRICES).forEach(([kind, price]) => {
     const a = ABILITIES[kind];
+    const hay = (a.name + ' ' + kind + ' ' + a.desc + ' ' + (a.battle ? 'battle attack' : 'solo battle') + (bag[kind] ? ' owned' : '')).toLowerCase();
+    if (!q.every(w => /^\d+$/.test(w) ? price <= +w : hay.includes(w))) return;
+    shown++;
     const can = coins >= price;
     const card = document.createElement('div');
     card.className = 'shop-card' + (a.attack ? ' attack' : '') + (a.battle ? ' battle' : '');
@@ -65,6 +72,7 @@ function renderStore() {
     card.querySelector('.shop-buy').onclick = e => buyBoost(kind, card);
     grid.appendChild(card);
   });
+  if (!shown) grid.innerHTML = `<div class="search-empty">${ic('search')}No boosts match "${escapeHtml(_storeQuery)}"</div>`;
 }
 function untilTomorrow() {
   const now = new Date(), next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);

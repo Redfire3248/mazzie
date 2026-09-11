@@ -1,7 +1,6 @@
 // ══════════════════════════════════════════════════
 // js/icons.js — Hand-drawn SVG icon set (no emoji anywhere)
 //   ic(name, cls?)      → inline <svg> string (24×24 line icons, currentColor)
-//   avatarGlyph(id)     → inline <svg> string (48×48 filled avatar characters)
 //   hydrateIcons(root)  → replaces every <i data-ic="name"></i> with its svg
 // ══════════════════════════════════════════════════
 
@@ -105,91 +104,12 @@ function medal(i) {
   return cls ? `<span class="medal ${cls}">${ic('medal')}<b>${i + 1}</b></span>` : `<span class="medal">#${i + 1}</span>`;
 }
 
-// ══════════════════════════════════════════════════
-// AVATAR CHARACTERS (48×48, ink on the avatar colour)
-// ══════════════════════════════════════════════════
-const INK = '#0b0b14', WH = '#f6f6fb';
-const eyes = (y, dx, r) => `<circle cx="${24 - dx}" cy="${y}" r="${r}" fill="${WH}"/><circle cx="${24 + dx}" cy="${y}" r="${r}" fill="${WH}"/>`
-  + `<circle cx="${24 - dx + .6}" cy="${y + .4}" r="${r * .48}" fill="${INK}"/><circle cx="${24 + dx + .6}" cy="${y + .4}" r="${r * .48}" fill="${INK}"/>`;
-
-const AVATAR_GLYPHS = {
-  cat:
-    `<path d="M11 19L12.5 6.5 20 13h8l7.5-6.5L37 19a13 12 0 1 1-26 0z" fill="${INK}"/>`
-    + eyes(24, 5.5, 3) + `<path d="M22.4 29.3h3.2L24 31.2z" fill="#ff8fb1"/>`
-    + `<path d="M8 27.5l7 .8M8.5 31l6.5-1M40 27.5l-7 .8M39.5 31l-6.5-1" stroke="${WH}" stroke-width="1.2" stroke-linecap="round" opacity=".7"/>`,
-  dog:
-    `<ellipse cx="11" cy="21" rx="5" ry="10" transform="rotate(18 11 21)" fill="${INK}"/><ellipse cx="37" cy="21" rx="5" ry="10" transform="rotate(-18 37 21)" fill="${INK}"/>`
-    + `<circle cx="24" cy="24.5" r="12.5" fill="${INK}"/><ellipse cx="24" cy="30.5" rx="7" ry="5.2" fill="${WH}" opacity=".92"/>`
-    + eyes(22, 5, 2.8) + `<ellipse cx="24" cy="28.2" rx="2.6" ry="1.8" fill="${INK}"/><path d="M24 30v2.2" stroke="${INK}" stroke-width="1.2" stroke-linecap="round"/>`,
-  fox:
-    `<path d="M8 9l12 7h8l12-7-4 18-12 12-12-12z" fill="${INK}"/><path d="M13 27l11 11.5L35 27l-5 1.5-6 4-6-4z" fill="${WH}" opacity=".92"/>`
-    + eyes(23, 5.5, 2.6) + `<circle cx="24" cy="36" r="1.8" fill="${INK}"/>`,
-  panda:
-    `<circle cx="13" cy="13.5" r="5.5" fill="${INK}"/><circle cx="35" cy="13.5" r="5.5" fill="${INK}"/><circle cx="24" cy="25" r="14" fill="${WH}"/>`
-    + `<ellipse cx="18" cy="24" rx="4" ry="5.2" transform="rotate(-25 18 24)" fill="${INK}"/><ellipse cx="30" cy="24" rx="4" ry="5.2" transform="rotate(25 30 24)" fill="${INK}"/>`
-    + `<circle cx="18.6" cy="24" r="1.6" fill="${WH}"/><circle cx="29.4" cy="24" r="1.6" fill="${WH}"/><ellipse cx="24" cy="30.2" rx="2.4" ry="1.6" fill="${INK}"/>`,
-  frog:
-    `<circle cx="15" cy="15" r="6.5" fill="${INK}"/><circle cx="33" cy="15" r="6.5" fill="${INK}"/><ellipse cx="24" cy="28" rx="16" ry="11" fill="${INK}"/>`
-    + `<circle cx="15" cy="15" r="3.6" fill="${WH}"/><circle cx="33" cy="15" r="3.6" fill="${WH}"/><circle cx="15.7" cy="15.4" r="1.8" fill="${INK}"/><circle cx="33.7" cy="15.4" r="1.8" fill="${INK}"/>`
-    + `<path d="M15 29q9 7 18 0" stroke="${WH}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
-  octopus:
-    `<path d="M10 24a14 14 0 0 1 28 0v4c0 2-1 3 1 6s0 5-2 3-3-3-4 0-3 4-4 0-2-3-3 0-3 4-4 0-2-3-3 0-3 4-4 0-3-4-5-2-3-1-1-4 2-3 1-6z" fill="${INK}"/>`
-    + eyes(23, 5.5, 3) + `<path d="M21 29q3 2 6 0" stroke="${WH}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`,
-  invader:
-    `<path d="M14 12h4v4h-4zM30 12h4v4h-4zM18 16h12v4H18zM14 16h4v4h-4zM30 16h4v4h-4zM10 20h28v4H10zM10 24h4v4h-4zM18 24h12v4H18zM34 24h4v4h-4zM6 24h4v8H6zM38 24h4v8h-4zM10 28h28v4H10zM14 32h4v4h-4zM30 32h4v4h-4zM18 36h4v4h-4zM26 36h4v4h-4z" fill="${INK}"/>`
-    + `<path d="M14 24h4v4h-4zM30 24h4v4h-4z" fill="${WH}"/>`,
-  robot:
-    `<path d="M24 5v5" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/><circle cx="24" cy="5" r="2.4" fill="${INK}"/>`
-    + `<rect x="10" y="11" width="28" height="25" rx="7" fill="${INK}"/><rect x="6" y="19" width="4" height="9" rx="2" fill="${INK}"/><rect x="38" y="19" width="4" height="9" rx="2" fill="${INK}"/>`
-    + `<rect x="14" y="16" width="20" height="9" rx="4.5" fill="#1d2b3a"/><circle cx="19" cy="20.5" r="2.4" fill="#4dfffe"/><circle cx="29" cy="20.5" r="2.4" fill="#4dfffe"/>`
-    + `<path d="M17 30.5h14M20 30.5v2.5M24 30.5v2.5M28 30.5v2.5" stroke="${WH}" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>`,
-  ghost:
-    `<path d="M11 23a13 13 0 0 1 26 0v17l-4.3-3.5-4.4 3.5-4.3-3.5-4.3 3.5-4.4-3.5L11 40z" fill="${WH}"/>`
-    + `<ellipse cx="19.5" cy="23" rx="2.6" ry="3.6" fill="${INK}"/><ellipse cx="28.5" cy="23" rx="2.6" ry="3.6" fill="${INK}"/><ellipse cx="24" cy="30.5" rx="2.4" ry="2" fill="${INK}"/>`,
-  unicorn:
-    `<path d="M24 3l3.5 12h-7z" fill="#ffd84d"/><path d="M21.6 8.5h4.8M20.9 11.5h6.2" stroke="${INK}" stroke-width=".9" opacity=".5"/>`
-    + `<circle cx="24" cy="26" r="13" fill="${WH}"/><path d="M13 17c-4 4-4 12 0 16 0-6 2-10 6-13z" fill="#ff6bb5"/><path d="M35 17c4 4 4 12 0 16 0-6-2-10-6-13z" fill="#b67cff"/>`
-    + `<path d="M17.5 25q2.5-2.4 5 0M25.5 25q2.5-2.4 5 0" stroke="${INK}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`
-    + `<circle cx="16.5" cy="30" r="2" fill="#ff8fb1" opacity=".8"/><circle cx="31.5" cy="30" r="2" fill="#ff8fb1" opacity=".8"/><path d="M21.5 32q2.5 1.8 5 0" stroke="${INK}" stroke-width="1.5" fill="none" stroke-linecap="round"/>`,
-  dragon:
-    `<path d="M13 16L9 5l9 7zM35 16l4-11-9 7z" fill="${INK}"/><path d="M11 22q0-11 13-11t13 11v5q0 11-13 12-13-1-13-12z" fill="${INK}"/>`
-    + `<path d="M17 13l2-5 2 4M27 12l2-4 2 5" fill="${INK}"/>`
-    + `<ellipse cx="18.5" cy="23" rx="3.4" ry="2.6" fill="#ffd84d"/><ellipse cx="29.5" cy="23" rx="3.4" ry="2.6" fill="#ffd84d"/><rect x="17.9" y="20.6" width="1.2" height="4.8" rx=".6" fill="${INK}"/><rect x="28.9" y="20.6" width="1.2" height="4.8" rx=".6" fill="${INK}"/>`
-    + `<circle cx="21" cy="31.5" r="1.1" fill="${WH}"/><circle cx="27" cy="31.5" r="1.1" fill="${WH}"/><path d="M18 35l2 2.5 2-2.5 2 2.5 2-2.5 2 2.5 2-2.5" stroke="${WH}" stroke-width="1.2" fill="none"/>`,
-  skull:
-    `<path d="M10 22a14 14 0 0 1 28 0c0 5-2 8-5 9.5V38H15v-6.5c-3-1.5-5-4.5-5-9.5z" fill="${WH}"/>`
-    + `<circle cx="18.5" cy="23" r="4.2" fill="${INK}"/><circle cx="29.5" cy="23" r="4.2" fill="${INK}"/><path d="M24 27l-2.4 4h4.8z" fill="${INK}"/>`
-    + `<path d="M19 38v-4M24 38v-4M29 38v-4" stroke="${INK}" stroke-width="1.6"/>`,
-  flame:
-    `<path d="M24 43c-8.5 0-14-5.8-14-13.2 0-8 6.4-12.4 7.4-19.8 4.7 2.8 6.8 7 6.8 11 2.1-1.5 3.4-3.8 3.9-6.8 5.3 4.2 9.9 9.8 9.9 15.6C38 37.2 32.5 43 24 43z" fill="${INK}"/>`
-    + `<path d="M24 39c-3.8 0-6.3-2.5-6.3-5.8 0-3.6 3-5.4 3.6-8.6 3.8 2.2 9 5.4 9 8.6 0 3.3-2.5 5.8-6.3 5.8z" fill="#ffd84d"/>`,
-  bolt:
-    `<path d="M27 3L10 26.5h12.5L19.5 45 38 20H25z" fill="${INK}"/><path d="M26 8l-2.4 10.5" stroke="${WH}" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>`,
-  gem:
-    `<path d="M13 8h22l8 10.5L24 42 5 18.5z" fill="${INK}"/><path d="M5 18.5h38M17 8l-3.5 10.5L24 42l10.5-23.5L31 8" stroke="${WH}" stroke-width="1.3" fill="none" opacity=".55"/>`
-    + `<path d="M13 8h8l-3.5 10.5H5z" fill="${WH}" opacity=".25"/>`,
-  rocket:
-    `<path d="M24 4c7 5 9.5 13 8 23H16c-1.5-10 1-18 8-23z" fill="${INK}"/><circle cx="24" cy="16.5" r="3.8" fill="${WH}"/><circle cx="24" cy="16.5" r="2" fill="#4dfffe"/>`
-    + `<path d="M16 21l-6 7v5l6.8-3zM32 21l6 7v5l-6.8-3z" fill="${INK}"/>`
-    + `<path d="M19 30h10l-2 6h-6z" fill="${INK}"/><path d="M21 37q3 7 6 0z" fill="#ff9f43"/>`,
-  moon:
-    `<path d="M33 35A15.5 15.5 0 0 1 19 8a15.5 15.5 0 1 0 20 20 15.5 15.5 0 0 1-6 7z" fill="${INK}"/>`
-    + `<circle cx="36" cy="10" r="1.5" fill="${WH}"/><circle cx="41" cy="18" r="1" fill="${WH}"/><circle cx="30" cy="6" r="1" fill="${WH}"/>`,
-  crown:
-    `<path d="M6 16l9.5 8.5L24 11l8.5 13.5L42 16l-4 20H10z" fill="${INK}"/><rect x="10" y="37.5" width="28" height="4" rx="2" fill="${INK}"/>`
-    + `<circle cx="6" cy="15" r="2.6" fill="${INK}"/><circle cx="24" cy="10" r="2.6" fill="${INK}"/><circle cx="42" cy="15" r="2.6" fill="${INK}"/>`
-    + `<circle cx="24" cy="28" r="2.6" fill="${WH}"/><circle cx="16" cy="30" r="1.7" fill="${WH}" opacity=".7"/><circle cx="32" cy="30" r="1.7" fill="${WH}" opacity=".7"/>`,
-  star:
-    `<path d="M24 4.5l5.8 12 13.2 1.9-9.5 9.3 2.2 13.1L24 34.6l-11.7 6.2 2.2-13.1L5 18.4l13.2-1.9z" fill="${INK}"/>`
-    + `<path d="M20.5 22q1.5-1.8 3 0M26.5 22q1.5-1.8 3 0M21 27q3 2.4 6 0" stroke="${WH}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`
-};
-// Old saves / accounts stored emoji ids — map them onto the drawn set
+// Old saves stored the removed drawn avatars (or even older emoji) — map them onto the new art
 const LEGACY_AVATAR_IDS = {
-  '\u{1F431}':'cat', '\u{1F436}':'dog', '\u{1F98A}':'fox', '\u{1F43C}':'panda', '\u{1F438}':'frog', '\u{1F419}':'octopus',
-  '\u{1F47E}':'invader', '\u{1F916}':'robot', '\u{1F47B}':'ghost', '\u{1F984}':'unicorn', '\u{1F432}':'dragon', '\u{1F480}':'skull',
-  '\u{1F525}':'flame', '⚡':'bolt', '\u{1F48E}':'gem', '\u{1F680}':'rocket', '\u{1F319}':'moon', '\u{1F451}':'crown', '\u{1F31F}':'star'
+  cat:'cr-cat', dog:'cr-pup', fox:'cr-fox', panda:'cr-panda', frog:'cr-frog', octopus:'my-kraken', invader:'cy-alien',
+  robot:'cy-bot', ghost:'cy-pixel-spook', unicorn:'my-unicorn', dragon:'my-dragon', skull:'cy-neon-skull', flame:'my-phoenix',
+  bolt:'ar-thunder', gem:'ar-gem', rocket:'cy-rocket', moon:'cy-moon-bun', crown:'ar-crown', star:'ar-superstar',
+  '\u{1F431}':'cr-cat', '\u{1F436}':'cr-pup', '\u{1F98A}':'cr-fox', '\u{1F43C}':'cr-panda', '\u{1F438}':'cr-frog', '\u{1F419}':'my-kraken',
+  '\u{1F47E}':'cy-alien', '\u{1F916}':'cy-bot', '\u{1F47B}':'cy-pixel-spook', '\u{1F984}':'my-unicorn', '\u{1F432}':'my-dragon', '\u{1F480}':'cy-neon-skull',
+  '\u{1F525}':'my-phoenix', '\u{26A1}':'ar-thunder', '\u{1F48E}':'ar-gem', '\u{1F680}':'cy-rocket', '\u{1F319}':'cy-moon-bun', '\u{1F451}':'ar-crown', '\u{1F31F}':'ar-superstar'
 };
-function avatarGlyph(id) {
-  const g = AVATAR_GLYPHS[id]; if (!g) return '';
-  return `<svg class="ava-glyph" viewBox="0 0 48 48" aria-hidden="true">${g}</svg>`;
-}

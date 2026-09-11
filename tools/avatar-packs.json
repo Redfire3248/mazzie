@@ -5,8 +5,8 @@
     "prefix": "cr-",
     "key": "#FF00FF",
     "items": [
-      { "name": "Cat", "lvl": 2, "look": "round-faced cat with pointy ears and whiskers", "neon": "neon purple #B026FF" },
-      { "name": "Pup", "lvl": 2, "look": "puppy with floppy ears and a round nose", "neon": "neon teal #00FFC6" },
+      { "name": "Cat", "lvl": 1, "look": "round-faced cat with pointy ears and whiskers", "neon": "neon purple #B026FF" },
+      { "name": "Pup", "lvl": 1, "look": "puppy with floppy ears and a round nose", "neon": "neon teal #00FFC6" },
       { "name": "Fox", "lvl": 3, "look": "fox with a pointed muzzle and big triangle ears", "neon": "neon orange #FF7A1A" },
       { "name": "Panda", "lvl": 4, "look": "panda with round ears and eye patches", "neon": "icy neon white #E8FDFF" },
       { "name": "Frog", "lvl": 5, "look": "frog with bulging eyes on top and a wide smile", "neon": "neon green #39FF14" },

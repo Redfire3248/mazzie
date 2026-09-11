@@ -4,13 +4,13 @@
       "id": "cr-cat",
       "name": "Cat",
       "file": "cr-cat.png",
-      "lvl": 2
+      "lvl": 1
     },
     {
       "id": "cr-pup",
       "name": "Pup",
       "file": "cr-pup.png",
-      "lvl": 2
+      "lvl": 1
     },
     {
       "id": "cr-fox",

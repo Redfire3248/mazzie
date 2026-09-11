@@ -527,7 +527,9 @@ async function syncAccountToCloud() {
   const s = loadSave(), id = currentAccount.id, secure = authMode() === 'secure';
   // Looks + position first: these never get held back by the anti-cheat limits
   try {
-    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), lastSeen: secure ? SERVER_TIME : Date.now() });
+    // Recent daily clears travel with the account, so the daily can't be replayed on another device
+    const daily = Object.fromEntries(Object.entries(s.daily || {}).sort().slice(-3));
+    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, lastSeen: secure ? SERVER_TIME : Date.now() });
   } catch (e) { return; }
   // Progress is stamped with the server clock; the database rejects impossible jumps.
   // A rejected jump simply retries on later syncs, once enough real time has passed.
@@ -613,6 +615,7 @@ function applyAccountLocally(account) {
     totalCleared: secure ? (account.totalCleared || 0) : Math.max(account.totalCleared || 0, s.totalCleared || 0),
     coins:        secure ? (account.coins || 0) : Math.max(account.coins || 0, s.coins || 0),
     boosts:       secure ? (account.boosts || {}) : (account.boosts || s.boosts || {}),
+    daily:        { ...(account.daily && typeof account.daily === 'object' ? account.daily : {}), ...(s.daily || {}) },
     level:        account.level || s.level || 1,
     diff:         account.diff  || s.diff  || 'easy'
   };

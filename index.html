@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Righteous&family=Russo+One&family=Pacifico&family=Orbitron:wght@700;900&family=Bungee&family=Press+Start+2P&family=Cinzel+Decorative:wght@700;900&family=Permanent+Marker&family=Creepster&family=Monoton&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="css/style.css?v=20260911c">
+<link rel="stylesheet" href="css/style.css?v=20260912a">
 </head>
 <body>
 
@@ -186,6 +186,7 @@
       <span class="coin-chip static"><i data-ic="coin"></i><span class="coin-count">0</span></span>
     </div>
     <div class="store-chest" id="store-chest"></div>
+    <label class="search-box"><i data-ic="search"></i><input class="txt" id="store-search" type="search" placeholder="Search boosts or max price…" autocomplete="off" spellcheck="false" oninput="storeSearch(this.value)"></label>
     <div class="set-group-lbl">Boosts</div>
     <div class="store-grid" id="store-grid"></div>
     <div class="store-foot"><i data-ic="info"></i>Bought boosts go in your bag. In a game, tap an empty boost slot to use one. Earn coins by clearing levels, the daily challenge, battles and leveling up.</div>
@@ -272,6 +273,10 @@
       <button class="seg-btn locker-tab" data-tab="frame" onclick="lockerTab('frame')">Frame</button>
       <button class="seg-btn locker-tab" data-tab="trail" onclick="lockerTab('trail')">Trail</button>
       <button class="seg-btn locker-tab" data-tab="title" onclick="lockerTab('title')">Title</button>
+    </div>
+    <div class="search-row">
+      <label class="search-box"><i data-ic="search"></i><input class="txt" id="locker-search" type="search" placeholder="Search name, pack or level…" autocomplete="off" spellcheck="false" oninput="lockerSearch(this.value)"></label>
+      <button class="search-chip" id="locker-owned" onclick="lockerOwnedToggle()"><i data-ic="check"></i>Owned</button>
     </div>
     <div class="locker-count" id="locker-count"></div>
     <div class="locker-grid" id="locker-grid"></div>
@@ -550,20 +555,20 @@
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js?v=secure1"></script>
-<script src="js/icons.js?v=20260911c"></script>
-<script src="js/state.js?v=20260911c"></script>
-<script src="js/save.js?v=20260911c"></script>
-<script src="js/cosmetics.js?v=20260911c"></script>
-<script src="js/account.js?v=20260911c"></script>
-<script src="js/auth-ui.js?v=20260911c"></script>
-<script src="js/game.js?v=20260911c"></script>
-<script src="js/abilities.js?v=20260911c"></script>
-<script src="js/store.js?v=20260911c"></script>
-<script src="js/live.js?v=20260911c"></script>
-<script src="js/battle.js?v=20260911c"></script>
-<script src="js/matchmaking.js?v=20260911c"></script>
-<script src="js/ui.js?v=20260911c"></script>
-<script src="js/terminal.js?v=20260911c"></script>
+<script src="js/icons.js?v=20260912a"></script>
+<script src="js/state.js?v=20260912a"></script>
+<script src="js/save.js?v=20260912a"></script>
+<script src="js/cosmetics.js?v=20260912a"></script>
+<script src="js/account.js?v=20260912a"></script>
+<script src="js/auth-ui.js?v=20260912a"></script>
+<script src="js/game.js?v=20260912a"></script>
+<script src="js/abilities.js?v=20260912a"></script>
+<script src="js/store.js?v=20260912a"></script>
+<script src="js/live.js?v=20260912a"></script>
+<script src="js/battle.js?v=20260912a"></script>
+<script src="js/matchmaking.js?v=20260912a"></script>
+<script src="js/ui.js?v=20260912a"></script>
+<script src="js/terminal.js?v=20260912a"></script>
 
 </body>
 </html>

@@ -20,8 +20,14 @@ function continueGame() {
 }
 // Daily challenge: same board for everyone on a given (UTC) day
 function todayKey() { return new Date().toISOString().slice(0, 10); }
-function startDaily() {
+function startDaily(force) {
   const key = todayKey();
+  const done = (loadSave().daily || {})[key];
+  if (done && !force) {
+    sfx('err'); buzz(20);
+    pushToast(`Daily done in ${fmtMs(done)} — next one in ${untilTomorrow()}`, 'info', 'calendar');
+    return;
+  }
   let h = 2166136261;
   for (const ch of 'mazzie-daily-' + key) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
   dailyMode = true; level = 9;
@@ -574,14 +580,15 @@ function onWin() {
   let total = base + speed;
   let bestHtml = '';
 
+  const firstDaily = dailyMode && !(s.daily || {})[todayKey()];
   if (dailyMode) {
-    const daily = s.daily || {};
-    const prev = daily[todayKey()];
-    const isNew = !prev || ms < prev;
-    if (isNew) { daily[todayKey()] = ms; writeSave({ daily }); }
-    if (!prev) { total += 50; bonusTxt += `<span class="xp-bonus">${ic('calendar')}+50 daily</span>`; }
-    bestHtml = isNew ? '<div class="win-best new">' + ic('star') + 'New daily best</div>' : `<div class="win-best">Daily best ${fmtMs(prev)}</div>`;
+    // One daily per day: the first clear counts, then it locks until tomorrow (startDaily)
+    const daily = { ...(s.daily || {}) };
+    daily[todayKey()] = ms; writeSave({ daily });
+    total += 50; bonusTxt += `<span class="xp-bonus">${ic('calendar')}+50 daily</span>`;
+    bestHtml = '<div class="win-best new">' + ic('calendar') + 'Daily done · next in ' + untilTomorrow() + '</div>';
     writeSave({ totalCleared: (s.totalCleared || 0) + 1 });
+    updateDailyBtn();
   } else {
     writeSave({ totalCleared: (s.totalCleared || 0) + 1, level: level + 1, diff: currentDiff });
     const prevBest = getBest(currentDiff);
@@ -590,7 +597,7 @@ function onWin() {
                      : `<div class="win-best">Best ${fmtMs(prevBest)}</div>`;
   }
   const xpRes = addXp(total);
-  const coinsWon = coinsForWin(currentDiff, speed) + (dailyMode && !s.daily?.[todayKey()] ? 20 : 0);
+  const coinsWon = coinsForWin(currentDiff, speed) + (firstDaily ? 20 : 0);
   addCoins(coinsWon);
   updateMenuProfile();
   document.getElementById('win-time').innerText = time;

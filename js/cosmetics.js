@@ -8,15 +8,8 @@
 //                                       "frames":[{ "id":"vines","name":"Vines","file":"vines-frame.png","lvl":20 }] }
 // ══════════════════════════════════════════════════
 
-const AVA_ICONS = [
-  { id:'init',    lvl:1,  name:'Initials' }, { id:'cat', lvl:1, name:'Cat' },     { id:'dog', lvl:1, name:'Dog' },
-  { id:'fox',     lvl:2,  name:'Fox' },      { id:'panda', lvl:3, name:'Panda' }, { id:'frog', lvl:4, name:'Frog' },
-  { id:'octopus', lvl:5,  name:'Octo' },     { id:'invader', lvl:6, name:'Invader' }, { id:'robot', lvl:8, name:'Robot' },
-  { id:'ghost',   lvl:10, name:'Ghost' },    { id:'unicorn', lvl:12, name:'Unicorn' }, { id:'dragon', lvl:15, name:'Dragon' },
-  { id:'skull',   lvl:18, name:'Skull' },    { id:'flame', lvl:20, name:'Flame' }, { id:'bolt', lvl:25, name:'Bolt' },
-  { id:'gem',     lvl:30, name:'Gem' },      { id:'rocket', lvl:35, name:'Rocket' }, { id:'moon', lvl:40, name:'Moon' },
-  { id:'crown',   lvl:50, name:'Crown' },    { id:'star', lvl:75, name:'Star' }
-];
+// Initials + every icon in assets/avatars/manifest.json (loaded at start-up)
+const AVA_ICONS = [ { id:'init', lvl:1, name:'Initials' } ];
 const AVA_COLORS = [
   { id:'mint',     lvl:1,  name:'Mint',     bg:'linear-gradient(135deg,#2dff7f,#00b86b)' },
   { id:'ice',      lvl:1,  name:'Ice',      bg:'linear-gradient(135deg,#4dfffe,#2b7bff)' },
@@ -75,7 +68,9 @@ const DEFAULT_AVATAR = { icon:'init', color:'mint', frame:'ring', trail:'mint', 
 // ── Custom art from assets/avatars/manifest.json ──
 const SAFE_FILE = /^[a-zA-Z0-9_\-]+\.(png|webp|jpg|jpeg|svg|gif)$/;
 const SAFE_ID   = /^[a-z0-9_\-]{1,32}$/;
-let cosmeticsLoaded = Promise.resolve();
+let cosmeticsLoaded = Promise.resolve(), manifestReady = false;
+// Icon ids from the art packs look like "cr-fox"; keep them even before the manifest has loaded
+const PACK_ID = /^(cr|my|cy|sn|ar|fe|fr)-[a-z0-9-]{1,28}$/;
 function loadCustomCosmetics() {
   cosmeticsLoaded = fetch('assets/avatars/manifest.json', { cache: 'no-cache' })
     .then(r => r.ok ? r.json() : null)
@@ -86,6 +81,7 @@ function loadCustomCosmetics() {
         set.push({ id: x.id, name: String(x.name || x.id).slice(0, 14), lvl: Math.max(1, parseInt(x.lvl) || 1), src: 'assets/avatars/' + x.file });
       });
       add(m.icons, AVA_ICONS); add(m.frames, AVA_FRAMES);
+      manifestReady = true;
     })
     .catch(() => {});
   return cosmeticsLoaded;
@@ -99,7 +95,8 @@ function sanitizeAvatar(av) {
   for (const k of Object.keys(DEFAULT_AVATAR)) {
     let v = av && typeof av[k] === 'string' ? av[k] : null;
     if (k === 'icon' && v && LEGACY_AVATAR_IDS[v]) v = LEGACY_AVATAR_IDS[v];
-    out[k] = (v && _find(COSMETIC_SETS[k], v)) ? v : DEFAULT_AVATAR[k];
+    const known = v && (_find(COSMETIC_SETS[k], v) || (!manifestReady && (k === 'icon' || k === 'frame') && PACK_ID.test(v)));
+    out[k] = known ? v : DEFAULT_AVATAR[k];
   }
   return out;
 }
@@ -134,11 +131,10 @@ function renderAvatar(av, name, size) {
   const a     = sanitizeAvatar(av);
   const color = _find(AVA_COLORS, a.color);
   const iconI = _find(AVA_ICONS, a.icon);
-  const frame = _find(AVA_FRAMES, a.frame);
-  let inner;
-  if (iconI.src)            inner = `<img class="ava-img" src="${iconI.src}" alt="" draggable="false">`;
-  else if (a.icon === 'init') inner = `<span class="ava-init">${escapeHtml(String(name || '?').slice(0, 2).toUpperCase())}</span>`;
-  else                      inner = avatarGlyph(a.icon);
+  const frame = _find(AVA_FRAMES, a.frame) || AVA_FRAMES[0];
+  const inner = iconI && iconI.src
+    ? `<img class="ava-img" src="${iconI.src}" alt="" draggable="false">`
+    : `<span class="ava-init">${escapeHtml(String(name || '?').slice(0, 2).toUpperCase())}</span>`;
   const crown = a.frame === 'crown' ? `<span class="ava-crown">${ic('crown')}</span>` : '';
   const fimg  = frame.src ? `<img class="ava-frame-img" src="${frame.src}" alt="" draggable="false">` : '';
   return `<div class="ava fr-${frame.src ? 'custom' : a.frame}" style="--ava:${size}px">`
@@ -180,10 +176,20 @@ function applyMyCosmetics() { applyTrail(getMyAvatar().trail); }
 // ══════════════════════════════════════════════════
 let _lockerTab = 'icon';
 let _lockerDraft = null;
+let _lockerQuery = '', _lockerOwned = false;
+const PACK_NAMES = { cr:'critters animals', my:'mythic fantasy', cy:'cyber space robot', sn:'snacks food', ar:'arcade items', fe:'frame', fr:'frame' };
+function lockerSearch(v) { _lockerQuery = String(v || '').trim().toLowerCase(); renderLocker(); }
+function lockerOwnedToggle() { _lockerOwned = !_lockerOwned; renderLocker(); }
+function matchesSearch(item, q) {
+  if (!q) return true;
+  const hay = (item.name + ' ' + item.id + ' ' + (PACK_NAMES[item.id.split('-')[0]] || '')).toLowerCase();
+  return q.split(/\s+/).every(w => /^\d+$/.test(w) ? item.lvl <= +w : hay.includes(w));
+}
 
 function openLocker() {
   _lockerDraft = getMyAvatar();
-  _lockerTab = 'icon';
+  _lockerTab = 'icon'; _lockerQuery = ''; _lockerOwned = false;
+  document.getElementById('locker-search').value = '';
   show('locker');
   renderLocker();
 }
@@ -200,9 +206,12 @@ function renderLocker() {
 
   const grid = document.getElementById('locker-grid'); grid.innerHTML = '';
   const set  = COSMETIC_SETS[_lockerTab];
-  let unlockedCount = 0;
+  let unlockedCount = 0, shown = 0;
+  document.getElementById('locker-owned').classList.toggle('on', _lockerOwned);
   set.forEach(item => {
     const open = isUnlocked(item); if (open) unlockedCount++;
+    if (!matchesSearch(item, _lockerQuery) || (_lockerOwned && !open)) return;
+    shown++;
     const sel  = d[_lockerTab] === item.id;
     const el   = document.createElement('button');
     el.className = 'locker-item' + (sel ? ' sel' : '') + (open ? '' : ' locked');
@@ -223,7 +232,8 @@ function renderLocker() {
     };
     grid.appendChild(el);
   });
-  document.getElementById('locker-count').innerText = unlockedCount + ' / ' + set.length + ' unlocked';
+  if (!shown) grid.innerHTML = `<div class="search-empty">${ic('search')}Nothing matches "${escapeHtml(_lockerQuery || 'unlocked')}"</div>`;
+  document.getElementById('locker-count').innerText = (_lockerQuery || _lockerOwned ? shown + ' shown · ' : '') + unlockedCount + ' / ' + set.length + ' unlocked';
   fitText(document.getElementById('locker'));
 }
 
