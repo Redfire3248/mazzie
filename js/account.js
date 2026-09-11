@@ -529,14 +529,14 @@ async function syncAccountToCloud() {
   try {
     // Recent daily clears travel with the account, so the daily can't be replayed on another device
     const daily = Object.fromEntries(Object.entries(s.daily || {}).sort().slice(-3));
-    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, lastSeen: secure ? SERVER_TIME : Date.now() });
+    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, owned: s.owned || {}, ownedV1: !!s.ownedV1, lastSeen: secure ? SERVER_TIME : Date.now() });
   } catch (e) { return; }
   // Progress is stamped with the server clock; the database rejects impossible jumps.
   // A rejected jump simply retries on later syncs, once enough real time has passed.
   try {
     await dbPatch('/accounts/' + id, secure
-      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, xpAt: SERVER_TIME }
-      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {} });
+      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: s.crateKeys || 0, xpAt: SERVER_TIME }
+      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: s.crateKeys || 0 });
   } catch (e) { /* offline or over the speed limit — next sync */ }
 }
 
@@ -599,6 +599,15 @@ function logoutAccount() {
 // ── Local helpers ──
 function saveTokenLocally(uid, tok, name) { localStorage.setItem(ACC_UID, uid); localStorage.setItem(ACC_TOK, tok); localStorage.setItem(ACC_NAME, name); }
 function clearTokenLocally() { [ACC_UID, ACC_TOK, ACC_NAME].forEach(k => localStorage.removeItem(k)); }
+// Union of two owned-cosmetics maps ({ set: { id: true } }), known sets only
+function mergeOwned(a, b) {
+  const out = {};
+  [a, b].forEach(o => o && typeof o === 'object' && Object.entries(o).forEach(([set, ids]) => {
+    if (!['icon', 'color', 'frame', 'trail', 'title'].includes(set) || !ids || typeof ids !== 'object') return;
+    Object.keys(ids).forEach(id => { if (ids[id] === true) (out[set] = out[set] || {})[id] = true; });
+  }));
+  return out;
+}
 function applyAccountLocally(account) {
   currentAccount = account;
   myName = account.name;
@@ -615,6 +624,9 @@ function applyAccountLocally(account) {
     totalCleared: secure ? (account.totalCleared || 0) : Math.max(account.totalCleared || 0, s.totalCleared || 0),
     coins:        secure ? (account.coins || 0) : Math.max(account.coins || 0, s.coins || 0),
     boosts:       secure ? (account.boosts || {}) : (account.boosts || s.boosts || {}),
+    crateKeys:    secure ? (account.crateKeys || 0) : Math.max(account.crateKeys || 0, s.crateKeys || 0),
+    owned:        mergeOwned(account.owned, s.owned),
+    ownedV1:      !!(account.ownedV1 || s.ownedV1),
     daily:        { ...(account.daily && typeof account.daily === 'object' ? account.daily : {}), ...(s.daily || {}) },
     level:        account.level || s.level || 1,
     diff:         account.diff  || s.diff  || 'easy'

@@ -67,6 +67,7 @@ async function bootApp() {
   applyMyCosmetics();
   initAccount(name => {
     hideConnecting();
+    migrateOwned();
     myName = name;
     updateMenuProfile();
     _setupContinueBtn();

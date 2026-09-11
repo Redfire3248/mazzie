@@ -41,6 +41,7 @@ function storeSearch(v) { _storeQuery = String(v || '').trim().toLowerCase(); re
 
 function renderStore() {
   updateCoinUI();
+  if (typeof renderCrates === 'function') renderCrates();
   // Daily chest
   const chest = document.getElementById('store-chest');
   const ready = loadSave().chestDay !== todayKey();
@@ -147,22 +148,3 @@ document.addEventListener('pointerdown', e => {
 // EARNING (called from the game)
 // ══════════════════════════════════════════════════
 function coinsForWin(diff, speedXp) { return (COIN_BY_DIFF[diff] || 5) + Math.round((speedXp || 0) / 8); }
-
-// Everything newly unlocked between two XP levels (for the level-up reward card)
-function unlockedBetween(from, to) {
-  const out = [];
-  Object.entries(COSMETIC_SETS).forEach(([set, list]) => list.forEach(item => {
-    if (item.lvl > from && item.lvl <= to && item.id !== 'none') out.push({ set, item });
-  }));
-  return out;
-}
-function unlockChip({ set, item }) {
-  const av = getMyAvatar();
-  let html;
-  if (set === 'icon')  html = renderAvatar({ ...av, icon: item.id, frame: 'none' }, myName, 34);
-  if (set === 'color') html = renderAvatar({ ...av, color: item.id, frame: 'none' }, myName, 34);
-  if (set === 'frame') html = renderAvatar({ ...av, frame: item.id }, myName, 30);
-  if (set === 'trail') html = trailPreviewSvg(item);
-  if (set === 'title') html = `<span class="chip-title fit" data-max="12" data-min="7">${titleHtml(item.id)}</span>`;
-  return { html, label: item.name };
-}

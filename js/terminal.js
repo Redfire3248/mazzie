@@ -349,6 +349,15 @@ const CMDS = {
     if (isHost) broadcastAll({ type:'announce', msg });
     addChatMsg('Admin: ' + msg, null, true); pushToast(msg, 'info', 'alert'); tOk('announced');
   } },
+  crate:    { desc:'Crates', sub:{
+    keys: { args:[NUM('<n>')], desc:'Give yourself crate keys', run(a) { addKeys(needInt(a[0], 'n')); syncAccountToCloud(); tOk('keys = ' + getKeys()); } },
+    open: { args:[H('<crate>', () => Object.keys(CRATES))], desc:'Open a crate for free', run(a) {
+      const id = (a[0] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
+      addKeys(1); adminClose(); openCrate(id, true); } },
+    odds: { desc:'Show drop odds + pool sizes', run() {
+      Object.entries(CRATES).forEach(([id, c]) => { const p = cratePool(c); tInfo(pad(id, 7) + c.price + 'c  ' + RAR_ORDER.filter(r => c.odds[r]).map(r => r + ' ' + c.odds[r] + '% (' + (p[r] || []).length + ')').join(' · ')); });
+    } }
+  } },
   unlock:   { desc:'Cosmetics: unlock everything / relock', args:[H('<all|reset>', ['all', 'reset'])], run(a) {
     if (a[0] === 'reset') { writeSave({ unlockAll:false }); tWarn('cosmetics relocked'); }
     else { writeSave({ unlockAll:true }); tOk('every Locker item unlocked'); }

@@ -123,6 +123,16 @@ const SV = { '.sv': 'timestamp' };
   no('unknown boost kind',                await req('PATCH', '/accounts/B', { boosts: { hint: 0, god: 5 } }, bob.tok));
   no('negative coins',                    await req('PATCH', '/accounts/B', { coins: -5 }, bob.tok));
   ok('admin gifts coins',                 await req('PATCH', '/accounts/B', { coins: 5000 }, admin.tok));
+  
+  no('console cheat: 500 crate keys',     await req('PATCH', '/accounts/B', { crateKeys: 500, xpAt: SV }, bob.tok));
+  await req('PATCH', '/accounts/B', { xp: 0 }, admin.tok);
+  no('keys without xp gain',              await req('PATCH', '/accounts/B', { crateKeys: 1, xpAt: SV }, bob.tok));
+  no('too many keys for the xp gained',   await req('PATCH', '/accounts/B', { xp: 100, crateKeys: 5, xpAt: SV }, bob.tok));
+  ok('level-up key with its xp',          await req('PATCH', '/accounts/B', { xp: 100, crateKeys: 1, xpAt: SV }, bob.tok));
+  ok('open a crate: spend coins, own item', await req('PATCH', '/accounts/B', { coins: 4900, owned: { frame: { 'f-nova': true } } }, bob.tok));
+  ok('use a key',                         await req('PATCH', '/accounts/B', { crateKeys: 0 }, bob.tok));
+  no('owned: unknown set',                await req('PATCH', '/accounts/B', { owned: { hacks: { x: true } } }, bob.tok));
+  no('owned: non-true value',             await req('PATCH', '/accounts/B', { owned: { icon: { 'cr-fox': 'yes' } } }, bob.tok));
 
   console.log('Live: broadcast / troll / online');
   ok('signed-in player reads broadcast',  await req('GET', '/broadcast', undefined, bob.tok));

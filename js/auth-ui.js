@@ -21,6 +21,7 @@ function enterGame(msg) {
   show('menu');
   if (msg) pushToast(msg, 'acc');
   if (typeof startLive === 'function') startLive();
+  if (typeof migrateOwned === 'function') migrateOwned().then(() => syncAccountToCloud().catch(() => {}));
 }
 
 // Central handler for every auth result

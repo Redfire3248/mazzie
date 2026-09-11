@@ -26,6 +26,20 @@
         "coins": {
           ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000"
         },
+        "crateKeys": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999 && ((auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (newData.val() <= (data.isNumber() ? data.val() : 0) || ((newData.parent().child('xp').isNumber() ? newData.parent().child('xp').val() : 0) > (data.parent().child('xp').isNumber() ? data.parent().child('xp').val() : 0) && newData.val() - (data.isNumber() ? data.val() : 0) <= 1 + ((newData.parent().child('xp').isNumber() ? newData.parent().child('xp').val() : 0) - (data.parent().child('xp').isNumber() ? data.parent().child('xp').val() : 0)) / 90)))"
+        },
+        "owned": {
+          "$set": {
+            ".validate": "$set.matches(/^(icon|color|frame|trail|title)$/)",
+            "$id": {
+              ".validate": "newData.val() == true && $id.length <= 32"
+            }
+          }
+        },
+        "ownedV1": {
+          ".validate": "newData.isBoolean()"
+        },
         "boosts": {
           "hint": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"

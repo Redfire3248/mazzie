@@ -74,11 +74,12 @@ function addXp(amount) {
     spawnParticles(); sfx('level');
     const bonus = 15 * (after - before);
     if (typeof addCoins === 'function') addCoins(bonus);
-    // Nothing is "new" when everything is already unlocked (admin unlock-all)
-    const unlocks = typeof unlockedBetween === 'function' && !loadSave().unlockAll ? unlockedBetween(before, after) : [];
-    const chips = [{ html: coinHtml(bonus), label: 'bonus' }, ...unlocks.map(unlockChip)];
+    // Every level up = a free crate key
+    const keys = after - before;
+    if (typeof addKeys === 'function') addKeys(keys);
+    const chips = [{ html: coinHtml(bonus), label: 'bonus' }, { html: `<span class="coin-inline key-inline">${ic('key')}+${keys}</span>`, label: 'crate key' + (keys > 1 ? 's' : '') }];
     showReward({ iconHtml: getLevelBadge(after), tone: 'xp', kicker: 'Level up', title: 'Level ' + after,
-      sub: unlocks.length ? unlocks.length + ' new Locker item' + (unlocks.length > 1 ? 's' : '') + ' unlocked' : getRank(loadSave().totalCleared || 0).name + ' rank', chips });
+      sub: 'Open your free crate in the Store', chips });
   }
   return { gained: amount, newXp, newLvl: after };
 }

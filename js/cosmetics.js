@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════
 // js/cosmetics.js — Avatar icons, colours, frames, path trails, titles + Locker
-// Everything unlocks by XP level. Ids are whitelisted before rendering, so
-// avatars received from other players can never inject markup.
+// Starters (lvl 1) are free; everything else comes out of Crates (js/crates.js).
+// "lvl" only sets an item's rarity now (see rarityOf). Ids are whitelisted before
+// rendering, so avatars received from other players can never inject markup.
 //
 // Add your own art (e.g. AI-generated) without touching code:
 //   assets/avatars/manifest.json  →  { "icons":[{ "id":"wizard","name":"Wizard","file":"wizard.png","lvl":8 }],
@@ -23,13 +24,63 @@ const AVA_COLORS = [
   { id:'midnight', lvl:22, name:'Midnight', bg:'linear-gradient(135deg,#5a3fc0,#161622)' },
   { id:'gold',     lvl:30, name:'Gold',     bg:'linear-gradient(135deg,#fff3a0,#ffd700 45%,#b8860b)' },
   { id:'holo',     lvl:45, name:'Holo',     bg:'linear-gradient(135deg,#ff4d6a,#ffd700,#2dff7f,#4dfffe,#a78bfa)', anim:true },
-  { id:'void',     lvl:60, name:'Void',     bg:'radial-gradient(circle at 30% 30%,#a78bfa,#07070e 72%)' }
+  { id:'void',     lvl:60, name:'Void',     bg:'radial-gradient(circle at 30% 30%,#a78bfa,#07070e 72%)' },
+  { id:'steel',    lvl:4,  name:'Steel',    bg:'linear-gradient(135deg,#eeeef8,#34344a)' },
+  { id:'lagoon',   lvl:9,  name:'Lagoon',   bg:'linear-gradient(135deg,#2dff7f,#4dfffe)' },
+  { id:'candy',    lvl:14, name:'Candy',    bg:'linear-gradient(135deg,#ff4d6a,#a78bfa)' },
+  { id:'aurora',   lvl:26, name:'Aurora',   bg:'linear-gradient(135deg,#2dff7f,#4dfffe,#a78bfa)', anim:true },
+  { id:'sunset',   lvl:28, name:'Sunset',   bg:'linear-gradient(160deg,#ffd700,#ff9f43,#ff4d6a)' },
+  { id:'royal',    lvl:44, name:'Royal',    bg:'linear-gradient(135deg,#5a3fc0,#a78bfa 55%,#ffd700)' },
+  { id:'inferno',  lvl:66, name:'Inferno',  bg:'radial-gradient(circle at 50% 80%,#ffd700,#ff9f43 30%,#ff4d6a 60%,#1a0008)', anim:true },
+  { id:'galaxy',   lvl:80, name:'Galaxy',   bg:'radial-gradient(circle at 70% 20%,#4dfffe,transparent 25%),radial-gradient(circle at 25% 75%,#ff4d6a,transparent 30%),linear-gradient(135deg,#5a3fc0,#07070e)' }
 ];
+// k = frame style (css .fk-<k>), c = palette colours it uses
 const AVA_FRAMES = [
   { id:'none',    lvl:1,   name:'None' },    { id:'ring',  lvl:1,  name:'Ring' },   { id:'double', lvl:3,  name:'Double' },
   { id:'dashed',  lvl:6,   name:'Spinner' }, { id:'glow',  lvl:10, name:'Glow' },   { id:'neon',   lvl:15, name:'Neon' },
   { id:'orbit',   lvl:20,  name:'Orbit' },   { id:'goldr', lvl:30, name:'Gold' },   { id:'flame',  lvl:40, name:'Flame' },
-  { id:'rainbow', lvl:50,  name:'Rainbow' }, { id:'crown', lvl:75, name:'Crown' },  { id:'cosmic', lvl:100, name:'Cosmic' }
+  { id:'rainbow', lvl:50,  name:'Rainbow' }, { id:'crown', lvl:75, name:'Crown' },  { id:'cosmic', lvl:100, name:'Cosmic' },
+  // Common
+  { id:'f-cyan',    lvl:2,  name:'Cyan Ring',    k:'solid',  c:['cyan'] },
+  { id:'f-violet',  lvl:2,  name:'Violet Ring',  k:'solid',  c:['xp'] },
+  { id:'f-gold',    lvl:3,  name:'Gold Ring',    k:'solid',  c:['gold'] },
+  { id:'f-orange',  lvl:3,  name:'Orange Ring',  k:'solid',  c:['orange'] },
+  { id:'f-red',     lvl:4,  name:'Red Ring',     k:'solid',  c:['danger'] },
+  { id:'f-spin-v',  lvl:5,  name:'Violet Spin',  k:'dash',   c:['xp'] },
+  { id:'f-spin-g',  lvl:6,  name:'Gold Spin',    k:'dash',   c:['gold'] },
+  { id:'f-twin',    lvl:7,  name:'Twin Ring',    k:'double', c:['acc', 'cyan'] },
+  { id:'f-ember2',  lvl:8,  name:'Ember Ring',   k:'double', c:['orange', 'danger'] },
+  // Rare
+  { id:'f-glow-c',  lvl:10, name:'Cyan Glow',    k:'glow',   c:['cyan'] },
+  { id:'f-glow-v',  lvl:11, name:'Violet Glow',  k:'glow',   c:['xp'] },
+  { id:'f-glow-r',  lvl:12, name:'Red Glow',     k:'glow',   c:['danger'] },
+  { id:'f-ocean',   lvl:13, name:'Ocean',        k:'duo',    c:['cyan', 'xp'] },
+  { id:'f-sunset',  lvl:14, name:'Sunset',       k:'duo',    c:['gold', 'danger'] },
+  { id:'f-lime',    lvl:15, name:'Lime',         k:'duo',    c:['acc', 'gold'] },
+  { id:'f-ping',    lvl:16, name:'Ping',         k:'pulse',  c:['acc'] },
+  { id:'f-sonar',   lvl:17, name:'Sonar',        k:'pulse',  c:['cyan'] },
+  { id:'f-loader',  lvl:18, name:'Loader',       k:'seg',    c:['gold'] },
+  { id:'f-radar',   lvl:19, name:'Radar',        k:'seg',    c:['acc'] },
+  // Epic
+  { id:'f-comet-c', lvl:22, name:'Comet',        k:'comet',  c:['cyan', 'xp'] },
+  { id:'f-comet-r', lvl:24, name:'Red Comet',    k:'comet',  c:['danger', 'orange'] },
+  { id:'f-orbit2',  lvl:26, name:'Twin Orbit',   k:'orbit2', c:['cyan', 'xp'] },
+  { id:'f-aurora',  lvl:28, name:'Aurora',       k:'halo',   c:['acc', 'cyan'] },
+  { id:'f-tropic',  lvl:30, name:'Tropic',       k:'spin',   c:['gold', 'orange', 'danger'] },
+  { id:'f-zap-c',   lvl:33, name:'Static',       k:'zap',    c:['cyan'] },
+  { id:'f-gem-v',   lvl:36, name:'Amethyst',     k:'gem',    c:['xp', 'txt'] },
+  { id:'f-neonseg', lvl:38, name:'Neon Grid',    k:'seg',    c:['cyan'] },
+  // Legendary
+  { id:'f-inferno', lvl:42, name:'Inferno',      k:'halo',   c:['danger', 'gold'] },
+  { id:'f-comet-g', lvl:46, name:'Gold Comet',   k:'comet',  c:['gold', 'orange'] },
+  { id:'f-orbitf',  lvl:50, name:'Fire Orbit',   k:'orbit2', c:['gold', 'danger'] },
+  { id:'f-diamond', lvl:55, name:'Diamond',      k:'gem',    c:['cyan', 'txt'] },
+  { id:'f-borealis',lvl:60, name:'Borealis',     k:'spin',   c:['acc', 'cyan', 'xp'] },
+  { id:'f-zap-v',   lvl:65, name:'Storm',        k:'zap',    c:['xp'] },
+  // Mythic
+  { id:'f-nova',    lvl:80, name:'Supernova',    k:'nova',   c:['gold'] },
+  { id:'f-prism',   lvl:90, name:'Prism',        k:'prism',  c:['txt'] },
+  { id:'f-voideye', lvl:95, name:'Void Eye',     k:'halo',   c:['xp', 'danger'] }
 ];
 // Path trails: a neon tube (glow + body + white core). grad = colours along the path,
 // flow = travelling sparks, pulse = breathing glow, zap = electric flicker, sparks = crackle at the head
@@ -46,7 +97,36 @@ const TRAILS = [
   { id:'rainbow',  lvl:25, name:'Rainbow',   rgb:'45,255,127',  core:'#ffffff', grad:RAINBOW, flow:true, spin:true },
   { id:'toxic',    lvl:32, name:'Toxic',     rgb:'45,255,127',  core:'#f4ffe0', grad:['#ffd700', '#2dff7f', '#4dfffe'], pulse:true, sparks:true },
   { id:'void',     lvl:45, name:'Void',      rgb:'167,139,250', core:'#efe8ff', grad:['#5a3fc0', '#a78bfa', '#ff4d6a'], flow:true, sparks:true },
-  { id:'electric', lvl:60, name:'Electric',  rgb:'77,255,254',  core:'#ffffff', zap:true, flow:true, sparks:true }
+  { id:'electric', lvl:60, name:'Electric',  rgb:'77,255,254',  core:'#ffffff', zap:true, flow:true, sparks:true },
+  // Common
+  { id:'lime',      lvl:3,  name:'Lime',       rgb:'45,255,127',  core:'#fffbe0', grad:['#2dff7f', '#ffd700'] },
+  { id:'sky',       lvl:3,  name:'Sky',        rgb:'77,255,254',  core:'#ffffff', grad:['#ffffff', '#4dfffe'] },
+  { id:'lilac',     lvl:4,  name:'Lilac',      rgb:'167,139,250', core:'#f3ecff' },
+  { id:'tangerine', lvl:5,  name:'Tangerine',  rgb:'255,159,67',  core:'#fff4d6' },
+  { id:'ruby',      lvl:6,  name:'Ruby',       rgb:'255,77,106',  core:'#fff0f3' },
+  { id:'sunbeam',   lvl:7,  name:'Sunbeam',    rgb:'255,215,0',   core:'#fffbe0', pulse:true },
+  { id:'ghost',     lvl:8,  name:'Ghost',      rgb:'238,238,248', core:'#ffffff', dash:true },
+  // Rare
+  { id:'aurora',    lvl:11, name:'Aurora',     rgb:'77,255,254',  core:'#ffffff', grad:['#2dff7f', '#4dfffe', '#a78bfa'], flow:true },
+  { id:'sunset',    lvl:12, name:'Sunset',     rgb:'255,159,67',  core:'#fff4d6', grad:['#ffd700', '#ff9f43', '#ff4d6a'] },
+  { id:'ocean',     lvl:13, name:'Ocean',      rgb:'77,255,254',  core:'#ffffff', grad:['#4dfffe', '#a78bfa'], pulse:true },
+  { id:'candy',     lvl:15, name:'Candy',      rgb:'255,77,106',  core:'#ffffff', grad:['#ff4d6a', '#a78bfa', '#ff4d6a'], pulse:true },
+  { id:'mintdash',  lvl:17, name:'Mint Dash',  rgb:'45,255,127',  core:'#eafff3', dash:true, flow:true },
+  { id:'neondash',  lvl:19, name:'Neon Dash',  rgb:'77,255,254',  core:'#ffffff', dash:true, flow:true },
+  // Epic
+  { id:'inferno',   lvl:23, name:'Inferno',    rgb:'255,77,106',  core:'#fff4d6', grad:['#ff4d6a', '#ff9f43', '#ffd700'], flow:true, sparks:true },
+  { id:'nebula',    lvl:27, name:'Nebula',     rgb:'167,139,250', core:'#ffffff', grad:['#a78bfa', '#ff4d6a', '#4dfffe'], flow:true, pulse:true },
+  { id:'frostbite', lvl:31, name:'Frostbite',  rgb:'77,255,254',  core:'#ffffff', grad:['#ffffff', '#4dfffe'], zap:true },
+  { id:'venom',     lvl:34, name:'Venom',      rgb:'45,255,127',  core:'#f4ffe0', grad:['#2dff7f', '#a78bfa'], pulse:true, sparks:true },
+  { id:'solar',     lvl:38, name:'Solar Flare',rgb:'255,215,0',   core:'#ffffff', grad:['#ffd700', '#ff9f43'], zap:true, sparks:true },
+  // Legendary
+  { id:'prism',     lvl:44, name:'Prism',      rgb:'45,255,127',  core:'#ffffff', grad:RAINBOW, flow:true, dash:true },
+  { id:'galaxy',    lvl:50, name:'Galaxy',     rgb:'167,139,250', core:'#ffffff', grad:['#a78bfa', '#4dfffe', '#ff4d6a'], spin:true, flow:true, sparks:true },
+  { id:'thunder',   lvl:56, name:'Thunder',    rgb:'255,215,0',   core:'#ffffff', zap:true, flow:true, sparks:true },
+  { id:'phoenix',   lvl:64, name:'Phoenix',    rgb:'255,159,67',  core:'#fffbe0', grad:['#ff4d6a', '#ff9f43', '#ffd700'], spin:true, flow:true, sparks:true },
+  // Mythic
+  { id:'supernova', lvl:85, name:'Supernova',  rgb:'255,215,0',   core:'#ffffff', grad:RAINBOW, flow:true, spin:true, sparks:true, pulse:true },
+  { id:'voidrift',  lvl:95, name:'Void Rift',  rgb:'167,139,250', core:'#ffffff', grad:['#5a3fc0', '#ff4d6a', '#a78bfa'], zap:true, spin:true, sparks:true }
 ];
 // Every title has its own display font (loaded from Google Fonts in index.html)
 const TITLES = [
@@ -61,7 +141,17 @@ const TITLES = [
   { id:'hustler',     lvl:35,  name:'Hustler',     font:"'Permanent Marker'",  color:'var(--orange)' },
   { id:'spooky',      lvl:40,  name:'Spooky',      font:"'Creepster'",         color:'var(--acc)' },
   { id:'untouchable', lvl:50,  name:'Untouchable', font:"'Monoton'",           color:'var(--cyan)' },
-  { id:'mythic',      lvl:100, name:'Mythic',      font:"'Cinzel Decorative'", rainbow:true }
+  { id:'mythic',      lvl:100, name:'Mythic',      font:"'Cinzel Decorative'", rainbow:true },
+  { id:'bigbrain',    lvl:4,   name:'Big Brain',   font:"'Righteous'",         color:'var(--gold)' },
+  { id:'mazerunner',  lvl:6,   name:'Maze Runner', font:"'Bungee'",            color:'var(--acc)' },
+  { id:'nightowl',    lvl:9,   name:'Night Owl',   font:"'Pacifico'",          color:'var(--cyan)' },
+  { id:'pixelpro',    lvl:13,  name:'Pixel Pro',   font:"'Press Start 2P'",    color:'var(--cyan)' },
+  { id:'artist',      lvl:18,  name:'Artist',      font:"'Permanent Marker'",  color:'var(--xp)' },
+  { id:'speeddemon',  lvl:24,  name:'Speed Demon', font:"'Russo One'",         color:'var(--danger)', italic:true },
+  { id:'unstoppable', lvl:32,  name:'Unstoppable', font:"'Orbitron'",          color:'var(--orange)' },
+  { id:'shadow',      lvl:42,  name:'Shadow',      font:"'Monoton'",           color:'var(--xp)' },
+  { id:'chaos',       lvl:58,  name:'Chaos',       font:"'Creepster'",         color:'var(--danger)' },
+  { id:'goat',        lvl:88,  name:'The GOAT',    font:"'Cinzel Decorative'", rainbow:true }
 ];
 const COSMETIC_SETS = { icon:AVA_ICONS, color:AVA_COLORS, frame:AVA_FRAMES, trail:TRAILS, title:TITLES };
 const DEFAULT_AVATAR = { icon:'init', color:'mint', frame:'ring', trail:'mint', title:'puzzler' };
@@ -102,11 +192,42 @@ function sanitizeAvatar(av) {
   return out;
 }
 function getMyAvatar() { return sanitizeAvatar(loadSave().avatar); }
-function isUnlocked(item) { return loadSave().unlockAll || myXpLevel() >= item.lvl; }
-function cosmeticsUnlockedAt(fromLvl, toLvl) {
-  let n = 0;
-  Object.values(COSMETIC_SETS).forEach(set => set.forEach(i => { if (i.lvl >= fromLvl && i.lvl <= toLvl && i.lvl > 1) n++; }));
-  return n;
+// Rarity comes from the item's old unlock level
+const RARITIES = [
+  { id:'starter',   name:'Starter',   rgb:'var(--txt-rgb)' },
+  { id:'common',    name:'Common',    rgb:'var(--txt-rgb)' },
+  { id:'rare',      name:'Rare',      rgb:'var(--cyan-rgb)' },
+  { id:'epic',      name:'Epic',      rgb:'var(--xp-rgb)' },
+  { id:'legendary', name:'Legendary', rgb:'var(--gold-rgb)' },
+  { id:'mythic',    name:'Mythic',    rgb:'var(--danger-rgb)' }
+];
+function rarityOf(item) {
+  const l = item.lvl || 1;
+  return RARITIES[l <= 1 ? 0 : l <= 8 ? 1 : l <= 20 ? 2 : l <= 40 ? 3 : l <= 70 ? 4 : 5];
+}
+// Owned = starter, bought/won from a crate, or admin "unlock all"
+function isUnlocked(item, set) {
+  const s = loadSave();
+  if (s.unlockAll || (item.lvl || 1) <= 1) return true;
+  const o = s.owned && s.owned[set || setOf(item)];
+  return !!(o && o[item.id]);
+}
+function setOf(item) { for (const [k, list] of Object.entries(COSMETIC_SETS)) if (list.includes(item)) return k; return null; }
+function grantItem(set, id) {
+  const s = loadSave(), owned = s.owned || {};
+  owned[set] = { ...(owned[set] || {}), [id]: true };
+  writeSave({ owned });
+}
+// One-time move from level unlocks: keep everything a player had already unlocked
+async function migrateOwned() {
+  await cosmeticsLoaded;
+  const s = loadSave();
+  if (s.ownedV1) return;
+  const lvl = getXpLevel(s.xp || 0), owned = s.owned || {};
+  Object.entries(COSMETIC_SETS).forEach(([set, list]) => list.forEach(i => {
+    if ((i.lvl || 1) > 1 && i.lvl <= lvl) owned[set] = { ...(owned[set] || {}), [i.id]: true };
+  }));
+  writeSave({ owned, ownedV1: true });
 }
 function titleName(av) { const t = _find(TITLES, sanitizeAvatar(av).title); return t && t.id !== 'none' ? t.name : ''; }
 // Styled title (its own font + colour); '' when the player shows no title
@@ -138,7 +259,9 @@ function renderAvatar(av, name, size) {
     : `<span class="ava-init">${escapeHtml(String(name || '?').slice(0, 2).toUpperCase())}</span>`;
   const crown = a.frame === 'crown' ? `<span class="ava-crown">${ic('crown')}</span>` : '';
   const fimg  = frame.src ? `<img class="ava-frame-img" src="${frame.src}" alt="" draggable="false">` : '';
-  return `<div class="ava fr-${frame.src ? 'custom' : a.frame}" style="--ava:${size}px">`
+  const fk = frame.k ? ` fr-k fk-${frame.k}` : '';
+  const fc = frame.c ? frame.c.map((c, i) => `--f${i + 1}:var(--${c}-rgb);`).join('') : '';
+  return `<div class="ava fr-${frame.src ? 'custom' : a.frame}${fk}" style="--ava:${size}px;${fc}">`
     + `<div class="ava-in${color.anim ? ' holo' : ''}" style="background:${color.bg}">${inner}</div>${crown}${fimg}</div>`;
 }
 
@@ -150,7 +273,7 @@ function applyTrail(trailId) {
   const root = document.documentElement;
   root.style.setProperty('--trail-rgb', t.rgb);
   root.style.setProperty('--trail-core', t.core || '#ffffff');
-  ['flow', 'pulse', 'zap', 'sparks', 'spin'].forEach(k => root.classList.toggle('trail-' + k, !!t[k]));
+  ['flow', 'pulse', 'zap', 'sparks', 'spin', 'dash'].forEach(k => root.classList.toggle('trail-' + k, !!t[k]));
   root.classList.toggle('trail-grad', !!t.grad);
   if (typeof paintTrailGradient === 'function') paintTrailGradient();
 }
@@ -164,7 +287,7 @@ let _tpv = 0;
 function trailPreviewSvg(t) {
   const id = 'tpv' + (++_tpv), d = 'M8 36 L8 12 L32 12 L32 36 L56 36 L56 12 L72 12';
   const spin = t.spin ? `<animateTransform attributeName="gradientTransform" type="rotate" from="0 40 24" to="360 40 24" dur="3s" repeatCount="indefinite"/>` : '';
-  return `<svg class="trail-pv${t.flow ? ' flow' : ''}${t.pulse ? ' pulse' : ''}${t.zap ? ' zap' : ''}" viewBox="0 0 80 48" style="--trail-rgb:${t.rgb};--trail-core:${t.core || '#fff'}">
+  return `<svg class="trail-pv${t.flow ? ' flow' : ''}${t.pulse ? ' pulse' : ''}${t.zap ? ' zap' : ''}${t.dash ? ' dash' : ''}" viewBox="0 0 80 48" style="--trail-rgb:${t.rgb};--trail-core:${t.core || '#fff'}">
     <defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="80" y2="48">${trailStops(t)}${spin}</linearGradient></defs>
     <path class="tp-glow" d="${d}" stroke="url(#${id})"/><path class="tp-body" d="${d}" stroke="url(#${id})"/>
     <path class="tp-core" d="${d}"/>${t.flow ? `<path class="tp-flow" d="${d}"/>` : ''}
@@ -183,8 +306,8 @@ function lockerSearch(v) { _lockerQuery = String(v || '').trim().toLowerCase(); 
 function lockerOwnedToggle() { _lockerOwned = !_lockerOwned; renderLocker(); }
 function matchesSearch(item, q) {
   if (!q) return true;
-  const hay = (item.name + ' ' + item.id + ' ' + (PACK_NAMES[item.id.split('-')[0]] || '')).toLowerCase();
-  return q.split(/\s+/).every(w => /^\d+$/.test(w) ? item.lvl <= +w : hay.includes(w));
+  const hay = (item.name + ' ' + item.id + ' ' + rarityOf(item).name + ' ' + (PACK_NAMES[item.id.split('-')[0]] || '')).toLowerCase();
+  return q.split(/\s+/).every(w => hay.includes(w));
 }
 
 function openLocker() {
@@ -210,12 +333,14 @@ function renderLocker() {
   let unlockedCount = 0, shown = 0;
   document.getElementById('locker-owned').classList.toggle('on', _lockerOwned);
   set.forEach(item => {
-    const open = isUnlocked(item); if (open) unlockedCount++;
+    const open = isUnlocked(item, _lockerTab); if (open) unlockedCount++;
     if (!matchesSearch(item, _lockerQuery) || (_lockerOwned && !open)) return;
     shown++;
     const sel  = d[_lockerTab] === item.id;
     const el   = document.createElement('button');
-    el.className = 'locker-item' + (sel ? ' sel' : '') + (open ? '' : ' locked');
+    const rar = rarityOf(item);
+    el.className = 'locker-item r-' + rar.id + (sel ? ' sel' : '') + (open ? '' : ' locked');
+    el.style.setProperty('--rar', rar.rgb);
     let inner = '';
     if (_lockerTab === 'icon')  inner = renderAvatar({ ...d, icon:item.id, frame:'none' }, myName, 44);
     if (_lockerTab === 'color') inner = renderAvatar({ ...d, color:item.id, frame:'none' }, myName, 44);
@@ -224,9 +349,11 @@ function renderLocker() {
     if (_lockerTab === 'title') inner = `<div class="title-swatch fit" data-max="15" data-min="7">${titleHtml(item.id)}</div>`;
     el.innerHTML = inner
       + (_lockerTab !== 'title' ? `<span class="locker-lbl">${escapeHtml(item.name || '')}</span>` : '')
-      + (open ? '' : `<span class="locker-lock">${ic('lock')}${item.lvl}</span>`);
+      + (rar.id !== 'starter' ? `<span class="locker-rar"></span>` : '')
+      + (open ? '' : `<span class="locker-lock">${ic('lock')}</span>`);
+    el.title = rar.name + (open ? '' : ' · from crates');
     el.onclick = () => {
-      if (!open) { pushToast('Unlocks at level ' + item.lvl, 'warn'); sfx('err'); return; }
+      if (!open) { pushToast(rar.name + ' · win it from a crate in the Store', 'info', 'chest'); sfx('err'); return; }
       _lockerDraft[_lockerTab] = item.id; sfx('tap'); buzz(8);
       if (_lockerTab === 'trail') applyTrail(item.id);
       renderLocker();
@@ -234,7 +361,7 @@ function renderLocker() {
     grid.appendChild(el);
   });
   if (!shown) grid.innerHTML = `<div class="search-empty">${ic('search')}Nothing matches "${escapeHtml(_lockerQuery || 'unlocked')}"</div>`;
-  document.getElementById('locker-count').innerText = (_lockerQuery || _lockerOwned ? shown + ' shown · ' : '') + unlockedCount + ' / ' + set.length + ' unlocked';
+  document.getElementById('locker-count').innerText = (_lockerQuery || _lockerOwned ? shown + ' shown · ' : '') + unlockedCount + ' / ' + set.length + ' owned';
   fitText(document.getElementById('locker'));
 }
 

@@ -23,6 +23,10 @@ const num = e => `(${e}.isNumber() ? ${e}.val() : 0)`;
 const BNEW = k => num(`newData.child('boosts').child('${k}')`), BOLD = k => num(`data.child('boosts').child('${k}')`);
 const BOOST_COST = Object.entries(BOOST_PRICES).map(([k, p]) => `(${BNEW(k)} > ${BOLD(k)} ? (${BNEW(k)} - ${BOLD(k)}) * ${p} : 0)`).join(' + ');
 const EARNED = `(${num("newData.child('coins')")} + ${BOOST_COST} - ${num("data.child('coins')")})`;
+// Crate keys come only from level-ups: every level needs ≥ 90 more XP, and XP itself is speed-limited,
+// so new keys must arrive in the same write as an XP gain and fit it.
+const XP_OLD = num("data.parent().child('xp')"), XP_NEW = num("newData.parent().child('xp')");
+const KEYS_OK = `(newData.val() <= ${num('data')} || (${XP_NEW} > ${XP_OLD} && newData.val() - ${num('data')} <= 1 + (${XP_NEW} - ${XP_OLD}) / 90))`;
 const ACC_XPAT = "(data.child('xpAt').isNumber() ? data.child('xpAt').val() : now)";
 const ECONOMY = `(${ADMIN} || ${EARNED} <= 0 || (newData.child('xpAt').val() == now && ${EARNED} <= ${COIN_BURST} + (now - ${ACC_XPAT}) / 1000 * ${COIN_PER_SEC}))`;
 const NOT_PIN_LOCKED =`(!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + ${LOCK_MS} < now)`;
@@ -60,6 +64,15 @@ const rules = {
          || (root.child('recovery').child($acc).child('code').isString() && newData.child('recoveryProof').val() == root.child('recovery').child($acc).child('code').val())))`,
         '.validate': `newData.child('name').isString() && newData.child('nameLower').isString() && ${ECONOMY}`,
         coins: { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000' },
+        crateKeys: { '.validate': `newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999 && (${ADMIN} || ${KEYS_OK})` },
+        // Owned cosmetics: { icon|color|frame|trail|title: { id: true } }
+        owned: {
+          '$set': {
+            '.validate': "$set.matches(/^(icon|color|frame|trail|title)$/)",
+            '$id': { '.validate': "newData.val() == true && $id.length <= 32" }
+          }
+        },
+        ownedV1: { '.validate': 'newData.isBoolean()' },
         boosts: {
           ...Object.fromEntries(Object.keys(BOOST_PRICES).map(k => [k, { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 999' }])),
           '$other': { '.validate': false }
