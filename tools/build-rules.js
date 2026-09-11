@@ -164,7 +164,8 @@ const rules = {
           '.write': `${ADMIN} || (auth != null && (
               (!newData.exists() && ${acctOwnerOf('$to')} == auth.uid)
            || (newData.exists() && !data.exists() && newData.child('from').isString() && ${acctOwnerOf("newData.child('from').val()")} == auth.uid && newData.child('from').val() != $to)))`,
-          '.validate': `newData.child('crate').isString() && newData.child('crate').val().matches(/^(basic|icon|style|elite)$/)
+          '.validate': `newData.child('crate').isString() && (newData.child('crate').val().matches(/^(basic|icon|style|elite)$/) || (newData.child('crate').val() == 'admin' && ${ADMIN}))
+            && (!newData.child('item').exists() || (newData.child('item').isString() && newData.child('item').val().length <= 48))
             && newData.child('at').val() == now && newData.child('fromName').isString() && newData.child('fromName').val().length <= 16
             && (!newData.child('msg').exists() || (newData.child('msg').isString() && newData.child('msg').val().length <= 60))
             && (${ADMIN} || (

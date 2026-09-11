@@ -124,53 +124,56 @@ let _actx = null, _bus = null;
 function audioBus() {
   if (!_actx) {
     _actx = new (window.AudioContext || window.webkitAudioContext)();
-    // soft compressor → speakers: stacked notes stay smooth instead of clipping
+    // Warm chain: gain → low-pass (takes the sharp edge off every sound) → gentle compressor → speakers
+    const lp = _actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.4;
     const comp = _actx.createDynamicsCompressor();
-    comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 4; comp.release.value = 0.15;
-    _bus = _actx.createGain(); _bus.gain.value = 0.9;
-    _bus.connect(comp); comp.connect(_actx.destination);
+    comp.threshold.value = -20; comp.knee.value = 18; comp.ratio.value = 3; comp.release.value = 0.2;
+    _bus = _actx.createGain(); _bus.gain.value = 0.75;
+    _bus.connect(lp); lp.connect(comp); comp.connect(_actx.destination);
   }
   if (_actx.state === 'suspended') _actx.resume();
   return _bus;
 }
-// One synth voice: f = start freq, to = end freq (pitch glide), d = decay seconds
-function tone({ f, to, d = 0.12, v = 0.08, type = 'sine', at = 0, attack = 0.004 }) {
+// One soft voice: f = start freq, to = end freq (glide), d = decay seconds. Sine/triangle only.
+function tone({ f, to, d = 0.14, v = 0.06, type = 'sine', at = 0, attack = 0.008 }) {
   const bus = audioBus(), t = _actx.currentTime + at;
   const o = _actx.createOscillator(), g = _actx.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + Math.min(d, 0.08));
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + Math.min(d, 0.1));
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(v, t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + d);
   o.connect(g); g.connect(bus);
-  o.start(t); o.stop(t + d + 0.03);
+  o.start(t); o.stop(t + d + 0.05);
 }
-// Major pentatonic from C5 — every step sounds "right", whatever order you play them in
+// Major pentatonic from G4 — mellow range, every step sounds "right" in any order
 const PENTA = [0, 2, 4, 7, 9];
-function scaleFreq(n) { const o = Math.floor(n / 5), s = PENTA[((n % 5) + 5) % 5]; return 523.25 * Math.pow(2, (12 * o + s) / 12); }
-function pluck(f, v = 0.085) {
-  tone({ f: f * 1.03, to: f, d: 0.16, v, type: 'triangle' });   // body
-  tone({ f: f * 2, d: 0.07, v: v * 0.35, type: 'sine' });        // shimmer
-  tone({ f: f * 4, d: 0.025, v: v * 0.18, type: 'square' });     // click of the "tap"
+function scaleFreq(n) { const o = Math.floor(n / 5), s = PENTA[((n % 5) + 5) % 5]; return 392 * Math.pow(2, (12 * o + s) / 12); }
+// Soft wooden "bloop" (marimba-like: round body + a whisper of the 4th partial)
+function pluck(f, v = 0.07) {
+  tone({ f: f * 1.015, to: f, d: 0.26, v, type: 'sine', attack: 0.006 });
+  tone({ f: f * 3.98, d: 0.045, v: v * 0.07, type: 'sine', attack: 0.003 });
 }
+const chord = (root, steps, gap, d, v, type) => steps.forEach((st, i) => tone({ f: root * Math.pow(2, st / 12), d, v, type: type || 'sine', at: i * gap }));
 const SFX = {
-  node:   () => { const f = 783.99; tone({ f, d: 0.45, v: 0.07 }); tone({ f: f * 1.5, d: 0.35, v: 0.045, at: 0.03 }); tone({ f: f * 2.01, d: 0.5, v: 0.035, at: 0.05 }); tone({ f: f * 3, d: 0.2, v: 0.02, type: 'triangle', at: 0.06 }); },
-  tap:    () => pluck(1046.5, 0.05),
-  back:   () => tone({ f: 330, to: 262, d: 0.08, v: 0.05, type: 'triangle' }),
-  pickup: () => [5, 7, 9, 12].forEach((n, i) => { tone({ f: scaleFreq(n), d: 0.2, v: 0.055, type: 'triangle', at: i * 0.05 }); tone({ f: scaleFreq(n) * 2, d: 0.08, v: 0.02, type: 'square', at: i * 0.05 }); }),
-  coin:   () => { tone({ f: 987.77, d: 0.08, v: 0.07, type: 'square' }); tone({ f: 1318.5, d: 0.35, v: 0.07, type: 'square', at: 0.075 }); },
-  buy:    () => { SFX.coin(); [0, 4, 7, 12].forEach((s, i) => tone({ f: 659.25 * Math.pow(2, s / 12), d: 0.22, v: 0.05, type: 'triangle', at: 0.18 + i * 0.06 })); },
-  reward: () => [0, 4, 7, 11, 14].forEach((s, i) => tone({ f: 523.25 * Math.pow(2, s / 12), d: 0.4, v: 0.055, type: 'sine', at: i * 0.07 })),
-  ability:() => { tone({ f: 440, to: 1320, d: 0.22, v: 0.06, type: 'sawtooth' }); tone({ f: 1760, d: 0.25, v: 0.03, at: 0.12 }); },
-  hit:    () => { tone({ f: 220, to: 70, d: 0.35, v: 0.12, type: 'sawtooth' }); tone({ f: 110, d: 0.3, v: 0.08, type: 'square', at: 0.05 }); },
-  win:    () => [0, 4, 7, 12, 16, 19].forEach((s, i) => { tone({ f: 523.25 * Math.pow(2, s / 12), d: i === 5 ? 0.9 : 0.25, v: 0.06, type: 'triangle', at: i * 0.075 }); }),
-  level:  () => [0, 7, 12, 16].forEach((s, i) => tone({ f: 440 * Math.pow(2, s / 12), d: 0.5, v: 0.06, at: i * 0.09 })),
-  tick:   () => tone({ f: 880, d: 0.09, v: 0.07, type: 'square' }),
-  go:     () => { tone({ f: 1318.5, d: 0.3, v: 0.08, type: 'square' }); tone({ f: 1760, d: 0.35, v: 0.05, at: 0.05 }); },
-  err:    () => tone({ f: 160, to: 110, d: 0.12, v: 0.07, type: 'square' }),
-  honk:   () => { tone({ f: 330, d: 0.25, v: 0.12, type: 'sawtooth' }); tone({ f: 277, d: 0.35, v: 0.12, type: 'sawtooth', at: 0.28 }); },
-  world:  () => [0, 5, 9, 12].forEach((s, i) => tone({ f: 392 * Math.pow(2, s / 12), d: 0.45, v: 0.06, type: 'triangle', at: i * 0.11 }))
+  node:   () => { tone({ f: 659.25, d: 0.6, v: 0.06 }); tone({ f: 987.77, d: 0.45, v: 0.025, at: 0.02 }); tone({ f: 329.63, d: 0.5, v: 0.03, type: 'triangle' }); },
+  tap:    () => pluck(587.33, 0.045),
+  back:   () => tone({ f: 392, to: 330, d: 0.12, v: 0.045, type: 'triangle' }),
+  pickup: () => chord(523.25, [0, 4, 7, 12], 0.05, 0.26, 0.045),
+  coin:   () => { tone({ f: 987.77, d: 0.1, v: 0.045, type: 'triangle' }); tone({ f: 1318.5, d: 0.35, v: 0.04, type: 'triangle', at: 0.07 }); },
+  buy:    () => { SFX.coin(); chord(523.25, [0, 4, 7, 12], 0.06, 0.25, 0.04, 'triangle'); },
+  reward: () => chord(523.25, [0, 4, 7, 11, 14], 0.07, 0.45, 0.045),
+  ability:() => { tone({ f: 392, to: 784, d: 0.25, v: 0.05, type: 'triangle' }); tone({ f: 1174.7, d: 0.3, v: 0.025, at: 0.1 }); },
+  hit:    () => { tone({ f: 196, to: 98, d: 0.35, v: 0.09, type: 'triangle' }); tone({ f: 130.8, d: 0.3, v: 0.05, at: 0.04 }); },
+  win:    () => chord(523.25, [0, 4, 7, 12, 16], 0.08, 0.55, 0.05, 'triangle'),
+  level:  () => chord(392, [0, 7, 12, 16, 19], 0.09, 0.7, 0.045),
+  tick:   () => tone({ f: 784, d: 0.1, v: 0.05, type: 'triangle' }),
+  go:     () => { tone({ f: 1046.5, d: 0.4, v: 0.055, type: 'triangle' }); tone({ f: 523.25, d: 0.45, v: 0.04, at: 0.02 }); },
+  err:    () => tone({ f: 220, to: 175, d: 0.16, v: 0.06, type: 'triangle' }),
+  honk:   () => { tone({ f: 330, d: 0.25, v: 0.1, type: 'sawtooth' }); tone({ f: 277, d: 0.35, v: 0.1, type: 'sawtooth', at: 0.28 }); },
+  world:  () => chord(392, [0, 5, 9, 12], 0.11, 0.5, 0.045, 'triangle'),
+  clack:  () => { tone({ f: 523.25, to: 440, d: 0.08, v: 0.04, type: 'triangle' }); }
 };
 function sfx(name) {
   if (!getSetting('sound', true) || !SFX[name]) return;
@@ -179,7 +182,7 @@ function sfx(name) {
 // Each new box in your path plays the next note up the scale (wraps after two octaves)
 function sfxStep(n) {
   if (!getSetting('sound', true)) return;
-  try { pluck(scaleFreq(((n - 1) % 11) - 1)); } catch (e) {}
+  try { pluck(scaleFreq((n - 1) % 10)); } catch (e) {}
 }
 function buzz(ms) {
   if (!getSetting('haptics', true)) return;

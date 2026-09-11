@@ -18,7 +18,10 @@ const MAX_SLOTS = 3;
 function boostsActive() { return battleActive ? abilitiesEnabled : !dailyMode; }
 
 // ── Place pickups on the solution path (deterministic from the board rng) ──
+// Boosts no longer appear on the board — they only come from the Store (your bag).
+const BOARD_PICKUPS = false;
 function placePickups(rng, path, nodeCells) {
+  if (!BOARD_PICKUPS) return;
   const pool = battleActive ? BATTLE_POOL : SOLO_POOL;
   const count = Math.max(1, Math.min(battleActive ? 3 : 2, Math.floor(path.length / 11)));
   // Skip the first few cells so nobody gets a boost for free
@@ -64,7 +67,7 @@ function renderAbilityBar(flashSlot) {
       : inBag
         ? `<span class="ab-empty">${ic('bag')}<span class="ab-name">Bag</span><b class="ab-count">${inBag}</b></span>`
         : `<span class="ab-empty">${ic('plus')}<span class="ab-name">Empty</span></span>`;
-    b.title = kind ? ABILITIES[kind].desc : 'Collect boosts on the board, or tap to use one from your bag';
+    b.title = kind ? ABILITIES[kind].desc : 'Tap to use a boost from your bag (buy them in the Store)';
     b.onclick = () => kind ? useAbilitySlot(i) : openBag();
     bar.appendChild(b);
   }

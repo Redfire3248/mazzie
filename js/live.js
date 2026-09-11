@@ -77,7 +77,7 @@ async function listenBroadcast() {
     const seen = +localStorage.getItem('mz_bc_seen') || 0;
     if (b.at <= seen || Date.now() - b.at > 20 * 60000) return;   // already seen, or older than 20 min
     localStorage.setItem('mz_bc_seen', String(b.at));
-    showWorldMessage(String(b.msg).slice(0, 200), b.by);
+    showWorldMessage(String(b.msg).slice(0, 200), b.by, b.av);
   }, () => { if (_liveOn) listenBroadcast(); });          // token expired → reconnect with a fresh one
 }
 async function listenTroll() {
@@ -107,9 +107,9 @@ async function heartbeat() {
 }
 
 // ── World message banner ──
-function showWorldMessage(msg, by) {
+function showWorldMessage(msg, by, av) {
   sfx('world'); buzz([30, 40, 30]);
-  showReward({ icon: 'megaphone', tone: 'world', kicker: 'Message to everyone' + (by ? ' · ' + by : ''), title: msg, ms: 7000 });
+  showAvatarMessage('Message to everyone' + (by ? ' · ' + cleanName(by) : ''), msg, cleanName(by || 'Admin'), av, 7000);
   if (inBattleSession()) addChatMsg('World: ' + msg, null, true);
 }
 
@@ -138,7 +138,7 @@ function applyTroll(t) {
       showReward({ icon: 'coin', tone: 'gold', kicker: 'Jackpot!', title: '+1,000,000 coins', chips: [{ html: coinHtml('1,000,000'), label: 'coins' }], ms: 2600 });
       setTimeout(() => showReward({ icon: 'info', tone: 'world', title: 'Just kidding', sub: 'Greetings from ' + by, quick: true }), 200);
       break;
-    case 'msg': sfx('world'); showReward({ icon: 'chat', tone: 'world', kicker: 'Message from ' + by, title: String(t.text || '').slice(0, 160), ms: 6000 }); break;
+    case 'msg': sfx('world'); showAvatarMessage('Message from ' + by, String(t.text || '').slice(0, 160), by, t.av); break;
     case 'solve':
       if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); pushToast(by + ' cleared this level for you', 'acc', 'sparkle'); } catch (e) {} }
       break;
@@ -183,8 +183,9 @@ async function refreshFromCloud() {
 }
 
 // ── Admin side ──
-const adminBroadcast = msg => dbPut('/broadcast', { msg: String(msg).slice(0, 200), at: SERVER_TIME, by: myName });
-const adminTroll = (acc, kind, extra) => dbPut('/troll/' + acc, { kind, at: SERVER_TIME, by: myName, ...(extra || {}) });
+// Every admin message carries your look, so players see your character next to it
+const adminBroadcast = msg => dbPut('/broadcast', { msg: String(msg).slice(0, 200), at: SERVER_TIME, by: myName, av: getMyAvatar() });
+const adminTroll = (acc, kind, extra) => dbPut('/troll/' + acc, { kind, at: SERVER_TIME, by: myName, av: getMyAvatar(), ...(extra || {}) });
 async function adminOnline() {
   const all = (await dbGet('/online')) || {};
   const now = Date.now();

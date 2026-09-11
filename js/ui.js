@@ -251,7 +251,7 @@ function nextReward() {
   _rewardBusy = true;
   const layer = document.getElementById('reward-layer');
   const card = document.createElement('div');
-  card.className = 'reward ' + (r.tone || 'gold');
+  card.className = 'reward ' + (r.tone || 'gold') + (r.face ? ' face' : '');
   const chips = (r.chips || []).slice(0, 6);
   const more = (r.chips || []).length - chips.length;
   card.innerHTML = `<div class="rw-shine"></div>
@@ -272,6 +272,12 @@ function nextReward() {
   };
   card.onclick = close;
   setTimeout(close, r.ms || (r.quick ? 1800 : chips.length ? 3600 : 2600));
+}
+
+// Admin / player message card that shows the sender's character (icon + frame)
+function showAvatarMessage(kicker, msg, by, av, ms) {
+  const face = renderAvatar(sanitizeAvatar(av || {}), by || 'Admin', 46);
+  showReward({ iconHtml: face, tone: 'world', kicker, title: String(msg || '').slice(0, 200), ms: ms || 6500, face: true });
 }
 
 // ── Particles ──

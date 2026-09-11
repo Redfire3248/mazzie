@@ -1057,3 +1057,36 @@ html.troll-party .screen:not(.hidden){animation:trollHue 1s linear infinite;}
 .ava.fk-admin::after{inset:-10px;border-radius:50%;border:1.5px dashed rgba(var(--gold-rgb),.8);animation:spin 6s linear infinite reverse;}
 .ava.fk-console::before{inset:-4px;background:repeating-conic-gradient(rgb(var(--f1)) 0 6deg,rgba(var(--f1),.15) 6deg 12deg);animation:spin 8s steps(30) infinite;box-shadow:0 0 12px rgba(var(--f1),.6);}
 .ava.fk-console::after{inset:-8px;border:1px solid rgba(var(--f1),.5);animation:glowP .9s steps(2) infinite;}
+
+/* ══════════ MULTI-OPEN: stacked reels ══════════ */
+.crate-intro.small{width:96px;height:96px;}
+.reel-stack{display:flex;flex-direction:column;gap:5px;width:100%;}
+.reel-wrap.mini{height:60px;border-top-color:rgba(var(--ct),.18);border-bottom-color:rgba(var(--ct),.18);animation:stackIn .35s calc(var(--i) * 45ms) cubic-bezier(.3,1.3,.5,1) backwards;transition:background .3s,box-shadow .3s;}
+@keyframes stackIn{from{transform:translateX(-30px);opacity:0;}}
+.reel-stack.n10 .reel-wrap.mini{height:52px;}
+.reel-wrap.mini .reel{gap:6px;}
+.reel-wrap.mini .reel-card{flex:0 0 52px;height:46px;border-radius:10px;border-bottom-width:3px;gap:0;}
+.reel-stack.n10 .reel-wrap.mini .reel-card{flex-basis:46px;height:40px;}
+.reel-wrap.mini .rc-pv{width:44px;height:36px;}
+.reel-wrap.mini .rc-pv .trail-pv{max-width:40px;}
+.reel-wrap.mini .rc-pv .title-swatch{font-size:8px!important;padding:0;}
+.reel-wrap.mini .reel-marker{width:2px;}
+.reel-wrap.mini .reel-marker::before,.reel-wrap.mini .reel-marker::after{border-width:5px;}
+.reel-wrap.mini.landed{background:linear-gradient(90deg,transparent,rgba(var(--rar),.14),transparent);box-shadow:inset 0 0 0 1px rgba(var(--rar),.25);}
+.reel-wrap.mini.landed.r-legendary,.reel-wrap.mini.landed.r-mythic,.reel-wrap.mini.landed.r-admin{animation:landGlow 1.2s ease-in-out infinite;}
+@keyframes landGlow{50%{box-shadow:inset 0 0 0 1px rgba(var(--rar),.6),0 0 18px rgba(var(--rar),.35);}}
+.reel-tag{position:absolute;right:14%;top:50%;transform:translateY(-50%) scale(.6);opacity:0;z-index:4;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 7px;border-radius:8px;background:rgba(7,7,14,.85);border:1px solid rgba(var(--rar,var(--txt-rgb)),.5);color:var(--acc);transition:all .3s cubic-bezier(.3,1.6,.5,1);}
+.reel-tag .coin-inline{font-size:10px;}
+.landed .reel-tag{opacity:1;transform:translateY(-50%) scale(1);}
+.reel-wrap.mini .reel-card.won{transform:scale(1.14);}
+
+/* ══════════ LOCKER: equipped label ══════════ */
+.locker-eq{position:absolute;top:5px;left:5px;display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);font-size:8px;letter-spacing:.5px;text-transform:uppercase;padding:2px 5px;border-radius:6px;background:var(--acc);color:#07070e;font-weight:700;z-index:3;}
+.locker-eq .ic{width:9px;height:9px;}
+
+/* ══════════ MESSAGE CARD with the sender's character ══════════ */
+.reward.face .rw-ic{background:none;box-shadow:none;width:56px;height:56px;}
+.reward.face .rw-title{font-size:15px;font-weight:700;}
+/* Fixed reel card widths (content must never stretch a card, or the reel lands off-target) */
+.reel-card{min-width:0;overflow:hidden;box-sizing:border-box;}
+.rc-pv{overflow:hidden;}

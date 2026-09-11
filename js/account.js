@@ -534,7 +534,7 @@ async function syncAccountToCloud() {
     const ownedPaths = {};
     Object.entries(mergeOwned(s.owned)).forEach(([set, ids]) => Object.keys(ids).forEach(k => { ownedPaths['owned/' + set + '/' + k] = true; }));
     await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, ...ownedPaths,
-      ownedV1: !!s.ownedV1, pity: typeof getPity === 'function' ? getPity() : { e: 0, l: 0 }, lastSeen: secure ? SERVER_TIME : Date.now() });
+      ownedV1: !!s.ownedV1, ownedV2: !!s.ownedV2, pity: typeof getPity === 'function' ? getPity() : { e: 0, l: 0 }, lastSeen: secure ? SERVER_TIME : Date.now() });
   } catch (e) { return; }
   // Progress is stamped with the server clock; the database rejects impossible jumps.
   // A rejected jump simply retries on later syncs, once enough real time has passed.
@@ -632,6 +632,7 @@ function applyAccountLocally(account) {
     crateKeys:    secure ? (account.crateKeys || 0) : Math.max(account.crateKeys || 0, s.crateKeys || 0),
     owned:        mergeOwned(account.owned, s.owned),
     ownedV1:      !!(account.ownedV1 || s.ownedV1),
+    ownedV2:      !!(account.ownedV2 || s.ownedV2),
     pity:         account.pity && typeof account.pity === 'object' ? { e: account.pity.e | 0, l: account.pity.l | 0 } : (s.pity || { e: 0, l: 0 }),
     daily:        { ...(account.daily && typeof account.daily === 'object' ? account.daily : {}), ...(s.daily || {}) },
     level:        account.level || s.level || 1,

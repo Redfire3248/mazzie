@@ -14,7 +14,7 @@ const AVA_ICONS = [ { id:'init', lvl:1, name:'Initials' } ];
 // Palette: green #2dff7f · cyan #4dfffe · violet #a78bfa · gold #ffd700 · orange #ff9f43 · red #ff4d6a (+ darker shades)
 const AVA_COLORS = [
   { id:'mint',     lvl:1,  name:'Mint',     bg:'linear-gradient(135deg,#2dff7f,#0e9e57)' },
-  { id:'ice',      lvl:1,  name:'Ice',      bg:'linear-gradient(135deg,#4dfffe,#178aa8)' },
+  { id:'ice',      lvl:2,  name:'Ice',      bg:'linear-gradient(135deg,#4dfffe,#178aa8)' },
   { id:'rose',     lvl:2,  name:'Rose',     bg:'linear-gradient(135deg,#ff4d6a,#a3183a)' },
   { id:'sun',      lvl:3,  name:'Sun',      bg:'linear-gradient(135deg,#ffd700,#ff9f43)' },
   { id:'grape',    lvl:5,  name:'Grape',    bg:'linear-gradient(135deg,#a78bfa,#5a3fc0)' },
@@ -37,7 +37,7 @@ const AVA_COLORS = [
 ];
 // k = frame style (css .fk-<k>), c = palette colours it uses
 const AVA_FRAMES = [
-  { id:'none',    lvl:1,   name:'None' },    { id:'ring',  lvl:1,  name:'Ring' },   { id:'double', lvl:3,  name:'Double' },
+  { id:'none',    lvl:1,   name:'None' },    { id:'ring',  lvl:2,  name:'Ring' },   { id:'double', lvl:3,  name:'Double' },
   { id:'dashed',  lvl:6,   name:'Spinner' }, { id:'glow',  lvl:10, name:'Glow' },   { id:'neon',   lvl:15, name:'Neon' },
   { id:'orbit',   lvl:20,  name:'Orbit' },   { id:'goldr', lvl:30, name:'Gold' },   { id:'flame',  lvl:40, name:'Flame' },
   { id:'rainbow', lvl:50,  name:'Rainbow' }, { id:'crown', lvl:75, name:'Crown' },  { id:'cosmic', lvl:100, name:'Cosmic' },
@@ -138,7 +138,7 @@ const TRAILS = [
 // Every title has its own display font (loaded from Google Fonts in index.html)
 const TITLES = [
   { id:'none',        lvl:1,   name:'None' },
-  { id:'puzzler',     lvl:1,   name:'Puzzler',     font:"'Righteous'",         color:'var(--acc)' },
+  { id:'puzzler',     lvl:2,   name:'Puzzler',     font:"'Righteous'",         color:'var(--acc)' },
   { id:'speedster',   lvl:5,   name:'Speedster',   font:"'Russo One'",         color:'var(--gold)', italic:true },
   { id:'dreamer',     lvl:8,   name:'Dreamer',     font:"'Pacifico'",          color:'var(--xp)' },
   { id:'pathfinder',  lvl:10,  name:'Pathfinder',  font:"'Orbitron'",          color:'var(--cyan)' },
@@ -165,7 +165,8 @@ const TITLES = [
   { id:'a-owner',     admin:true, name:'Owner',     font:"'Cinzel Decorative'", rainbow:true, glow:true }
 ];
 const COSMETIC_SETS = { icon:AVA_ICONS, color:AVA_COLORS, frame:AVA_FRAMES, trail:TRAILS, title:TITLES };
-const DEFAULT_AVATAR = { icon:'init', color:'mint', frame:'ring', trail:'mint', title:'puzzler' };
+// New players start with Initials + 2 icons (Cat, Pup), the basic Mint colour/trail, no frame and no title
+const DEFAULT_AVATAR = { icon:'init', color:'mint', frame:'none', trail:'mint', title:'none' };
 
 // ── Custom art from assets/avatars/manifest.json ──
 const SAFE_FILE = /^[a-zA-Z0-9_\-]+\.(png|webp|jpg|jpeg|svg|gif)$/;
@@ -213,6 +214,7 @@ const RARITIES = [
   { id:'mythic',    name:'Mythic',    rgb:'var(--danger-rgb)' },
   { id:'admin',     name:'Admin',     rgb:'var(--gold-rgb)' }
 ];
+const RAR_RANK = { starter: 0, common: 1, rare: 2, epic: 3, legendary: 4, mythic: 5, admin: 6 };
 function rarityOf(item) {
   if (item.admin) return RARITIES[6];
   const l = item.lvl || 1;
@@ -237,12 +239,18 @@ function grantItem(set, id) {
 async function migrateOwned() {
   await cosmeticsLoaded;
   const s = loadSave();
+  if (s.ownedV1 && !s.ownedV2) {
+    const owned = s.owned || {};
+    [['frame', 'ring'], ['color', 'ice'], ['title', 'puzzler']].forEach(([set, id]) => owned[set] = { ...(owned[set] || {}), [id]: true });
+    writeSave({ owned, ownedV2: true });
+    return;
+  }
   if (s.ownedV1) return;
   const lvl = getXpLevel(s.xp || 0), owned = s.owned || {};
   Object.entries(COSMETIC_SETS).forEach(([set, list]) => list.forEach(i => {
     if ((i.lvl || 1) > 1 && i.lvl <= lvl) owned[set] = { ...(owned[set] || {}), [i.id]: true };
   }));
-  writeSave({ owned, ownedV1: true });
+  writeSave({ owned, ownedV1: true, ownedV2: true });
 }
 function titleName(av) { const t = _find(TITLES, sanitizeAvatar(av).title); return t && t.id !== 'none' ? t.name : ''; }
 // Styled title (its own font + colour); '' when the player shows no title
@@ -347,8 +355,10 @@ function renderLocker() {
   const set  = COSMETIC_SETS[_lockerTab];
   let unlockedCount = 0, shown = 0;
   document.getElementById('locker-owned').classList.toggle('on', _lockerOwned);
-  set.forEach(item => {
-    const open = isUnlocked(item, _lockerTab);
+  const rank = i => RAR_RANK[rarityOf(i).id] || 0;
+  const sorted = set.map((item, i) => ({ item, i, open: isUnlocked(item, _lockerTab) }))
+    .sort((a, b) => (b.item.id === d[_lockerTab]) - (a.item.id === d[_lockerTab]) || b.open - a.open || rank(b.item) - rank(a.item) || a.i - b.i);
+  sorted.forEach(({ item, open }) => {
     if (item.admin && !open && !isAdminUser()) return;
     if (open) unlockedCount++;
     if (!matchesSearch(item, _lockerQuery) || (_lockerOwned && !open)) return;
@@ -367,13 +377,16 @@ function renderLocker() {
     el.innerHTML = inner
       + (_lockerTab !== 'title' ? `<span class="locker-lbl">${escapeHtml(item.name || '')}</span>` : '')
       + (rar.id !== 'starter' ? `<span class="locker-rar"></span>` : '')
+      + (sel ? `<span class="locker-eq">${ic('check')}Equipped</span>` : '')
       + (open ? '' : `<span class="locker-lock">${ic('lock')}</span>`);
     el.title = rar.name + (open ? '' : ' · from crates');
     el.onclick = () => {
       if (!open) { pushToast(rar.name + ' · win it from a crate in the Store', 'info', 'chest'); sfx('err'); return; }
+      if (sel) return;
       _lockerDraft[_lockerTab] = item.id; sfx('tap'); buzz(8);
-      if (_lockerTab === 'trail') applyTrail(item.id);
+      equipLook();
       renderLocker();
+      document.getElementById('locker-grid').scrollTop = 0;
     };
     grid.appendChild(el);
   });
@@ -382,18 +395,19 @@ function renderLocker() {
   fitText(document.getElementById('locker'));
 }
 
-function saveLocker() {
+// Save the look right away (tapping an item equips it)
+let _eqSyncT = null;
+function equipLook() {
   writeSave({ avatar: sanitizeAvatar(_lockerDraft) });
   applyMyCosmetics();
   updateMenuProfile();
-  syncAccountToCloud().catch(() => {});
+  clearTimeout(_eqSyncT); _eqSyncT = setTimeout(() => syncAccountToCloud().catch(() => {}), 800);
   if (isHost && lobbyPlayers[myId]) {
     lobbyPlayers[myId].avatar = getMyAvatar();
     broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
   } else if (hostConn && hostConn.open) {
     hostConn.send({ type:'avatar', avatar:getMyAvatar() });
   }
-  pushToast('Look saved', 'acc');
-  show('menu');
 }
-function cancelLocker() { applyMyCosmetics(); show('menu'); }
+function saveLocker() { show(inBattleSession() ? 'lobby' : 'menu'); }
+function cancelLocker() { saveLocker(); }

@@ -494,7 +494,7 @@ function handleHostMsg(d) {
       { const q = isQuickMatch; resetBattleState(); show(q ? 'menu' : 'battle-mode'); }
       break;
     case 'announce':
-      pushToast(String(d.msg || '').slice(0, 80), 'info', 'alert');
+      sfx('world'); showAvatarMessage('Announcement · ' + cleanName(d.by || 'Admin'), String(d.msg || '').slice(0, 80), cleanName(d.by || 'Admin'), d.av);
       addChatMsg('Admin: ' + String(d.msg || '').slice(0, 80), null, true);
       break;
     case 'freeze':

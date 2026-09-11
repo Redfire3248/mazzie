@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════
 // js/crates.js — Cosmetic crates
 //   • Buy with coins, a free key (every level up) or open a gift from a friend
-//   • Open 1 (rolling reel) or 5 / 10 at once (card-flip reveal; ×10 = 9× price)
+//   • Open 1 (big rolling reel) or 5 / 10 at once (stacked reels; ×10 = 9× price)
 //   • Pity: Epic+ guaranteed every 10 crates, Legendary+ every 50
 //   • Gifting: pay for a crate that lands in a friend's inbox (database rules
 //     check the sender really paid — see /gifts in tools/build-rules.js)
@@ -143,7 +143,7 @@ async function openCrates(id, n, opts) {
   if (_crateBusy) return;
   const crate = CRATES[id]; if (!crate) return;
   n = MULTI[n] ? n : 1;
-  if (crate.adminOnly && !isAdminUser()) return;
+  if (crate.adminOnly && !isAdminUser() && !opts.gift) return;
   let payNote = '';
   if (opts.free) {
     if (!isAdminUser()) return;
@@ -169,6 +169,10 @@ async function openCrates(id, n, opts) {
   // Roll + save everything first
   const pool = cratePool(crate), drops = [];
   for (let i = 0; i < n; i++) {
+    // Admin-crate gifts arrive with the item already chosen (and already granted by the admin)
+    const pre = opts.gift && opts.gift.item ? String(opts.gift.item).split(':') : null;
+    const preItem = pre && COSMETIC_SETS[pre[0]] && _find(COSMETIC_SETS[pre[0]], pre[1]);
+    if (preItem) { grantItem(pre[0], preItem.id); drops.push({ set: pre[0], item: preItem, rar: rarityOf(preItem).id, dupe: false, refund: 0 }); continue; }
     const d = rollWithPity(crate, pool);
     const rar = rarityOf(d.item).id;
     const dupe = isUnlocked(d.item, d.set);
@@ -183,7 +187,7 @@ async function openCrates(id, n, opts) {
   _crateBusy = true;
   const again = () => opts.gift || opts.free ? false : opts.key ? getKeys() >= n : crate.adminOnly || getCoins() >= crate.price * MULTI[n];
   const ctx = window._crateCtx = { id, n, opts, crate, pool, drops, payNote, again };
-  if (n === 1) showReel(ctx); else showFlips(ctx);
+  if (n === 1) showReel(ctx); else showStack(ctx);
 }
 
 function stageHtml(ctx, body) {
@@ -194,6 +198,22 @@ function stageHtml(ctx, body) {
     <div class="crate-result" id="crate-result"></div>
     <div class="crate-actions" id="crate-actions"><button class="btn secondary" onclick="skipCrate()">Skip</button></div>
   </div>`;
+}
+
+// Where the reel must stop so card i sits under the centre marker (+ optional jitter)
+function reelTarget(reel, i, jitter) {
+  const c = reel.children[i], wrapW = reel.parentElement.clientWidth;
+  return c.offsetLeft + c.offsetWidth / 2 - wrapW / 2 + (jitter || 0) * c.offsetWidth;
+}
+// After the spin: if layout drifted, glide the last few pixels so the prize is exactly under the marker
+function settleReel(reel, i, done) {
+  const now = new DOMMatrixReadOnly(getComputedStyle(reel).transform).m41;
+  const c = reel.children[i], wrapW = reel.parentElement.clientWidth;
+  const off = (-now + wrapW / 2) - (c.offsetLeft + c.offsetWidth / 2);
+  if (Math.abs(off) <= c.offsetWidth * .42) return done();
+  const tgt = -(c.offsetLeft + c.offsetWidth / 2 - wrapW / 2 + Math.sign(off) * c.offsetWidth * .25);
+  const a = reel.animate([{ transform: 'translateX(' + now + 'px)' }, { transform: 'translateX(' + tgt + 'px)' }], { duration: 260, easing: 'cubic-bezier(.3,1.4,.5,1)', fill: 'forwards' });
+  a.onfinish = done;
 }
 
 // ── ×1: the rolling reel ──
@@ -224,7 +244,7 @@ function showReel(ctx) {
     const wrapW = ov.querySelector('.reel-wrap').clientWidth;
     // Layout sizes (not getBoundingClientRect: the pop-in animation scales the reel while we measure)
     const card = reel.children[1].offsetLeft - reel.children[0].offsetLeft;
-    const x = WIN * card + card / 2 - wrapW / 2 + (Math.random() - .5) * card * .6;
+    const x = reelTarget(reel, WIN, (Math.random() - .5) * .6);
     _reelAnim = reel.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-x}px)` }],
       { duration: 5600, easing: 'cubic-bezier(.08,.6,.12,1)', fill: 'forwards' });
     let last = -1;
@@ -235,55 +255,67 @@ function showReel(ctx) {
       _reelRaf = requestAnimationFrame(tick);
     };
     _reelRaf = requestAnimationFrame(tick);
-    _reelAnim.onfinish = () => {
+    _reelAnim.onfinish = () => settleReel(reel, WIN, () => {
       cancelAnimationFrame(_reelRaf);
       reel.classList.add('done'); reel.children[WIN].classList.add('won');
       finishReveal(ctx);
-    };
+    });
   }, 1050));
 }
 
-// ── ×5 / ×10: cards flip one by one ──
-function showFlips(ctx) {
-  const { crate, drops } = ctx;
+// ── ×5 / ×10: one rolling reel per crate, stacked, stopping one after another ──
+let _reelAnims = [];
+function showStack(ctx) {
+  const { crate, pool, drops } = ctx;
   const ov = document.getElementById('crate-open');
   ov.className = 'crate-overlay t-' + crate.tone;
-  ov.innerHTML = stageHtml(ctx, `<div class="flip-grid n${ctx.n}">${drops.map((d, i) => {
-    const r = rarityOf(d.item);
-    return `<div class="flip-card r-${r.id}" style="--rar:${r.rgb};--i:${i}">
-      <div class="fc-back">${crateArt(crate.tone)}</div>
-      <div class="fc-front"><div class="rc-pv">${itemPreview(d, 44)}</div><small>${escapeHtml(d.item.name)}</small>
-        ${d.dupe ? `<span class="fc-tag">${coinHtml('+' + d.refund)}</span>` : `<span class="fc-tag new">New</span>`}${d.pity ? '<span class="fc-pity">Pity</span>' : ''}</div>
-    </div>`; }).join('')}</div>`);
-  fitText(ov);
-  sfx('coin');
-  let t = 700;
-  drops.forEach((d, i) => {
-    const high = RAR_ORDER.indexOf(d.rar) >= 3;
-    if (high) {
-      _flipTimers.push(setTimeout(() => ov.querySelectorAll('.flip-card')[i].classList.add('tease'), t));
-      t += 650;
-    }
-    _flipTimers.push(setTimeout(() => flipCard(ov, i, d), t));
-    t += high ? 420 : 230;
+  const N = 30, WIN = 24;
+  ov.innerHTML = stageHtml(ctx, `<div class="crate-intro small">${crateArt(crate.tone)}</div>
+    <div class="reel-stack n${ctx.n}" hidden>${drops.map((d, i) => `<div class="reel-wrap mini" style="--i:${i}"><div class="reel"></div><div class="reel-marker"></div><span class="reel-tag"></span></div>`).join('')}</div>`);
+  sfx('tap');
+  const reels = [...ov.querySelectorAll('.reel-stack .reel')];
+  reels.forEach((reel, ri) => {
+    const cards = [];
+    for (let i = 0; i < N; i++) cards.push(i === WIN ? drops[ri] : fillerDrop(crate, pool));
+    reel.innerHTML = cards.map(c => { const r = rarityOf(c.item); return `<div class="reel-card r-${r.id}" style="--rar:${r.rgb}"><div class="rc-pv">${itemPreview(c, 34)}</div></div>`; }).join('');
   });
-  _flipTimers.push(setTimeout(() => finishReveal(ctx), t + 250));
-}
-function flipCard(ov, i, d) {
-  const el = ov.querySelectorAll('.flip-card')[i];
-  if (!el || el.classList.contains('open')) return;
-  el.classList.remove('tease'); el.classList.add('open');
-  const ri = RAR_ORDER.indexOf(d.rar);
-  if (ri >= 3) { sfx('reward'); buzz([20, 30, 20]); spawnParticles(); }
-  else { pluck(scaleFreq(4 + ri * 3), .06); buzz(6); }
+  _flipTimers.push(setTimeout(() => { sfx('coin'); const i = ov.querySelector('.crate-intro'); if (i) i.classList.add('burst'); }, 550));
+  _flipTimers.push(setTimeout(() => {
+    if (ctx !== window._crateCtx) return;
+    const intro = ov.querySelector('.crate-intro'); if (intro) intro.remove();
+    ov.querySelector('.reel-stack').hidden = false;
+    let left = reels.length;
+    _reelAnims = reels.map((reel, ri) => {
+      const wrap = reel.parentElement, wrapW = wrap.clientWidth;
+      const x = reelTarget(reel, WIN, (Math.random() - .5) * .5);
+      const anim = reel.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-x}px)` }],
+        { duration: 2600 + ri * 330, easing: 'cubic-bezier(.1,.65,.15,1)', fill: 'forwards' });
+      anim.onfinish = () => settleReel(reel, WIN, () => {
+        const d = drops[ri], rk = RAR_ORDER.indexOf(d.rar);
+        reel.classList.add('done'); reel.children[WIN].classList.add('won');
+        wrap.classList.add('landed', 'r-' + d.rar); wrap.style.setProperty('--rar', rarityOf(d.item).rgb);
+        wrap.querySelector('.reel-tag').innerHTML = d.dupe ? coinHtml('+' + d.refund) : 'NEW';
+        if (rk >= 3) { sfx('reward'); buzz([20, 30, 20]); spawnParticles(); } else { pluck(scaleFreq(3 + rk * 2), .05); buzz(8); }
+        if (--left === 0) setTimeout(() => finishReveal(ctx), 350);
+      });
+      return anim;
+    });
+    // Ticks follow the slowest reel so it doesn't turn into noise
+    const last = reels[reels.length - 1], lw = last.parentElement.clientWidth;
+    const lc = last.children[1].offsetLeft - last.children[0].offsetLeft;
+    let li = -1;
+    const tick = () => {
+      const tx = new DOMMatrixReadOnly(getComputedStyle(last).transform).m41;
+      const idx = Math.floor((-tx + lw / 2) / lc);
+      if (idx !== li) { li = idx; tone({ f: 660, d: 0.05, v: 0.022, type: 'triangle' }); }
+      if (left > 0) _reelRaf = requestAnimationFrame(tick);
+    };
+    _reelRaf = requestAnimationFrame(tick);
+  }, 900));
 }
 function skipCrate() {
   if (_reelAnim && _reelAnim.playState === 'running') { _reelAnim.finish(); return; }
-  const ov = document.getElementById('crate-open');
-  if (!ov.querySelector('.flip-grid')) return;
-  _flipTimers.forEach(clearTimeout); _flipTimers = [];
-  ov.querySelectorAll('.flip-card').forEach(el => { el.classList.remove('tease'); el.classList.add('open'); });
-  finishReveal(window._crateCtx);
+  _reelAnims.forEach(an => { if (an.playState === 'running') an.finish(); });
 }
 
 // ── Result panel + buttons ──
@@ -323,6 +355,7 @@ function closeCrate() {
   cancelAnimationFrame(_reelRaf);
   _flipTimers.forEach(clearTimeout); _flipTimers = [];
   if (_reelAnim) { try { _reelAnim.cancel(); } catch (e) {} _reelAnim = null; }
+  _reelAnims.forEach(an => { try { an.cancel(); } catch (e) {} }); _reelAnims = [];
   _crateBusy = false; window._crateCtx = null;
   const ov = document.getElementById('crate-open'); ov.className = 'crate-overlay hidden'; ov.innerHTML = '';
   if (isScreen('store')) renderStore();
@@ -339,7 +372,7 @@ function equipDrop(set, id) {
 // GIFTS  (secure mode only)
 // ══════════════════════════════════════════════════
 let _gifts = {};
-const giftList = () => Object.entries(_gifts).map(([id, g]) => ({ id, ...g })).filter(g => CRATES[g.crate] && !CRATES[g.crate].adminOnly).sort((a, b) => a.at - b.at);
+const giftList = () => Object.entries(_gifts).map(([id, g]) => ({ id, ...g })).filter(g => CRATES[g.crate]).sort((a, b) => a.at - b.at);
 
 // Called by live.js whenever /gifts/<me> changes
 function onGiftsChanged(all) {
@@ -385,7 +418,7 @@ async function sendGift(crateId, toNameArg, msgArg, free) {
   const msg = (msgArg != null ? msgArg : (document.getElementById('gift-msg') || {}).value || '').trim().slice(0, 60);
   const err = t => { const e = document.getElementById('gift-err'); if (e) e.innerText = t; if (free) throw new Error(t); };
   if (authMode() !== 'secure' || !currentAccount || currentAccount.offline) return err('Gifting needs you to be signed in online.');
-  if (!c || c.adminOnly) return err('That crate cannot be gifted.');
+  if (!c || (c.adminOnly && !(free && isAdminUser()))) return err('That crate cannot be gifted.');
   if (!free && getCoins() < c.price) return err(`You need ${c.price - getCoins()} more coins.`);
   const btn = document.getElementById('gift-send'); if (btn) btn.disabled = true;
   try {
@@ -397,7 +430,16 @@ async function sendGift(crateId, toNameArg, msgArg, free) {
     const gid = me + '_' + Date.now().toString(36) + randStr(4);
     const gift = { from: me, fromName: myName, crate: crateId, at: SERVER_TIME };
     if (msg) gift.msg = msg;
-    if (free) { await dbPut('/gifts/' + to + '/' + gid, gift); return { to, name: toName }; }
+    if (free) {
+      if (c.adminOnly) {
+        // Admin crate: pick the prize now and grant it (only admins may write admin cosmetics)
+        const d = pickFrom(cratePool(c).admin);
+        gift.item = d.set + ':' + d.item.id;
+        await dbPatch('/accounts/' + to + '/owned/' + d.set, { [d.item.id]: true });
+      }
+      await dbPut('/gifts/' + to + '/' + gid, gift);
+      return { to, name: toName };
+    }
     // One atomic multi-path write: pay + record which gift was paid for + deliver it
     const coins = getCoins() - c.price;
     await dbPatch('/', { ['accounts/' + me + '/coins']: coins, ['accounts/' + me + '/lastGift']: to + '/' + gid, ['gifts/' + to + '/' + gid]: gift });

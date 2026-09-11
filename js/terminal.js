@@ -132,6 +132,36 @@ const CMDS = {
     tInfo('auth mode: ' + authMode());
   } },
 
+  doctor: { desc:'Check why admin tools might be refused', async run() {
+    const mode = authMode();
+    tInfo('auth mode      ' + mode);
+    if (mode !== 'secure') return tWarn('admin tools need secure mode (firebaseConfig.apiKey in config.js)');
+    const u = _authUser;
+    if (!u) return tErr('not signed in');
+    const google = hasProvider(u, 'google.com');
+    tInfo('signed in as   ' + (u.email || '(no email)') + (u.emailVerified ? ' · verified' : ' · NOT verified'));
+    if (!google) tWarn('this account is not linked to Google — Settings → Google account → Link, using ' + ((CFG().adminEmails || [])[0] || 'your admin email'));
+    tInfo('config admin   ' + (isAdminUser() ? 'yes (email is in config.js adminEmails)' : 'NO — email not in config.js adminEmails'));
+    const key = String(u.email || '').toLowerCase().split('.').join(',');
+    let dbAdmin = false;
+    try { await dbGet('/admins'); dbAdmin = true; tOk('database admin yes'); }
+    catch (e) {
+      tErr('database admin NO — the database does not list you as an admin');
+      termPrint('  fix: Firebase console → Realtime Database → Data → add child "admins"', 'dim');
+      termPrint('       inside it add   ' + key + ' : true   (dots become commas)', 'dim');
+    }
+    if (!dbAdmin) return;
+    const checks = [['/online', 'online list'], ['/broadcast', 'world messages'], ['/gifts/' + currentAccount.id, 'gift inbox']];
+    let stale = false;
+    for (const [p, what] of checks) {
+      try { await dbGet(p); tOk('rules: ' + pad(what, 14) + 'ok'); }
+      catch (e) { stale = true; tErr('rules: ' + pad(what, 14) + 'refused'); }
+    }
+    if (stale) {
+      tWarn('your published database rules are out of date');
+      termPrint('  fix: Firebase console → Realtime Database → Rules → paste database.rules.json from GitHub → Publish', 'dim');
+    } else tOk('all good — trolls, broadcasts and gifts should work');
+  } },
   broadcast: { desc:'Message EVERY online player', args:[H('<message…>', null, true)], async run(a) {
     needSecure(); const msg = a.join(' ').trim(); if (!msg) throw new Error('what should everyone see?');
     await adminBroadcast(msg); tOk('sent to everyone: ' + msg);
@@ -346,17 +376,17 @@ const CMDS = {
   } },
   say:      { desc:'Announce to the room', args:[H('<message…>', null, true)], run(a) {
     const msg = a.join(' ').slice(0, 80); if (!msg) throw new Error('nothing to say');
-    if (isHost) broadcastAll({ type:'announce', msg });
-    addChatMsg('Admin: ' + msg, null, true); pushToast(msg, 'info', 'alert'); tOk('announced');
+    if (isHost) broadcastAll({ type:'announce', msg, by: myName, av: getMyAvatar() });
+    addChatMsg('Admin: ' + msg, null, true); sfx('world'); showAvatarMessage('Announcement · ' + myName, msg, myName, getMyAvatar()); tOk('announced');
   } },
   crate:    { desc:'Crates', sub:{
     keys: { args:[NUM('<n>')], desc:'Give yourself crate keys', run(a) { addKeys(needInt(a[0], 'n')); syncAccountToCloud(); tOk('keys = ' + getKeys()); } },
     open: { args:[H('<crate>', () => Object.keys(CRATES))], desc:'Open a crate for free', run(a) {
       const id = (a[0] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
       adminClose(); if (!isScreen('store')) openStore(); openCrates(id, 1, { free: true }); } },
-    gift: { args:[H('<player>', accountNames), H('<crate>', () => Object.keys(CRATES).filter(k => !CRATES[k].adminOnly)), NUM('[count]'), H('[message…]', null, true)], desc:'Send free gift crates to a player', async run(a) {
+    gift: { args:[H('<player>', accountNames), H('<crate>', () => Object.keys(CRATES)), NUM('[count]'), H('[message…]', null, true)], desc:'Give a player free crates (admin crates too) — they open them from the Store', async run(a) {
       needSecure(); const x = await findAccount(a[0]);
-      const id = (a[1] || 'basic').toLowerCase(); if (!CRATES[id] || CRATES[id].adminOnly) throw new Error('crates: basic, icon, style, elite');
+      const id = (a[1] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
       const n = Math.max(1, Math.min(20, parseInt(a[2]) || 1));
       for (let i = 0; i < n; i++) await sendGift(id, x.name, a.slice(3).join(' '), true);
       tOk(n + ' × ' + CRATES[id].name + ' → ' + x.name);
@@ -596,6 +626,12 @@ function termUpdateAssist(keepChips) {
 }
 
 // ── Execute ──
+// Friendlier errors: DENIED means the database refused, so point at the doctor
+function termFail(e) {
+  const m = (e && e.message) || String(e);
+  if (m === 'DENIED' || /database refused/.test(m)) { tErr('error: the database refused this'); termPrint('  run "doctor" to see why (usually: rules not published, or your email missing from /admins)', 'dim'); }
+  else tErr('error: ' + m);
+}
 function termRun(line) {
   const raw = line.trim();
   termPrint('$ ' + raw, 'cmd');
@@ -614,12 +650,12 @@ function termRun(line) {
       const sub = cmd.sub[(vals[1] || '').toLowerCase()];
       if (!sub) return tWarn('usage: ' + name + ' <' + Object.keys(cmd.sub).join('|') + '>   (help ' + name + ')');
       const res = sub.run(vals.slice(2));
-      if (res && res.then) res.catch(e => tErr('error: ' + e.message));
+      if (res && res.then) res.catch(termFail);
     } else {
       const res = cmd.run(vals.slice(1));
-      if (res && res.then) res.catch(e => tErr('error: ' + e.message));
+      if (res && res.then) res.catch(termFail);
     }
-  } catch (e) { tErr('error: ' + e.message); }
+  } catch (e) { termFail(e); }
   document.getElementById('term-mode').innerText = termMode();
 }
 

@@ -148,6 +148,7 @@ const SV = { '.sv': 'timestamp' };
   no('bob cannot take the gift back',     await req('DELETE', '/gifts/A/B_1', undefined, bob.tok));
   ok('alice opens (removes) the gift',    await req('DELETE', '/gifts/A/B_1', undefined, aliceNew.tok));
   ok('admin sends a free Elite Crate',    await req('PUT', '/gifts/A/adm_1', { from: 'admin', fromName: 'Admin', crate: 'elite', at: SV }, admin.tok));
+  ok('admin gifts an admin crate',        await req('PUT', '/gifts/A/adm_2', { from: 'admin', fromName: 'Admin', crate: 'admin', item: 'frame:a-admin', at: SV }, admin.tok));
   no('bob grants himself an admin frame', await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true }, bob.tok));
   ok('admin grants bob the admin frame',  await req('PATCH', '/accounts/B/owned/frame', { 'a-admin': true }, admin.tok));
   ok('bob keeps it when he syncs',        await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true, 'owned/frame/f-nova': true, pity: { e: 3, l: 12 } }, bob.tok));
