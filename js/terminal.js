@@ -107,7 +107,7 @@ const CMDS = {
       tInfo('Commands (Tab to complete):');
       Object.entries(CMDS).forEach(([k, c]) => termPrint('  ' + pad(k, 10) + c.desc, 'dim'));
     } },
-  clear:   { desc:'Clear the screen (Ctrl+L)', run() { document.getElementById('term-out').innerHTML = ''; } },
+  cls:     { desc:'Clear the terminal screen (Ctrl+L)', run() { document.getElementById('term-out').innerHTML = ''; } },
   exit:    { desc:'Close the terminal (Esc)', run() { adminClose(); } },
   history: { desc:'Show command history', run() { termHist.slice(-20).forEach((h, i, arr) => termPrint(pad(termHist.length - arr.length + i + 1, 4) + h, 'dim')); } },
   echo:    { desc:'Print text', args:[H('<text>', null, true)], run(a) { termPrint(a.join(' ')); } },
@@ -383,6 +383,22 @@ const CMDS = {
     rounds:     { args:[NUM()], desc:'Set round count (host)', run(a) { needHost(); maxRounds = Math.max(1, Math.min(10, needInt(a[0]))); document.getElementById('rounds-disp').innerText = maxRounds; broadcastLobbySettings(); tOk('rounds = ' + maxRounds); } },
     boosts:     { args:[H('<on|off>', ['on', 'off'])], desc:'Power-ups modifier on/off (host)', run(a) { needHost(); setMods(a[0] === 'off' ? battleMods.filter(k => k !== 'boosts') : [...new Set([...battleMods, 'boosts'])]); renderModRow(); broadcastLobbySettings(); tOk('boosts ' + (abilitiesEnabled ? 'on' : 'off')); } }
   } },
+  solve:    { desc:"Solve a player's board (host, in a match)", args:[playerArg(['all'])], run(a) {
+    needHost(); needBattle();
+    const t = (a[0] || '').toLowerCase(); if (!t) throw new Error('who? a player name, me, or all');
+    if (t === 'all') { broadcastAll({ type:'admin_solve' }); if (!amSpectating) adminAutoSolve(); return tOk('solving every board'); }
+    const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player');
+    if (pid === myId) adminAutoSolve(); else broadcastAll({ type:'admin_solve', id:pid });
+    tOk('solving ' + pname(pid) + "'s board");
+  } },
+  clear:    { desc:"Clear a player's board (host, in a match)", args:[playerArg(['all'])], run(a) {
+    needHost(); needBattle();
+    const t = (a[0] || '').toLowerCase(); if (!t) throw new Error('who? a player name, me, or all');
+    if (t === 'all') { broadcastAll({ type:'reset_path' }); resetPath(); return tOk('cleared every board'); }
+    const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player');
+    if (pid === myId) resetPath(); else broadcastAll({ type:'reset_path', id:pid });
+    tOk('cleared ' + pname(pid) + "'s board");
+  } },
   kick:     { desc:'Kick a player (host)', args:[H('<player>', playerNames)], run(a) {
     needHost(); const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player'); if (pid === myId) throw new Error('cannot kick yourself');
     kickPlayer(pid); tWarn('kicked ' + pname(pid));
@@ -489,7 +505,7 @@ const CMDS = {
     localStorage.removeItem('mazzie'); updateMenuProfile(); applyMyCosmetics(); tWarn('local save wiped');
   } }
 };
-const ALIASES = { cls:'clear', '?':'help', q:'exit', quit:'exit', lvl:'level', t:'timer', b:'board', ann:'say', announce:'say', users:'accounts', acc:'account' };
+const ALIASES = { '?':'help', q:'exit', quit:'exit', lvl:'level', t:'timer', b:'board', ann:'say', announce:'say', users:'accounts', acc:'account' };
 
 // ── Account helpers (admin) ──
 function needSecure() { if (authMode() !== 'secure') throw new Error('account tools need Firebase Auth set up (see FIREBASE_SETUP.md)'); if (!isAdminUser()) throw new Error('sign in with your admin Google account'); }
@@ -719,7 +735,7 @@ document.getElementById('term-input').addEventListener('keydown', e => {
     if (rest && rest.textContent && c.matches.length) { e.preventDefault(); termSetValue(inp.value + rest.textContent); termUpdateAssist(); }
     return;
   }
-  if (e.ctrlKey && e.key.toLowerCase() === 'l') { e.preventDefault(); CMDS.clear.run(); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'l') { e.preventDefault(); CMDS.cls.run(); return; }
   if (e.ctrlKey && e.key.toLowerCase() === 'c' && inp.selectionStart === inp.selectionEnd) { e.preventDefault(); termPrint('$ ' + inp.value + '^C', 'dim'); termSetValue(''); termUpdateAssist(); return; }
   if (e.ctrlKey && e.key.toLowerCase() === 'u') { e.preventDefault(); termSetValue(''); termUpdateAssist(); }
 });

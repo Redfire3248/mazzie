@@ -139,6 +139,7 @@ function generate() {
   inputLockedUntil = 0; shieldUntil = 0; _headEl = null;
   initSvg();
   g.style.gridTemplateColumns = `repeat(${cols},${cellSize}px)`;
+  g.style.setProperty('--cs', cellSize + 'px');   // number size follows the cell size
   g.style.padding = GPAD + 'px'; g.style.gap = GAP + 'px';
   const frag = document.createDocumentFragment();
   for (let i = 0; i < rows * cols; i++) {
@@ -629,6 +630,7 @@ function onViewportResize() {
     if (!inGame() || !cells.length) return;
     calcSize();
     document.getElementById('grid').style.gridTemplateColumns = `repeat(${cols},${cellSize}px)`;
+    document.getElementById('grid').style.setProperty('--cs', cellSize + 'px');
     cells.forEach(c => { c.style.width = c.style.height = cellSize + 'px'; });
     requestAnimationFrame(() => { cachePos(); redrawPath(); });
   }, 60);

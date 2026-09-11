@@ -79,8 +79,12 @@ function showEmote(d) {
   b.className = 'emote-rise' + (d.id === myId ? ' me' : '');
   b.style.left = Math.round(Math.random() * 36) + 'px';
   b.style.setProperty('--sway', (Math.random() < .5 ? -1 : 1) * (8 + Math.random() * 10) + 'px');
+  // From someone who already finished (now watching) → say so, so players know who's cheering
+  const watching = d.id !== myId && battleActive && (finishOrder.some(f => f.id === d.id) || (progressState[d.id] && progressState[d.id].done));
+  if (isScreen('game')) b.classList.add('big');
   b.innerHTML = emoteImg(e, 'er-emote')
-    + `<div class="er-who">${renderAvatar(sanitizeAvatar(p.avatar || {}), name, 18)}<b>${escapeHtml(d.id === myId ? 'You' : name)}</b></div>`;
+    + `<div class="er-who">${renderAvatar(sanitizeAvatar(p.avatar || {}), name, 18)}<b>${escapeHtml(d.id === myId ? 'You' : name)}</b>${watching ? '<span class="er-watch"><i data-ic="eye"></i></span>' : ''}</div>`;
+  if (watching && typeof hydrateIcons === 'function') hydrateIcons(b);
   layer.appendChild(b);
-  setTimeout(() => b.remove(), 3200);
+  setTimeout(() => b.remove(), 3800);
 }

@@ -1336,3 +1336,16 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .continue-btn.rejoin-btn.hidden,.big-opt.rejoin-btn.hidden{display:none!important;}
 .rejoin-code{font-family:var(--mono);letter-spacing:3px;}
 .big-opt.rejoin-btn > .ic:first-child{color:var(--cyan);}
+
+/* In-game bottom bar: all buttons equal */
+.bottom-bar .ctrl-btn,.bottom-bar .chat-btn{flex:1 1 0;width:auto;min-width:0;height:50px;min-height:50px;border-radius:15px;}
+.bottom-bar .chat-btn .ic{width:21px;height:21px;}
+@media (max-height:640px){.bottom-bar .ctrl-btn,.bottom-bar .chat-btn{height:42px;min-height:42px;}}
+.bottom-bar .ctrl-btn,.bottom-bar .chat-btn{padding:0;}
+/* Phones: maze numbers scale with the cell (bigger, easier to read) */
+@media (max-width:600px){#grid .node{width:66%;height:66%;font-size:clamp(11px,calc(var(--cs,36px) * .36),20px);}}
+/* Emotes while you're playing: bigger + a little eye when it's from someone watching */
+.emote-rise.big .er-emote{width:66px;height:66px;}
+.emote-rise.big{animation-duration:3.7s;}
+.er-watch{display:inline-flex;color:var(--cyan);margin-left:1px;}
+.er-watch .ic{width:11px;height:11px;}

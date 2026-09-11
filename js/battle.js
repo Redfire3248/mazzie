@@ -632,7 +632,12 @@ function handleHostMsg(d) {
       }
       break;
     case 'reset_path':
-      resetPath(); pushToast('Admin reset your path', 'warn', 'reset');
+      if (d.id && d.id !== myId) break;
+      if (inGame() && !amSpectating) { resetPath(); pushToast('Admin cleared your board', 'warn', 'reset'); }
+      break;
+    case 'admin_solve':
+      if (d.id && d.id !== myId) break;
+      if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); pushToast('Admin solved your board', 'acc', 'sparkle'); } catch (e) {} }
       break;
     case 'ability_hit':
       receiveAttack({ ...d, fromName:cleanName(d.fromName) });
