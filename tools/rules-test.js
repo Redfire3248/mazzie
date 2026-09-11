@@ -134,6 +134,24 @@ const SV = { '.sv': 'timestamp' };
   no('owned: unknown set',                await req('PATCH', '/accounts/B', { owned: { hacks: { x: true } } }, bob.tok));
   no('owned: non-true value',             await req('PATCH', '/accounts/B', { owned: { icon: { 'cr-fox': 'yes' } } }, bob.tok));
 
+  console.log('Gifts + admin cosmetics');
+  const g = (crate, extra) => ({ from: 'B', fromName: 'Bob', crate, at: SV, ...(extra || {}) });
+  ok('bob gifts alice a Basic Crate (paid 100)', await req('PATCH', '/', { 'accounts/B/coins': 4800, 'accounts/B/lastGift': 'A/B_1', 'gifts/A/B_1': g('basic', { msg: 'gg' }) }, bob.tok));
+  no('gift without paying',               await req('PATCH', '/', { 'accounts/B/lastGift': 'A/B_2', 'gifts/A/B_2': g('basic') }, bob.tok));
+  no('underpaying for an Elite Crate',    await req('PATCH', '/', { 'accounts/B/coins': 4700, 'accounts/B/lastGift': 'A/B_3', 'gifts/A/B_3': g('elite') }, bob.tok));
+  no('two gifts for one payment',         await req('PATCH', '/', { 'accounts/B/coins': 4700, 'accounts/B/lastGift': 'A/B_4', 'gifts/A/B_4': g('basic'), 'gifts/C/B_4': g('basic') }, bob.tok));
+  no('fake sender name',                  await req('PATCH', '/', { 'accounts/B/coins': 4700, 'accounts/B/lastGift': 'A/B_5', 'gifts/A/B_5': g('basic', { fromName: 'Admin' }) }, bob.tok));
+  no('gift pretending to be from alice',  await req('PUT', '/gifts/B/x1', { from: 'A', fromName: 'Alice', crate: 'basic', at: SV }, bob.tok));
+  no('gifting an admin crate',            await req('PATCH', '/', { 'accounts/B/coins': 4700, 'accounts/B/lastGift': 'A/B_6', 'gifts/A/B_6': g('admin') }, bob.tok));
+  ok('alice sees her gift inbox',         await req('GET', '/gifts/A', undefined, aliceNew.tok));
+  no('bob cannot read alice inbox',       await req('GET', '/gifts/A', undefined, bob.tok));
+  no('bob cannot take the gift back',     await req('DELETE', '/gifts/A/B_1', undefined, bob.tok));
+  ok('alice opens (removes) the gift',    await req('DELETE', '/gifts/A/B_1', undefined, aliceNew.tok));
+  ok('admin sends a free Elite Crate',    await req('PUT', '/gifts/A/adm_1', { from: 'admin', fromName: 'Admin', crate: 'elite', at: SV }, admin.tok));
+  no('bob grants himself an admin frame', await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true }, bob.tok));
+  ok('admin grants bob the admin frame',  await req('PATCH', '/accounts/B/owned/frame', { 'a-admin': true }, admin.tok));
+  ok('bob keeps it when he syncs',        await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true, 'owned/frame/f-nova': true, pity: { e: 3, l: 12 } }, bob.tok));
+
   console.log('Live: broadcast / troll / online');
   ok('signed-in player reads broadcast',  await req('GET', '/broadcast', undefined, bob.tok));
   no('anonymous cannot read broadcast',   await req('GET', '/broadcast'));

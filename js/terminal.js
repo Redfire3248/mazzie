@@ -353,9 +353,37 @@ const CMDS = {
     keys: { args:[NUM('<n>')], desc:'Give yourself crate keys', run(a) { addKeys(needInt(a[0], 'n')); syncAccountToCloud(); tOk('keys = ' + getKeys()); } },
     open: { args:[H('<crate>', () => Object.keys(CRATES))], desc:'Open a crate for free', run(a) {
       const id = (a[0] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
-      addKeys(1); adminClose(); openCrate(id, true); } },
+      adminClose(); if (!isScreen('store')) openStore(); openCrates(id, 1, { free: true }); } },
+    gift: { args:[H('<player>', accountNames), H('<crate>', () => Object.keys(CRATES).filter(k => !CRATES[k].adminOnly)), NUM('[count]'), H('[message…]', null, true)], desc:'Send free gift crates to a player', async run(a) {
+      needSecure(); const x = await findAccount(a[0]);
+      const id = (a[1] || 'basic').toLowerCase(); if (!CRATES[id] || CRATES[id].adminOnly) throw new Error('crates: basic, icon, style, elite');
+      const n = Math.max(1, Math.min(20, parseInt(a[2]) || 1));
+      for (let i = 0; i < n; i++) await sendGift(id, x.name, a.slice(3).join(' '), true);
+      tOk(n + ' × ' + CRATES[id].name + ' → ' + x.name);
+    } },
     odds: { desc:'Show drop odds + pool sizes', run() {
       Object.entries(CRATES).forEach(([id, c]) => { const p = cratePool(c); tInfo(pad(id, 7) + c.price + 'c  ' + RAR_ORDER.filter(r => c.odds[r]).map(r => r + ' ' + c.odds[r] + '% (' + (p[r] || []).length + ')').join(' · ')); });
+    } }
+  } },
+  cosmetic: { desc:'Admin cosmetics', sub:{
+    list: { args:[H('[set]', ['icon', 'color', 'frame', 'trail', 'title', 'admin'])], desc:'List cosmetic ids', run(a) {
+      const want = (a[0] || 'admin').toLowerCase();
+      Object.entries(COSMETIC_SETS).forEach(([set, list]) => list.forEach(i => {
+        if ((want === 'admin' && i.admin) || set === want) termPrint(pad(set, 7) + pad(i.id, 14) + pad(i.name, 14) + rarityOf(i).name, i.admin ? 'warn' : 'dim');
+      }));
+    } },
+    give: { args:[H('<player>', accountNames), H('<set>', ['icon', 'color', 'frame', 'trail', 'title']), H('<id>', () => { const t = tokenize(document.getElementById('term-input').value).toks; const set = COSMETIC_SETS[(t[3] || {}).v]; return set ? set.map(i => i.id) : []; })],
+      desc:'Give a player any cosmetic (admin ones too)', async run(a) {
+      needSecure(); const x = await findAccount(a[0]);
+      const set = (a[1] || '').toLowerCase(), item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], a[2]);
+      if (!item) throw new Error('unknown ' + set + ' id — try: cosmetic list ' + set);
+      await dbPatch('/accounts/' + x.id + '/owned/' + set, { [item.id]: true });
+      await adminTroll(x.id, 'cosmetic', { text: set + ':' + item.id }).catch(() => {});
+      tOk('gave ' + item.name + ' (' + set + ') → ' + x.name);
+    } },
+    me: { args:[H('<set>', ['icon', 'color', 'frame', 'trail', 'title']), H('<id>')], desc:'Give yourself a cosmetic', run(a) {
+      const set = (a[0] || '').toLowerCase(), item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], a[1]);
+      if (!item) throw new Error('unknown id'); grantItem(set, item.id); syncAccountToCloud(); tOk('you own ' + item.name);
     } }
   } },
   unlock:   { desc:'Cosmetics: unlock everything / relock', args:[H('<all|reset>', ['all', 'reset'])], run(a) {

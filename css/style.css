@@ -993,3 +993,67 @@ html.troll-party .screen:not(.hidden){animation:trollHue 1s linear infinite;}
 .crate-result.r-mythic .cres-name,.crate-result.r-legendary .cres-name{color:rgb(var(--rar));text-shadow:0 0 18px rgba(var(--rar),.6);}
 .crate-actions{display:flex;gap:10px;width:100%;max-width:380px;padding:0 20px;}
 .crate-actions .btn{flex:1;}
+
+/* ══════════ PITY ══════════ */
+.pity-box{grid-column:1/-1;display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:14px;background:var(--bg2);border:1px solid var(--cb);}
+.pity-row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;font-size:11px;color:var(--txt2);}
+.pity-row b{font-family:var(--mono);font-size:12px;color:var(--txt);}
+.pity-row i{grid-column:1/-1;height:4px;border-radius:4px;background:linear-gradient(90deg,rgb(var(--c)) var(--p),var(--cb) var(--p));box-shadow:0 0 8px rgba(var(--c),.25);}
+.key-banner.gift{color:var(--gold);border-color:rgba(var(--gold-rgb),.55);background:linear-gradient(120deg,rgba(var(--gold-rgb),.2),rgba(var(--gold-rgb),.04));}
+.crate-card{cursor:pointer;transition:transform .12s,border-color var(--trans);}
+.crate-card:active{transform:scale(.96);}
+.crate-card.t-danger{--ct:var(--danger-rgb);}
+.crate-card.t-danger .crate-art{animation:crateBob 2.6s ease-in-out infinite,adminHue 3s linear infinite;}
+@keyframes adminHue{50%{filter:drop-shadow(0 0 10px rgba(var(--gold-rgb),.8));}}
+.odd.r-admin{--r:var(--gold-rgb);}
+
+/* ══════════ CRATE SHEET (×1 / ×5 / ×10 / gift) ══════════ */
+.crate-overlay.t-danger{--ct:var(--danger-rgb);}
+.crate-sheet{position:relative;width:min(380px,calc(100% - 28px));display:flex;flex-direction:column;align-items:center;gap:12px;padding:22px 18px 18px;border-radius:24px;background:var(--sf);border:1px solid rgba(var(--ct),.35);box-shadow:var(--shadow),0 0 40px rgba(var(--ct),.12);animation:cardIn .25s cubic-bezier(.34,1.4,.64,1);}
+.sheet-x{position:absolute;top:12px;right:12px;width:34px;height:34px;}
+.crate-art.big{width:96px;height:96px;}
+.sheet-odds{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;}
+.sheet-odds .odd{font-size:10px;padding:3px 6px;text-transform:capitalize;}
+.sheet-pity{font-size:10.5px;color:var(--dim);text-align:center;}
+.sheet-btns{display:flex;flex-direction:column;gap:8px;width:100%;}
+.sheet-btns .btn{justify-content:space-between;position:relative;}
+.sheet-btns .btn.poor{opacity:.45;}
+.sheet-cost .coin-inline{color:inherit;}
+.sheet-btns .btn.primary .sheet-cost .coin-inline{color:#07070e;}
+.sheet-btns .btn em{position:absolute;top:-7px;right:10px;font-style:normal;font-size:9px;letter-spacing:1px;padding:2px 7px;border-radius:8px;background:var(--danger);color:#fff;}
+.crate-sheet .field-box{width:100%;}
+.crate-sheet .form-err{min-height:1em;}
+.crate-sheet .link-btn{display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
+.crate-sheet .link-btn .ic{width:15px;height:15px;}
+
+/* ══════════ MULTI-OPEN: flip cards ══════════ */
+.flip-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(520px,calc(100% - 20px));perspective:800px;}
+.flip-grid.n5{width:min(480px,calc(100% - 20px));}
+.flip-card{--rar:var(--txt-rgb);position:relative;aspect-ratio:3/4;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.3,1.4,.5,1);animation:flipIn .35s calc(var(--i) * 40ms) backwards;}
+@keyframes flipIn{from{transform:translateY(20px) scale(.8);opacity:0;}}
+.flip-card.open{transform:rotateY(180deg);}
+.flip-card.tease{animation:tease .16s linear infinite;}
+@keyframes tease{0%,100%{transform:rotate(0) scale(1.05);}25%{transform:rotate(-4deg) scale(1.08);}75%{transform:rotate(4deg) scale(1.08);}}
+.flip-card.tease .fc-back{box-shadow:0 0 22px rgba(var(--rar),.9);border-color:rgb(var(--rar));}
+.fc-back,.fc-front{position:absolute;inset:0;border-radius:12px;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;overflow:hidden;}
+.fc-back{background:linear-gradient(160deg,rgba(var(--ct),.25),var(--cell));border:1.5px solid rgba(var(--ct),.45);}
+.fc-back .crate-svg{width:62%;height:auto;}
+.fc-front{transform:rotateY(180deg);background:linear-gradient(180deg,var(--cell),rgba(var(--rar),.2));border:1.5px solid rgba(var(--rar),.6);border-bottom-width:4px;padding:4px;}
+.flip-card.open.r-legendary .fc-front,.flip-card.open.r-mythic .fc-front,.flip-card.open.r-admin .fc-front{box-shadow:0 0 18px rgba(var(--rar),.6);}
+.fc-front .rc-pv{width:100%;height:auto;flex:1;min-height:0;}
+.fc-front .rc-pv .trail-pv{max-width:90%;}
+.fc-front small{font-size:8.5px;color:var(--txt2);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fc-tag{font-size:8.5px;font-family:var(--mono);color:var(--dim);}
+.fc-tag .coin-inline{font-size:8.5px;}
+.fc-tag.new{color:var(--acc);font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+.fc-pity{position:absolute;top:3px;left:3px;font-size:7.5px;font-family:var(--mono);padding:1px 4px;border-radius:4px;background:rgba(var(--rar),.25);color:rgb(var(--rar));}
+@media (max-width:380px){.flip-grid{gap:5px;}.fc-front small{font-size:7.5px;}}
+
+/* ══════════ ADMIN cosmetics ══════════ */
+.locker-item.r-admin{background:linear-gradient(180deg,transparent 40%,rgba(var(--danger-rgb),.14)),var(--cell);border-color:rgba(var(--gold-rgb),.45);}
+.locker-item.r-admin .locker-rar{background:linear-gradient(90deg,var(--danger),var(--gold),var(--danger));background-size:200% 100%;animation:ttlShift 2s linear infinite;box-shadow:0 0 10px rgba(var(--gold-rgb),.6);}
+.reel-card.r-admin,.flip-card.r-admin{--rar:var(--gold-rgb);}
+.ava.fk-admin::before{inset:-5px;background:conic-gradient(var(--danger),var(--gold),#fff,var(--gold),var(--danger));animation:spin 2.2s linear infinite;box-shadow:0 0 14px rgba(var(--danger-rgb),.7);}
+.ava.fk-admin::after{inset:-10px;border-radius:50%;border:1.5px dashed rgba(var(--gold-rgb),.8);animation:spin 6s linear infinite reverse;}
+.ava.fk-console::before{inset:-4px;background:repeating-conic-gradient(rgb(var(--f1)) 0 6deg,rgba(var(--f1),.15) 6deg 12deg);animation:spin 8s steps(30) infinite;box-shadow:0 0 12px rgba(var(--f1),.6);}
+.ava.fk-console::after{inset:-8px;border:1px solid rgba(var(--f1),.5);animation:glowP .9s steps(2) infinite;}

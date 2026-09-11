@@ -32,7 +32,8 @@ const AVA_COLORS = [
   { id:'sunset',   lvl:28, name:'Sunset',   bg:'linear-gradient(160deg,#ffd700,#ff9f43,#ff4d6a)' },
   { id:'royal',    lvl:44, name:'Royal',    bg:'linear-gradient(135deg,#5a3fc0,#a78bfa 55%,#ffd700)' },
   { id:'inferno',  lvl:66, name:'Inferno',  bg:'radial-gradient(circle at 50% 80%,#ffd700,#ff9f43 30%,#ff4d6a 60%,#1a0008)', anim:true },
-  { id:'galaxy',   lvl:80, name:'Galaxy',   bg:'radial-gradient(circle at 70% 20%,#4dfffe,transparent 25%),radial-gradient(circle at 25% 75%,#ff4d6a,transparent 30%),linear-gradient(135deg,#5a3fc0,#07070e)' }
+  { id:'galaxy',   lvl:80, name:'Galaxy',   bg:'radial-gradient(circle at 70% 20%,#4dfffe,transparent 25%),radial-gradient(circle at 25% 75%,#ff4d6a,transparent 30%),linear-gradient(135deg,#5a3fc0,#07070e)' },
+  { id:'a-admin',  admin:true, name:'Admin',   bg:'linear-gradient(135deg,#ff4d6a,#ffd700,#ff4d6a)', anim:true }
 ];
 // k = frame style (css .fk-<k>), c = palette colours it uses
 const AVA_FRAMES = [
@@ -80,7 +81,10 @@ const AVA_FRAMES = [
   // Mythic
   { id:'f-nova',    lvl:80, name:'Supernova',    k:'nova',   c:['gold'] },
   { id:'f-prism',   lvl:90, name:'Prism',        k:'prism',  c:['txt'] },
-  { id:'f-voideye', lvl:95, name:'Void Eye',     k:'halo',   c:['xp', 'danger'] }
+  { id:'f-voideye', lvl:95, name:'Void Eye',     k:'halo',   c:['xp', 'danger'] },
+  // Admin only
+  { id:'a-admin',   admin:true, name:'Admin',      k:'admin',  c:['danger', 'gold'] },
+  { id:'a-console', admin:true, name:'Console',    k:'console', c:['acc'] }
 ];
 // Path trails: a neon tube (glow + body + white core). grad = colours along the path,
 // flow = travelling sparks, pulse = breathing glow, zap = electric flicker, sparks = crackle at the head
@@ -126,7 +130,10 @@ const TRAILS = [
   { id:'phoenix',   lvl:64, name:'Phoenix',    rgb:'255,159,67',  core:'#fffbe0', grad:['#ff4d6a', '#ff9f43', '#ffd700'], spin:true, flow:true, sparks:true },
   // Mythic
   { id:'supernova', lvl:85, name:'Supernova',  rgb:'255,215,0',   core:'#ffffff', grad:RAINBOW, flow:true, spin:true, sparks:true, pulse:true },
-  { id:'voidrift',  lvl:95, name:'Void Rift',  rgb:'167,139,250', core:'#ffffff', grad:['#5a3fc0', '#ff4d6a', '#a78bfa'], zap:true, spin:true, sparks:true }
+  { id:'voidrift',  lvl:95, name:'Void Rift',  rgb:'167,139,250', core:'#ffffff', grad:['#5a3fc0', '#ff4d6a', '#a78bfa'], zap:true, spin:true, sparks:true },
+  // Admin only
+  { id:'a-admin',   admin:true, name:'Admin',      rgb:'255,77,106',  core:'#ffffff', grad:['#ffd700', '#ff4d6a', '#ffffff', '#ff4d6a', '#ffd700'], zap:true, flow:true, spin:true, sparks:true },
+  { id:'a-matrix',  admin:true, name:'Matrix',     rgb:'45,255,127',  core:'#eafff3', grad:['#0e9e57', '#2dff7f', '#eafff3'], dash:true, flow:true, sparks:true }
 ];
 // Every title has its own display font (loaded from Google Fonts in index.html)
 const TITLES = [
@@ -151,7 +158,11 @@ const TITLES = [
   { id:'unstoppable', lvl:32,  name:'Unstoppable', font:"'Orbitron'",          color:'var(--orange)' },
   { id:'shadow',      lvl:42,  name:'Shadow',      font:"'Monoton'",           color:'var(--xp)' },
   { id:'chaos',       lvl:58,  name:'Chaos',       font:"'Creepster'",         color:'var(--danger)' },
-  { id:'goat',        lvl:88,  name:'The GOAT',    font:"'Cinzel Decorative'", rainbow:true }
+  { id:'goat',        lvl:88,  name:'The GOAT',    font:"'Cinzel Decorative'", rainbow:true },
+  // Admin only
+  { id:'a-admin',     admin:true, name:'Admin',     font:"'Orbitron'",          color:'var(--danger)', glow:true },
+  { id:'a-dev',       admin:true, name:'Developer', font:"'Press Start 2P'",    color:'var(--acc)', glow:true },
+  { id:'a-owner',     admin:true, name:'Owner',     font:"'Cinzel Decorative'", rainbow:true, glow:true }
 ];
 const COSMETIC_SETS = { icon:AVA_ICONS, color:AVA_COLORS, frame:AVA_FRAMES, trail:TRAILS, title:TITLES };
 const DEFAULT_AVATAR = { icon:'init', color:'mint', frame:'ring', trail:'mint', title:'puzzler' };
@@ -199,15 +210,19 @@ const RARITIES = [
   { id:'rare',      name:'Rare',      rgb:'var(--cyan-rgb)' },
   { id:'epic',      name:'Epic',      rgb:'var(--xp-rgb)' },
   { id:'legendary', name:'Legendary', rgb:'var(--gold-rgb)' },
-  { id:'mythic',    name:'Mythic',    rgb:'var(--danger-rgb)' }
+  { id:'mythic',    name:'Mythic',    rgb:'var(--danger-rgb)' },
+  { id:'admin',     name:'Admin',     rgb:'var(--gold-rgb)' }
 ];
 function rarityOf(item) {
+  if (item.admin) return RARITIES[6];
   const l = item.lvl || 1;
   return RARITIES[l <= 1 ? 0 : l <= 8 ? 1 : l <= 20 ? 2 : l <= 40 ? 3 : l <= 70 ? 4 : 5];
 }
 // Owned = starter, bought/won from a crate, or admin "unlock all"
 function isUnlocked(item, set) {
   const s = loadSave();
+  const o0 = s.owned && s.owned[set || setOf(item)];
+  if (item.admin) return !!(o0 && o0[item.id]) || (!!s.unlockAll && isAdminUser());
   if (s.unlockAll || (item.lvl || 1) <= 1) return true;
   const o = s.owned && s.owned[set || setOf(item)];
   return !!(o && o[item.id]);
@@ -235,7 +250,7 @@ function titleHtml(avOrId) {
   const id = typeof avOrId === 'string' ? avOrId : sanitizeAvatar(avOrId).title;
   const t = _find(TITLES, id);
   if (!t || t.id === 'none') return typeof avOrId === 'string' ? '<span class="ttl ttl-none">None</span>' : '';
-  const style = `font-family:${t.font},'Syne',sans-serif;${t.color ? 'color:' + t.color + ';' : ''}${t.italic ? 'font-style:italic;' : ''}`;
+  const style = `font-family:${t.font},'Syne',sans-serif;${t.color ? 'color:' + t.color + ';' : ''}${t.italic ? 'font-style:italic;' : ''}${t.glow ? 'text-shadow:0 0 10px currentColor;' : ''}`;
   return `<span class="ttl${t.rainbow ? ' ttl-rainbow' : ''}" style="${style}">${escapeHtml(t.name)}</span>`;
 }
 // Shrink text inside every .fit box until it fits on one line (re-run once web fonts load)
@@ -333,7 +348,9 @@ function renderLocker() {
   let unlockedCount = 0, shown = 0;
   document.getElementById('locker-owned').classList.toggle('on', _lockerOwned);
   set.forEach(item => {
-    const open = isUnlocked(item, _lockerTab); if (open) unlockedCount++;
+    const open = isUnlocked(item, _lockerTab);
+    if (item.admin && !open && !isAdminUser()) return;
+    if (open) unlockedCount++;
     if (!matchesSearch(item, _lockerQuery) || (_lockerOwned && !open)) return;
     shown++;
     const sel  = d[_lockerTab] === item.id;
@@ -361,7 +378,7 @@ function renderLocker() {
     grid.appendChild(el);
   });
   if (!shown) grid.innerHTML = `<div class="search-empty">${ic('search')}Nothing matches "${escapeHtml(_lockerQuery || 'unlocked')}"</div>`;
-  document.getElementById('locker-count').innerText = (_lockerQuery || _lockerOwned ? shown + ' shown · ' : '') + unlockedCount + ' / ' + set.length + ' owned';
+  document.getElementById('locker-count').innerText = (_lockerQuery || _lockerOwned ? shown + ' shown · ' : '') + unlockedCount + ' / ' + set.filter(i => !i.admin || isAdminUser() || isUnlocked(i, _lockerTab)).length + ' owned';
   fitText(document.getElementById('locker'));
 }
 

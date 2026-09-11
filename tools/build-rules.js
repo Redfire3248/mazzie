@@ -69,10 +69,13 @@ const rules = {
         owned: {
           '$set': {
             '.validate': "$set.matches(/^(icon|color|frame|trail|title)$/)",
-            '$id': { '.validate': "newData.val() == true && $id.length <= 32" }
+            // "a-" ids are admin cosmetics: only an admin can grant one (keeping one you were given is fine)
+            '$id': { '.validate': `newData.val() == true && $id.length <= 32 && (!$id.beginsWith('a-') || data.val() == true || ${ADMIN})` }
           }
         },
         ownedV1: { '.validate': 'newData.isBoolean()' },
+        pity: { '.validate': "newData.child('e').isNumber() && newData.child('l').isNumber()" },
+        lastGift: { '.validate': 'newData.isString() && newData.val().length <= 64' },
         boosts: {
           ...Object.fromEntries(Object.keys(BOOST_PRICES).map(k => [k, { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 999' }])),
           '$other': { '.validate': false }
@@ -147,6 +150,30 @@ const rules = {
         '.read': `auth != null && ${acctOwnerOf('$acc')} == auth.uid`,
         '.write': `${ADMIN} || (auth != null && !newData.exists() && ${acctOwnerOf('$acc')} == auth.uid)`,
         '.validate': "newData.child('kind').isString() && newData.child('kind').val().length <= 16 && newData.child('at').val() == now"
+      }
+    },
+
+    // Gift crates. The sender pays in the SAME multi-path write that delivers the gift:
+    //   accounts/<from>/coins     drops by the crate price (checked against the old value)
+    //   accounts/<from>/lastGift  = this gift's id  → one paid gift per write, no double-spend
+    // Recipients can read and delete (open) their own gifts; admins can send free ones.
+    gifts: {
+      '$to': {
+        '.read': `(auth != null && ${acctOwnerOf('$to')} == auth.uid) || ${ADMIN}`,
+        '$gid': {
+          '.write': `${ADMIN} || (auth != null && (
+              (!newData.exists() && ${acctOwnerOf('$to')} == auth.uid)
+           || (newData.exists() && !data.exists() && newData.child('from').isString() && ${acctOwnerOf("newData.child('from').val()")} == auth.uid && newData.child('from').val() != $to)))`,
+          '.validate': `newData.child('crate').isString() && newData.child('crate').val().matches(/^(basic|icon|style|elite)$/)
+            && newData.child('at').val() == now && newData.child('fromName').isString() && newData.child('fromName').val().length <= 16
+            && (!newData.child('msg').exists() || (newData.child('msg').isString() && newData.child('msg').val().length <= 60))
+            && (${ADMIN} || (
+                 newData.child('fromName').val() == root.child('accounts').child(newData.child('from').val()).child('name').val()
+              && newData.parent().parent().parent().child('accounts').child(newData.child('from').val()).child('lastGift').val() == $to + '/' + $gid
+              && newData.parent().parent().parent().child('accounts').child(newData.child('from').val()).child('coins').val()
+                   <= root.child('accounts').child(newData.child('from').val()).child('coins').val()
+                      - (newData.child('crate').val() == 'basic' ? 100 : newData.child('crate').val() == 'icon' ? 80 : newData.child('crate').val() == 'style' ? 140 : 350)))`
+        }
       }
     },
 

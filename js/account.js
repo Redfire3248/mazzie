@@ -529,7 +529,12 @@ async function syncAccountToCloud() {
   try {
     // Recent daily clears travel with the account, so the daily can't be replayed on another device
     const daily = Object.fromEntries(Object.entries(s.daily || {}).sort().slice(-3));
-    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, owned: s.owned || {}, ownedV1: !!s.ownedV1, lastSeen: secure ? SERVER_TIME : Date.now() });
+    // Owned cosmetics are written item by item ("owned/frame/f-nova": true) so a sync only ever
+    // adds — it can never wipe something an admin granted from another device
+    const ownedPaths = {};
+    Object.entries(mergeOwned(s.owned)).forEach(([set, ids]) => Object.keys(ids).forEach(k => { ownedPaths['owned/' + set + '/' + k] = true; }));
+    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, ...ownedPaths,
+      ownedV1: !!s.ownedV1, pity: typeof getPity === 'function' ? getPity() : { e: 0, l: 0 }, lastSeen: secure ? SERVER_TIME : Date.now() });
   } catch (e) { return; }
   // Progress is stamped with the server clock; the database rejects impossible jumps.
   // A rejected jump simply retries on later syncs, once enough real time has passed.
@@ -627,6 +632,7 @@ function applyAccountLocally(account) {
     crateKeys:    secure ? (account.crateKeys || 0) : Math.max(account.crateKeys || 0, s.crateKeys || 0),
     owned:        mergeOwned(account.owned, s.owned),
     ownedV1:      !!(account.ownedV1 || s.ownedV1),
+    pity:         account.pity && typeof account.pity === 'object' ? { e: account.pity.e | 0, l: account.pity.l | 0 } : (s.pity || { e: 0, l: 0 }),
     daily:        { ...(account.daily && typeof account.daily === 'object' ? account.daily : {}), ...(s.daily || {}) },
     level:        account.level || s.level || 1,
     diff:         account.diff  || s.diff  || 'easy'

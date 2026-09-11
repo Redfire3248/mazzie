@@ -7,7 +7,7 @@
 // /broadcast and /troll — the database rules enforce it.
 // ══════════════════════════════════════════════════
 
-let _bcES = null, _trES = null, _hbT = null, _liveOn = false;
+let _bcES = null, _trES = null, _gfES = null, _hbT = null, _liveOn = false;
 const TROLLS = {
   flip:      { desc: 'Turns their board upside down (10s)' },
   spin:      { desc: 'Spins their board (6s)' },
@@ -25,7 +25,8 @@ const TROLLS = {
   solve:     { desc: 'Clears their current level for them' },
   skip:      { desc: 'Sends them to the next level' },
   level:     { desc: 'Moves them to level N', value: true },
-  gift:      { desc: 'Gift coins (already added by the admin)', value: true }
+  gift:      { desc: 'Gift coins (already added by the admin)', value: true },
+  cosmetic:  { desc: 'Tell them about a cosmetic you granted', text: true }
 };
 
 async function streamUrl(path) {
@@ -35,13 +36,14 @@ async function streamUrl(path) {
 function startLive() {
   if (_liveOn || authMode() !== 'secure' || !currentAccount || currentAccount.offline || typeof EventSource === 'undefined') return;
   _liveOn = true;
-  listenBroadcast(); listenTroll(); heartbeat();
+  listenBroadcast(); listenTroll(); listenGifts(); heartbeat();
   clearInterval(_hbT); _hbT = setInterval(heartbeat, 45000);
   document.addEventListener('visibilitychange', onVis);
 }
 function stopLive() {
   _liveOn = false;
-  if (_bcES) _bcES.close(); if (_trES) _trES.close(); _bcES = _trES = null;
+  if (_bcES) _bcES.close(); if (_trES) _trES.close(); if (_gfES) _gfES.close(); _bcES = _trES = _gfES = null;
+  if (typeof onGiftsChanged === 'function') _gifts = {};
   clearInterval(_hbT);
   document.removeEventListener('visibilitychange', onVis);
 }
@@ -88,6 +90,13 @@ async function listenTroll() {
     if (Date.now() - t.at > 3 * 60000) return;
     applyTroll(t);
   }, () => { if (_liveOn) listenTroll(); });              // token expired → reconnect with a fresh one
+}
+// Gift crates from friends: /gifts/<me>/<giftId>
+async function listenGifts() {
+  if (_gfES) _gfES.close();
+  if (!currentAccount || !currentAccount.id || typeof onGiftsChanged !== 'function') return;
+  _gfES = streamNode(await streamUrl('/gifts/' + currentAccount.id), g => onGiftsChanged(g),
+    () => { if (_liveOn) listenGifts(); });
 }
 async function heartbeat() {
   if (!_liveOn || document.visibilityState === 'hidden' || !currentAccount) return;
@@ -144,6 +153,14 @@ function applyTroll(t) {
       pushToast(by + ' moved you to level ' + n, 'info', 'arrowR');
       break;
     }
+    case 'cosmetic': refreshFromCloud().then(() => {
+      const [set, id] = String(t.text || '').split(':');
+      const item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], id);
+      if (!item) return;
+      sfx('level'); spawnParticles();
+      showReward({ iconHtml: itemPreview({ set, item }, 44), tone: 'gold', kicker: 'Gift from ' + by, title: item.name,
+        sub: rarityOf(item).name + ' ' + SET_LABEL[set] + ' · added to your Locker', ms: 5000 });
+    }); break;
     case 'gift': refreshFromCloud().then(() => {
       sfx('reward'); spawnParticles();
       showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + by, title: '+' + (parseInt(t.value) || 0) + ' coins', chips: [{ html: coinHtml(getCoins()), label: 'balance' }] });
@@ -162,7 +179,7 @@ function fakeBan(by) {
 }
 // Re-read coins/boosts after an admin changed them server-side
 async function refreshFromCloud() {
-  try { const a = await dbGet('/accounts/' + currentAccount.id); if (a) { writeSave({ coins: a.coins || 0, boosts: a.boosts || {}, xp: a.xp || 0, level: a.level || loadSave().level }); updateMenuProfile(); updateCoinUI(); } } catch (e) {}
+  try { const a = await dbGet('/accounts/' + currentAccount.id); if (a) { writeSave({ coins: a.coins || 0, boosts: a.boosts || {}, xp: a.xp || 0, level: a.level || loadSave().level, crateKeys: a.crateKeys || 0, owned: mergeOwned(a.owned, loadSave().owned) }); updateMenuProfile(); updateCoinUI(); } } catch (e) {}
 }
 
 // ── Admin side ──

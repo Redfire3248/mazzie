@@ -1,51 +1,71 @@
 // ══════════════════════════════════════════════════
-// js/crates.js — Cosmetic crates: buy with coins (or a key from leveling up),
-// watch the reel roll, keep what it lands on. Duplicates refund some coins.
-// The result is decided and saved BEFORE the reel spins, so closing the page
+// js/crates.js — Cosmetic crates
+//   • Buy with coins, a free key (every level up) or open a gift from a friend
+//   • Open 1 (rolling reel) or 5 / 10 at once (card-flip reveal; ×10 = 9× price)
+//   • Pity: Epic+ guaranteed every 10 crates, Legendary+ every 50
+//   • Gifting: pay for a crate that lands in a friend's inbox (database rules
+//     check the sender really paid — see /gifts in tools/build-rules.js)
+//   • Admin crate: admin-only cosmetics ("a-" ids, the rules block anyone else)
+// Results are decided and saved BEFORE any animation, so closing the page
 // mid-roll can't be used to re-roll.
 // ══════════════════════════════════════════════════
 
 const CRATES = {
-  basic: { name: 'Basic Crate', price: 100, tone: 'cyan',   sets: ['icon', 'color', 'frame', 'trail', 'title'],
+  basic: { name: 'Basic Crate', price: 100, tone: 'cyan', sets: ['icon', 'color', 'frame', 'trail', 'title'],
            odds: { common: 60, rare: 27, epic: 10, legendary: 2.6, mythic: 0.4 }, desc: 'Anything can drop' },
-  icon:  { name: 'Icon Crate',  price: 80,  tone: 'acc',    sets: ['icon'],
+  icon:  { name: 'Icon Crate',  price: 80,  tone: 'acc',  sets: ['icon'],
            odds: { common: 60, rare: 27, epic: 10, legendary: 2.6, mythic: 0.4 }, desc: 'Avatar icons only' },
-  style: { name: 'Style Crate', price: 140, tone: 'xp',     sets: ['frame', 'trail', 'color', 'title'],
+  style: { name: 'Style Crate', price: 140, tone: 'xp',   sets: ['frame', 'trail', 'color', 'title'],
            odds: { common: 50, rare: 32, epic: 13, legendary: 4.2, mythic: 0.8 }, desc: 'Frames, trails, colours, titles' },
-  elite: { name: 'Elite Crate', price: 350, tone: 'gold',   sets: ['icon', 'color', 'frame', 'trail', 'title'],
-           odds: { rare: 55, epic: 30, legendary: 12, mythic: 3 }, desc: 'No commons. Best odds' }
+  elite: { name: 'Elite Crate', price: 350, tone: 'gold', sets: ['icon', 'color', 'frame', 'trail', 'title'],
+           odds: { rare: 55, epic: 30, legendary: 12, mythic: 3 }, desc: 'No commons. Best odds' },
+  admin: { name: 'Admin Crate', price: 0,   tone: 'danger', sets: ['color', 'frame', 'trail', 'title'], adminOnly: true,
+           odds: { admin: 100 }, desc: 'Admin-only cosmetics' }
 };
+const RAR_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythic', 'admin'];
 // Duplicate refund per rarity (always below the cheapest crate, so crates can't farm coins)
-const DUPE_REFUND = { common: 10, rare: 20, epic: 35, legendary: 55, mythic: 75 };
-const RAR_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythic'];
+const DUPE_REFUND = { common: 10, rare: 20, epic: 35, legendary: 55, mythic: 75, admin: 0 };
+const PITY = { epic: 10, legendary: 50 };      // guaranteed at this many crates without one
+const MULTI = { 1: 1, 5: 5, 10: 9 };           // open count → how many crates you pay for
 
 function getKeys() { return Math.max(0, loadSave().crateKeys | 0); }
 function addKeys(n) { writeSave({ crateKeys: Math.max(0, getKeys() + n) }); }
+function getPity() { const p = loadSave().pity || {}; return { e: p.e | 0, l: p.l | 0 }; }
+const crateVisible = id => !CRATES[id].adminOnly || isAdminUser();
 
 // Everything a crate can drop, grouped by rarity
 function cratePool(crate) {
   const pool = {};
   crate.sets.forEach(set => COSMETIC_SETS[set].forEach(item => {
     const r = rarityOf(item).id;
-    if (r === 'starter' || item.id === 'none') return;
+    if (r === 'starter' || item.id === 'none' || (r === 'admin') !== !!crate.adminOnly) return;
     (pool[r] = pool[r] || []).push({ set, item });
   }));
   return pool;
 }
-function rollRarity(odds, pool) {
-  const avail = RAR_ORDER.filter(r => odds[r] && pool[r] && pool[r].length);
+function rollRarity(odds, pool, minIdx) {
+  const avail = RAR_ORDER.filter((r, i) => i >= (minIdx || 0) && odds[r] && pool[r] && pool[r].length);
+  if (!avail.length) return rollRarity(odds, pool, 0);
   const total = avail.reduce((t, r) => t + odds[r], 0);
   let x = Math.random() * total;
   for (const r of avail) { if ((x -= odds[r]) < 0) return r; }
   return avail[avail.length - 1];
 }
-function rollDrop(crate, pool) {
-  const r = rollRarity(crate.odds, pool);
-  const list = pool[r];
-  return list[Math.floor(Math.random() * list.length)];
+const pickFrom = list => list[Math.floor(Math.random() * list.length)];
+// One real roll, with pity applied
+function rollWithPity(crate, pool) {
+  if (crate.adminOnly) return pickFrom(pool.admin);
+  const p = getPity();
+  const min = p.l + 1 >= PITY.legendary ? 3 : p.e + 1 >= PITY.epic ? 2 : 0;
+  const r = rollRarity(crate.odds, pool, min);
+  const idx = RAR_ORDER.indexOf(r);
+  writeSave({ pity: { e: idx >= 2 ? 0 : p.e + 1, l: idx >= 3 ? 0 : p.l + 1 } });
+  return { ...pickFrom(pool[r]), pity: min > 0 && idx >= min };
 }
+// Filler for the reel (no pity side effects)
+const fillerDrop = (crate, pool) => pickFrom(pool[rollRarity(crate.odds, pool, 0)]);
 
-// ── Item preview used on reel cards and results ──
+// ── Item preview used on reel cards, flip cards and results ──
 function itemPreview({ set, item }, size) {
   const av = getMyAvatar();
   if (set === 'icon')  return renderAvatar({ ...av, icon: item.id, frame: 'none' }, myName, size);
@@ -55,23 +75,6 @@ function itemPreview({ set, item }, size) {
   return `<div class="title-swatch fit" data-max="14" data-min="7">${titleHtml(item.id)}</div>`;
 }
 const SET_LABEL = { icon: 'Icon', color: 'Colour', frame: 'Frame', trail: 'Trail', title: 'Title' };
-
-// ══════════════════════════════════════════════════
-// STORE SECTION
-// ══════════════════════════════════════════════════
-function renderCrates() {
-  const el = document.getElementById('store-crates'); if (!el) return;
-  const coins = getCoins(), keys = getKeys();
-  el.innerHTML = (keys ? `<button class="key-banner" onclick="openCrate('basic', true)">${ic('key')}<span><b>${keys} free crate key${keys > 1 ? 's' : ''}</b><small>From leveling up · tap to open a Basic Crate</small></span>${ic('chevR')}</button>` : '')
-    + Object.entries(CRATES).map(([id, c]) => `
-      <div class="crate-card t-${c.tone}">
-        <div class="crate-art">${crateArt(c.tone)}</div>
-        <b class="crate-name">${c.name}</b>
-        <small class="crate-desc">${c.desc}</small>
-        <div class="crate-odds">${RAR_ORDER.filter(r => c.odds[r]).map(r => `<span class="odd r-${r}" title="${r}">${c.odds[r]}%</span>`).join('')}</div>
-        <button class="shop-buy${coins >= c.price ? '' : ' poor'}" onclick="openCrate('${id}')">${coinHtml(c.price)}</button>
-      </div>`).join('');
-}
 function crateArt(tone) {
   return `<svg viewBox="0 0 64 64" class="crate-svg" style="--ct:var(--${tone}-rgb)">
     <path class="cr-lid" d="M8 22 L32 12 L56 22 L32 32 Z"/>
@@ -82,77 +85,148 @@ function crateArt(tone) {
 }
 
 // ══════════════════════════════════════════════════
+// STORE SECTION
+// ══════════════════════════════════════════════════
+function renderCrates() {
+  const el = document.getElementById('store-crates'); if (!el) return;
+  const keys = getKeys(), p = getPity(), gifts = giftList();
+  el.innerHTML =
+      (gifts.length ? `<button class="key-banner gift" onclick="openGift()">${ic('gift')}<span><b>${gifts.length} gift${gifts.length > 1 ? 's' : ''} waiting</b><small>From ${escapeHtml(gifts[0].fromName)}${gifts.length > 1 ? ' and others' : ''} · tap to open</small></span>${ic('chevR')}</button>` : '')
+    + (keys ? `<button class="key-banner" onclick="openCrateSheet('basic', true)">${ic('key')}<span><b>${keys} free crate key${keys > 1 ? 's' : ''}</b><small>From leveling up · opens a Basic Crate</small></span>${ic('chevR')}</button>` : '')
+    + `<div class="pity-box">
+        <div class="pity-row"><span>Epic or better in</span><b>${PITY.epic - p.e}</b><i style="--p:${p.e / PITY.epic * 100}%;--c:var(--xp-rgb)"></i></div>
+        <div class="pity-row"><span>Legendary or better in</span><b>${PITY.legendary - p.l}</b><i style="--p:${p.l / PITY.legendary * 100}%;--c:var(--gold-rgb)"></i></div>
+      </div>`
+    + Object.entries(CRATES).filter(([id]) => crateVisible(id)).map(([id, c]) => `
+      <button class="crate-card t-${c.tone}" onclick="openCrateSheet('${id}')">
+        <div class="crate-art">${crateArt(c.tone)}</div>
+        <b class="crate-name">${c.name}</b>
+        <small class="crate-desc">${c.desc}</small>
+        <div class="crate-odds">${RAR_ORDER.filter(r => c.odds[r]).map(r => `<span class="odd r-${r}">${c.odds[r]}%</span>`).join('')}</div>
+        <span class="shop-buy${c.adminOnly || getCoins() >= c.price ? '' : ' poor'}">${c.adminOnly ? 'Free' : coinHtml(c.price)}</span>
+      </button>`).join('');
+}
+
+// ── Crate sheet: pick ×1 / ×5 / ×10, or gift it ──
+function openCrateSheet(id, useKey) {
+  const c = CRATES[id]; if (!c || !crateVisible(id)) return;
+  const coins = getCoins(), keys = getKeys();
+  const ov = document.getElementById('crate-open');
+  ov.className = 'crate-overlay t-' + c.tone;
+  const btn = n => {
+    if (useKey) return keys >= n ? `<button class="btn ${n === 1 ? 'primary' : 'secondary'}" onclick="openCrates('${id}',${n},{key:true})">${ic('key')}Open ${n}</button>` : '';
+    if (c.adminOnly) return `<button class="btn ${n === 1 ? 'primary' : 'secondary'}" onclick="openCrates('${id}',${n})">Open ${n}</button>`;
+    const cost = c.price * MULTI[n];
+    return `<button class="btn ${n === 1 ? 'primary' : 'secondary'}${coins >= cost ? '' : ' poor'}" onclick="openCrates('${id}',${n})">Open ${n}<span class="sheet-cost">${coinHtml(cost)}</span>${n === 10 ? '<em>1 free</em>' : ''}</button>`;
+  };
+  ov.innerHTML = `
+    <div class="crate-sheet">
+      <button class="icon-btn sheet-x" onclick="closeCrate()">${ic('x')}</button>
+      <div class="crate-art big">${crateArt(c.tone)}</div>
+      <div class="crate-top"><b>${c.name}</b><span class="crate-kicker">${c.desc}${useKey ? ` · ${keys} key${keys > 1 ? 's' : ''}` : ''}</span></div>
+      <div class="sheet-odds">${RAR_ORDER.filter(r => c.odds[r]).map(r => `<span class="odd r-${r}">${r} ${c.odds[r]}%</span>`).join('')}</div>
+      ${c.adminOnly ? '' : `<small class="sheet-pity">Pity: Epic+ guaranteed within ${PITY.epic - getPity().e}, Legendary+ within ${PITY.legendary - getPity().l}</small>`}
+      <div class="sheet-btns">${btn(1)}${btn(5)}${btn(10)}</div>
+      ${!useKey && !c.adminOnly && authMode() === 'secure' ? `<button class="link-btn" onclick="openGiftForm('${id}')">${ic('gift')} Gift this crate to a friend</button>` : ''}
+    </div>`;
+  sfx('tap');
+}
+
+// ══════════════════════════════════════════════════
 // OPENING
 // ══════════════════════════════════════════════════
-let _crateBusy = false, _reelAnim = null, _reelRaf = 0;
+let _crateBusy = false, _reelAnim = null, _reelRaf = 0, _flipTimers = [];
 
-function openCrate(id, useKey) {
+// opts: { key:true } pay with keys · { gift:giftObj } already paid by a friend
+async function openCrates(id, n, opts) {
+  opts = opts || {};
   if (_crateBusy) return;
   const crate = CRATES[id]; if (!crate) return;
-  if (useKey) {
-    if (!getKeys()) return;
-  } else if (getCoins() < crate.price) {
-    sfx('err'); buzz(20);
-    pushToast(`Need ${crate.price - getCoins()} more coins — win levels to earn them`, 'warn', 'coin');
-    return;
-  }
-  const pool = cratePool(crate);
-  const drop = rollDrop(crate, pool);
-  const rar  = rarityOf(drop.item).id;
-  const dupe = isUnlocked(drop.item, drop.set);
-  const refund = dupe ? DUPE_REFUND[rar] : 0;
+  n = MULTI[n] ? n : 1;
+  if (crate.adminOnly && !isAdminUser()) return;
+  let payNote = '';
+  if (opts.free) {
+    if (!isAdminUser()) return;
+    payNote = 'Admin';
+  } else if (opts.gift) {
+    try { await dbDelete('/gifts/' + currentAccount.id + '/' + opts.gift.id); }
+    catch (e) { pushToast('Could not open the gift — check your internet', 'warn'); return; }
+    delete _gifts[opts.gift.id];
+    payNote = 'Gift from ' + opts.gift.fromName;
+  } else if (opts.key) {
+    if (getKeys() < n) return;
+    writeSave({ crateKeys: getKeys() - n }); payNote = n + ' key' + (n > 1 ? 's' : '');
+  } else if (!crate.adminOnly) {
+    const cost = crate.price * MULTI[n];
+    if (getCoins() < cost) {
+      sfx('err'); buzz(20);
+      pushToast(`Need ${cost - getCoins()} more coins — win levels to earn them`, 'warn', 'coin');
+      return;
+    }
+    writeSave({ coins: getCoins() - cost }); payNote = '-' + cost;
+  } else payNote = 'Admin';
 
-  // Pay + save the result first
-  const patch = {};
-  if (useKey) patch.crateKeys = getKeys() - 1; else patch.coins = getCoins() - crate.price;
-  writeSave(patch);
-  if (dupe) addCoins(refund); else grantItem(drop.set, drop.item.id);
-  writeSave({ cratesOpened: (loadSave().cratesOpened | 0) + 1 });
+  // Roll + save everything first
+  const pool = cratePool(crate), drops = [];
+  for (let i = 0; i < n; i++) {
+    const d = rollWithPity(crate, pool);
+    const rar = rarityOf(d.item).id;
+    const dupe = isUnlocked(d.item, d.set);
+    const refund = dupe ? DUPE_REFUND[rar] : 0;
+    if (dupe) addCoins(refund); else grantItem(d.set, d.item.id);
+    drops.push({ ...d, rar, dupe, refund });
+  }
+  writeSave({ cratesOpened: (loadSave().cratesOpened | 0) + n });
   updateCoinUI();
   syncAccountToCloud().catch(() => {});
 
   _crateBusy = true;
-  showCrateReel(id, crate, pool, drop, { rar, dupe, refund, useKey });
+  const again = () => opts.gift || opts.free ? false : opts.key ? getKeys() >= n : crate.adminOnly || getCoins() >= crate.price * MULTI[n];
+  const ctx = window._crateCtx = { id, n, opts, crate, pool, drops, payNote, again };
+  if (n === 1) showReel(ctx); else showFlips(ctx);
 }
 
-function showCrateReel(id, crate, pool, drop, res) {
+function stageHtml(ctx, body) {
+  const note = ctx.payNote.startsWith('-') ? coinHtml(-(+ctx.payNote.slice(1))) : escapeHtml(ctx.payNote);
+  return `<div class="crate-stage">
+    <div class="crate-top"><span class="crate-kicker">${note}</span><b>${ctx.n > 1 ? ctx.n + ' × ' : ''}${ctx.crate.name}</b></div>
+    ${body}
+    <div class="crate-result" id="crate-result"></div>
+    <div class="crate-actions" id="crate-actions"><button class="btn secondary" onclick="skipCrate()">Skip</button></div>
+  </div>`;
+}
+
+// ── ×1: the rolling reel ──
+function showReel(ctx) {
+  const { crate, pool, drops } = ctx, drop = drops[0];
   const ov = document.getElementById('crate-open');
   ov.className = 'crate-overlay t-' + crate.tone;
-  ov.innerHTML = `
-    <div class="crate-stage">
-      <div class="crate-top"><span class="crate-kicker">${res.useKey ? 'Free key' : coinHtml(-crate.price)}</span><b>${crate.name}</b></div>
-      <div class="crate-intro">${crateArt(crate.tone)}</div>
-      <div class="reel-wrap" hidden><div class="reel" id="reel"></div><div class="reel-marker"></div></div>
-      <div class="crate-result" id="crate-result"></div>
-      <div class="crate-actions" id="crate-actions"><button class="btn secondary" onclick="skipReel()">Skip</button></div>
-    </div>`;
+  ov.innerHTML = stageHtml(ctx, `<div class="crate-intro">${crateArt(crate.tone)}</div>
+    <div class="reel-wrap" hidden><div class="reel" id="reel"></div><div class="reel-marker"></div></div>`);
   sfx('tap');
-
-  // Filler cards: same odds as the crate so the reel "feels" honest, a few teasers near the winner
   const N = 46, WIN = 40, cards = [];
-  for (let i = 0; i < N; i++) cards.push(i === WIN ? drop : rollDrop(crate, pool));
-  const teaseR = RAR_ORDER.slice(3).find(r => pool[r]);
-  if (teaseR) [WIN - 1, WIN + 1].forEach(i => { if (Math.random() < .5) cards[i] = pool[teaseR][Math.floor(Math.random() * pool[teaseR].length)]; });
+  for (let i = 0; i < N; i++) cards.push(i === WIN ? drop : fillerDrop(crate, pool));
+  // A couple of teasers right next to the winner
+  const teaseR = ['mythic', 'legendary'].find(r => pool[r]);
+  if (teaseR) [WIN - 1, WIN + 1].forEach(i => { if (Math.random() < .5) cards[i] = pickFrom(pool[teaseR]); });
   const reel = ov.querySelector('#reel');
-  reel.innerHTML = cards.map((c, i) => {
+  reel.innerHTML = cards.map(c => {
     const r = rarityOf(c.item);
-    return `<div class="reel-card r-${r.id}" style="--rar:${r.rgb}" data-i="${i}"><div class="rc-pv">${itemPreview(c, 50)}</div><small>${escapeHtml(c.item.name)}</small></div>`;
+    return `<div class="reel-card r-${r.id}" style="--rar:${r.rgb}"><div class="rc-pv">${itemPreview(c, 50)}</div><small>${escapeHtml(c.item.name)}</small></div>`;
   }).join('');
 
-  // Intro: the crate shakes, bursts, then the reel slides in and rolls
-  setTimeout(() => { sfx('coin'); ov.querySelector('.crate-intro').classList.add('burst'); }, 650);
-  setTimeout(() => {
-    ov.querySelector('.crate-intro').remove();
+  _flipTimers.push(setTimeout(() => { sfx('coin'); const i = ov.querySelector('.crate-intro'); if (i) i.classList.add('burst'); }, 650));
+  _flipTimers.push(setTimeout(() => {
+    if (ctx !== window._crateCtx) return;
+    const intro = ov.querySelector('.crate-intro'); if (intro) intro.remove();
     ov.querySelector('.reel-wrap').hidden = false;
     fitText(reel);
     const wrapW = ov.querySelector('.reel-wrap').clientWidth;
     // Layout sizes (not getBoundingClientRect: the pop-in animation scales the reel while we measure)
-    const card = reel.children[1].offsetLeft - reel.children[0].offsetLeft;   // card + gap
-    const jitter = (Math.random() - .5) * card * .6;
-    const x = WIN * card + card / 2 - wrapW / 2 + jitter;
+    const card = reel.children[1].offsetLeft - reel.children[0].offsetLeft;
+    const x = WIN * card + card / 2 - wrapW / 2 + (Math.random() - .5) * card * .6;
     _reelAnim = reel.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-x}px)` }],
       { duration: 5600, easing: 'cubic-bezier(.08,.6,.12,1)', fill: 'forwards' });
-    // Tick every time a card crosses the marker (pitch rises as it slows)
     let last = -1;
     const tick = () => {
       const tx = new DOMMatrixReadOnly(getComputedStyle(reel).transform).m41;
@@ -161,41 +235,96 @@ function showCrateReel(id, crate, pool, drop, res) {
       _reelRaf = requestAnimationFrame(tick);
     };
     _reelRaf = requestAnimationFrame(tick);
-    _reelAnim.onfinish = () => revealDrop(id, crate, drop, res, reel, WIN);
-  }, 1050);
-}
-function skipReel() {
-  if (_reelAnim && _reelAnim.playState === 'running') _reelAnim.finish();
+    _reelAnim.onfinish = () => {
+      cancelAnimationFrame(_reelRaf);
+      reel.classList.add('done'); reel.children[WIN].classList.add('won');
+      finishReveal(ctx);
+    };
+  }, 1050));
 }
 
-function revealDrop(id, crate, drop, res, reel, WIN) {
-  cancelAnimationFrame(_reelRaf);
-  const r = rarityOf(drop.item);
-  reel.classList.add('done');
-  reel.children[WIN].classList.add('won');
-  const high = RAR_ORDER.indexOf(res.rar) >= 3;
-  sfx(high ? 'level' : 'reward'); buzz(high ? [30, 50, 30, 50, 80] : [20, 40, 20]);
-  spawnParticles(); if (high) setTimeout(spawnParticles, 350);
+// ── ×5 / ×10: cards flip one by one ──
+function showFlips(ctx) {
+  const { crate, drops } = ctx;
+  const ov = document.getElementById('crate-open');
+  ov.className = 'crate-overlay t-' + crate.tone;
+  ov.innerHTML = stageHtml(ctx, `<div class="flip-grid n${ctx.n}">${drops.map((d, i) => {
+    const r = rarityOf(d.item);
+    return `<div class="flip-card r-${r.id}" style="--rar:${r.rgb};--i:${i}">
+      <div class="fc-back">${crateArt(crate.tone)}</div>
+      <div class="fc-front"><div class="rc-pv">${itemPreview(d, 44)}</div><small>${escapeHtml(d.item.name)}</small>
+        ${d.dupe ? `<span class="fc-tag">${coinHtml('+' + d.refund)}</span>` : `<span class="fc-tag new">New</span>`}${d.pity ? '<span class="fc-pity">Pity</span>' : ''}</div>
+    </div>`; }).join('')}</div>`);
+  fitText(ov);
+  sfx('coin');
+  let t = 700;
+  drops.forEach((d, i) => {
+    const high = RAR_ORDER.indexOf(d.rar) >= 3;
+    if (high) {
+      _flipTimers.push(setTimeout(() => ov.querySelectorAll('.flip-card')[i].classList.add('tease'), t));
+      t += 650;
+    }
+    _flipTimers.push(setTimeout(() => flipCard(ov, i, d), t));
+    t += high ? 420 : 230;
+  });
+  _flipTimers.push(setTimeout(() => finishReveal(ctx), t + 250));
+}
+function flipCard(ov, i, d) {
+  const el = ov.querySelectorAll('.flip-card')[i];
+  if (!el || el.classList.contains('open')) return;
+  el.classList.remove('tease'); el.classList.add('open');
+  const ri = RAR_ORDER.indexOf(d.rar);
+  if (ri >= 3) { sfx('reward'); buzz([20, 30, 20]); spawnParticles(); }
+  else { pluck(scaleFreq(4 + ri * 3), .06); buzz(6); }
+}
+function skipCrate() {
+  if (_reelAnim && _reelAnim.playState === 'running') { _reelAnim.finish(); return; }
+  const ov = document.getElementById('crate-open');
+  if (!ov.querySelector('.flip-grid')) return;
+  _flipTimers.forEach(clearTimeout); _flipTimers = [];
+  ov.querySelectorAll('.flip-card').forEach(el => { el.classList.remove('tease'); el.classList.add('open'); });
+  finishReveal(window._crateCtx);
+}
+
+// ── Result panel + buttons ──
+function finishReveal(ctx) {
+  if (!ctx || ctx.done || ctx !== window._crateCtx) return; ctx.done = true;   // ignore callbacks from an older opening
+  _flipTimers.forEach(clearTimeout); _flipTimers = [];
+  const { drops, id, n, opts } = ctx;
+  const best = drops.reduce((b, d) => RAR_ORDER.indexOf(d.rar) > RAR_ORDER.indexOf(b.rar) ? d : b, drops[0]);
+  const r = rarityOf(best.item);
+  const high = RAR_ORDER.indexOf(best.rar) >= 3;
   const el = document.getElementById('crate-result');
   el.style.setProperty('--rar', r.rgb);
   el.className = 'crate-result show r-' + r.id;
-  el.innerHTML = `
-    <div class="cres-pv">${itemPreview(drop, 84)}</div>
-    <div class="cres-rar">${r.name} ${SET_LABEL[drop.set]}</div>
-    <div class="cres-name">${escapeHtml(drop.item.name)}</div>
-    <div class="cres-tag">${res.dupe ? `Duplicate · ${coinHtml('+' + res.refund)}` : `${ic('sparkle')}New! Added to your Locker`}</div>`;
+  if (n === 1) {
+    sfx(high ? 'level' : 'reward'); buzz(high ? [30, 50, 30, 50, 80] : [20, 40, 20]);
+    spawnParticles(); if (high) setTimeout(spawnParticles, 350);
+    el.innerHTML = `
+      <div class="cres-pv">${itemPreview(best, 84)}</div>
+      <div class="cres-rar">${r.name} ${SET_LABEL[best.set]}${best.pity ? ' · pity' : ''}</div>
+      <div class="cres-name">${escapeHtml(best.item.name)}</div>
+      <div class="cres-tag">${best.dupe ? `Duplicate · ${coinHtml('+' + best.refund)}` : `${ic('sparkle')}New! Added to your Locker`}</div>`;
+  } else {
+    const fresh = drops.filter(d => !d.dupe).length, refund = drops.reduce((t, d) => t + d.refund, 0);
+    sfx(high ? 'level' : 'win'); spawnParticles();
+    el.innerHTML = `<div class="cres-rar">Best: ${r.name} · ${escapeHtml(best.item.name)}</div>
+      <div class="cres-tag">${ic('sparkle')}${fresh} new${refund ? ` · ${drops.length - fresh} duplicates ${coinHtml('+' + refund)}` : ''}</div>`;
+  }
   fitText(el);
-  const again = res.useKey ? getKeys() > 0 : getCoins() >= crate.price;
   document.getElementById('crate-actions').innerHTML =
     `<button class="btn secondary" onclick="closeCrate()">Close</button>`
-    + (!res.dupe ? `<button class="btn secondary" onclick="equipDrop('${drop.set}','${drop.item.id}')">${ic('check')}Equip</button>` : '')
-    + (again ? `<button class="btn primary" onclick="closeCrate(true);openCrate('${id}',${res.useKey})">${ic('refresh')}Again</button>` : '');
+    + (n === 1 && !best.dupe ? `<button class="btn secondary" onclick="equipDrop('${best.set}','${best.item.id}')">${ic('check')}Equip</button>` : '')
+    + (ctx.again() ? `<button class="btn primary" onclick="openCrates('${id}',${n},${opts.key ? '{key:true}' : '{}'})">${ic('refresh')}Again</button>` : '')
+    + (opts.gift && giftList().length ? `<button class="btn primary" onclick="openGift()">${ic('gift')}Next gift</button>` : '');
   _crateBusy = false;
 }
-function closeCrate(keepOpen) {
+function closeCrate() {
   cancelAnimationFrame(_reelRaf);
-  _crateBusy = false;
-  if (!keepOpen) { const ov = document.getElementById('crate-open'); ov.className = 'crate-overlay hidden'; ov.innerHTML = ''; }
+  _flipTimers.forEach(clearTimeout); _flipTimers = [];
+  if (_reelAnim) { try { _reelAnim.cancel(); } catch (e) {} _reelAnim = null; }
+  _crateBusy = false; window._crateCtx = null;
+  const ov = document.getElementById('crate-open'); ov.className = 'crate-overlay hidden'; ov.innerHTML = '';
   if (isScreen('store')) renderStore();
   updateMenuProfile();
 }
@@ -205,4 +334,81 @@ function equipDrop(set, id) {
   applyMyCosmetics(); syncAccountToCloud().catch(() => {});
   pushToast('Equipped', 'acc', 'check');
   closeCrate();
+}
+// ══════════════════════════════════════════════════
+// GIFTS  (secure mode only)
+// ══════════════════════════════════════════════════
+let _gifts = {};
+const giftList = () => Object.entries(_gifts).map(([id, g]) => ({ id, ...g })).filter(g => CRATES[g.crate] && !CRATES[g.crate].adminOnly).sort((a, b) => a.at - b.at);
+
+// Called by live.js whenever /gifts/<me> changes
+function onGiftsChanged(all) {
+  const prev = _gifts;
+  _gifts = all && typeof all === 'object' ? all : {};
+  Object.entries(_gifts).forEach(([id, g]) => {
+    if (prev[id] || !g || !CRATES[g.crate]) return;
+    sfx('reward'); buzz([20, 40, 20]);
+    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + cleanName(g.fromName), title: CRATES[g.crate].name,
+      sub: g.msg ? '"' + String(g.msg).slice(0, 60) + '"' : 'Open it in the Store', ms: 5000 });
+  });
+  if (isScreen('store')) renderCrates();
+  const si = document.getElementById('store-info');
+  if (si && giftList().length) { si.innerText = giftList().length + ' gift' + (giftList().length > 1 ? 's' : '') + '!'; si.classList.add('done'); }
+}
+function openGift() {
+  const g = giftList()[0]; if (!g) return closeCrate();
+  if (_crateBusy) return;
+  closeCrate();
+  openCrates(g.crate, 1, { gift: g });
+}
+
+function openGiftForm(crateId) {
+  const c = CRATES[crateId];
+  const ov = document.getElementById('crate-open');
+  ov.innerHTML = `
+    <div class="crate-sheet">
+      <button class="icon-btn sheet-x" onclick="closeCrate()">${ic('x')}</button>
+      <div class="crate-art big">${crateArt(c.tone)}</div>
+      <div class="crate-top"><b>Gift a ${c.name}</b><span class="crate-kicker">They open it themselves · costs ${coinHtml(c.price)}</span></div>
+      <label class="field-box"><i data-ic="user"></i><input class="txt" id="gift-to" maxlength="16" placeholder="Friend's username" autocomplete="off" spellcheck="false"></label>
+      <label class="field-box"><i data-ic="chat"></i><input class="txt" id="gift-msg" maxlength="60" placeholder="Message (optional)" autocomplete="off"></label>
+      <div class="form-err" id="gift-err"></div>
+      <div class="sheet-btns"><button class="btn secondary" onclick="openCrateSheet('${crateId}')">Back</button>
+        <button class="btn primary" id="gift-send" onclick="sendGift('${crateId}')">${ic('gift')}Send gift</button></div>
+    </div>`;
+  hydrateIcons(ov);
+  setTimeout(() => document.getElementById('gift-to').focus(), 50);
+}
+async function sendGift(crateId, toNameArg, msgArg, free) {
+  const c = CRATES[crateId];
+  const toName = (toNameArg != null ? toNameArg : document.getElementById('gift-to').value).trim();
+  const msg = (msgArg != null ? msgArg : (document.getElementById('gift-msg') || {}).value || '').trim().slice(0, 60);
+  const err = t => { const e = document.getElementById('gift-err'); if (e) e.innerText = t; if (free) throw new Error(t); };
+  if (authMode() !== 'secure' || !currentAccount || currentAccount.offline) return err('Gifting needs you to be signed in online.');
+  if (!c || c.adminOnly) return err('That crate cannot be gifted.');
+  if (!free && getCoins() < c.price) return err(`You need ${c.price - getCoins()} more coins.`);
+  const btn = document.getElementById('gift-send'); if (btn) btn.disabled = true;
+  try {
+    const u = await dbGet('/usernames/' + nameKey(toName));
+    const to = u && (u.acc || u.uid);
+    if (!to) { if (btn) btn.disabled = false; return err('No player called "' + toName + '".'); }
+    if (to === currentAccount.id) { if (btn) btn.disabled = false; return err("You can't gift yourself — open it instead!"); }
+    const me = currentAccount.id;
+    const gid = me + '_' + Date.now().toString(36) + randStr(4);
+    const gift = { from: me, fromName: myName, crate: crateId, at: SERVER_TIME };
+    if (msg) gift.msg = msg;
+    if (free) { await dbPut('/gifts/' + to + '/' + gid, gift); return { to, name: toName }; }
+    // One atomic multi-path write: pay + record which gift was paid for + deliver it
+    const coins = getCoins() - c.price;
+    await dbPatch('/', { ['accounts/' + me + '/coins']: coins, ['accounts/' + me + '/lastGift']: to + '/' + gid, ['gifts/' + to + '/' + gid]: gift });
+    writeSave({ coins });
+    updateCoinUI();
+    sfx('buy'); buzz([10, 30, 10]);
+    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift sent', title: c.name + ' → ' + cleanName(toName), chips: [{ html: coinHtml(-c.price), label: 'spent' }], quick: true });
+    closeCrate();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    if (free) throw e;
+    err(e.message === 'DENIED' ? 'The server refused the gift (try again after your coins sync).' : 'Could not send — check your internet.');
+  }
 }
