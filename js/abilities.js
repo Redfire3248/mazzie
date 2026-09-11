@@ -4,12 +4,12 @@
 // ══════════════════════════════════════════════════
 
 const ABILITIES = {
-  hint:   { icon:'💡', name:'Hint',      desc:'Shows the next cells of the solution',   self:true },
-  dash:   { icon:'⚡', name:'Dash',      desc:'Auto-fills the next 4 correct cells',     self:true },
-  stop:   { icon:'⏸', name:'Time Stop', desc:'Pauses your timer for 5s',               self:true },
-  shield: { icon:'🛡', name:'Shield',    desc:'Blocks the next attack for 15s',          self:true, battle:true },
-  frost:  { icon:'🧊', name:'Frost',     desc:'Freezes every rival board for 2.5s',      attack:true, battle:true },
-  fog:    { icon:'🌫', name:'Fog',       desc:'Hides rival numbers for 4s',              attack:true, battle:true }
+  hint:   { icon:'bulb', name:'Hint',      desc:'Shows the next cells of the solution',   self:true },
+  dash:   { icon:'bolt', name:'Dash',      desc:'Auto-fills the next 4 correct cells',     self:true },
+  stop:   { icon:'pause', name:'Time Stop', desc:'Pauses your timer for 5s',               self:true },
+  shield: { icon:'shield', name:'Shield',    desc:'Blocks the next attack for 15s',          self:true, battle:true },
+  frost:  { icon:'snow', name:'Frost',     desc:'Freezes every rival board for 2.5s',      attack:true, battle:true },
+  fog:    { icon:'fog', name:'Fog',       desc:'Hides rival numbers for 4s',              attack:true, battle:true }
 };
 const SOLO_POOL   = ['hint', 'hint', 'dash', 'stop'];
 const BATTLE_POOL = ['hint', 'dash', 'stop', 'shield', 'frost', 'frost', 'fog', 'fog'];
@@ -28,14 +28,14 @@ function placePickups(rng, path, nodeCells) {
     const kind = pool[Math.floor(rng() * pool.length)];
     pickupMap.set(ci, kind);
     const orb = document.createElement('div');
-    orb.className = 'pickup'; orb.innerText = ABILITIES[kind].icon;
+    orb.className = 'pickup pk-' + kind; orb.innerHTML = ic(ABILITIES[kind].icon);
     cells[ci].appendChild(orb);
   });
 }
 
 function collectPickup(ci) {
   if (abilityInv.length >= MAX_SLOTS) {
-    if (!cells[ci].dataset.fullWarned) { pushToast('Boost slots full — use one!', 'warn'); cells[ci].dataset.fullWarned = '1'; }
+    if (!cells[ci].dataset.fullWarned) { pushToast('Boost slots full — use one first', 'warn'); cells[ci].dataset.fullWarned = '1'; }
     return; // stays on the board; grab it later
   }
   const kind = pickupMap.get(ci);
@@ -45,7 +45,7 @@ function collectPickup(ci) {
   abilityInv.push(kind);
   renderAbilityBar(abilityInv.length - 1);
   sfx('pickup'); buzz(20);
-  pushToast(ABILITIES[kind].icon + ' ' + ABILITIES[kind].name + ' ready!', 'acc');
+  pushToast(ABILITIES[kind].name + ' ready', 'acc', ABILITIES[kind].icon);
 }
 
 // ── Ability bar UI ──
@@ -59,9 +59,9 @@ function renderAbilityBar(flashSlot) {
     const b = document.createElement('button');
     b.className = 'ab-slot' + (kind ? ' filled' : '') + (kind && ABILITIES[kind].attack ? ' attack' : '') + (i === flashSlot ? ' pop' : '');
     b.innerHTML = kind
-      ? `<span class="ab-icon">${ABILITIES[kind].icon}</span><span class="ab-name">${ABILITIES[kind].name}</span><span class="ab-key">${i + 1}</span>`
-      : `<span class="ab-empty">·</span>`;
-    b.title = kind ? ABILITIES[kind].desc : 'Collect ✦ boosts on the board';
+      ? `<span class="ab-icon">${ic(ABILITIES[kind].icon)}</span><span class="ab-name">${ABILITIES[kind].name}</span><span class="ab-key">${i + 1}</span>`
+      : `<span class="ab-empty">${ic('plus')}</span>`;
+    b.title = kind ? ABILITIES[kind].desc : 'Collect boosts on the board';
     b.onclick = () => useAbilitySlot(i);
     bar.appendChild(b);
   }
@@ -87,7 +87,7 @@ function useAbility(kind) {
       }
       const from = Math.max(0, k - 1);
       drawHint(solutionPath.slice(from, Math.min(solutionPath.length, k + 7)), 3200, 'hint');
-      pushToast('💡 Follow the dashed line', 'info');
+      pushToast('Follow the dashed line', 'info', 'bulb');
       return true;
     }
     case 'dash': {
@@ -108,20 +108,20 @@ function useAbility(kind) {
     }
     case 'stop':
       selfFreezeUntil = Math.max(selfFreezeUntil, now) + 5000;
-      pushToast('⏸ Timer paused 5s', 'info');
+      pushToast('Timer paused 5s', 'info', 'pause');
       return true;
     case 'shield':
       if (!battleActive) return false;
       shieldUntil = now + 15000;
       document.getElementById('game').classList.add('shielded');
       setTimeout(() => { if (performance.now() >= shieldUntil) document.getElementById('game').classList.remove('shielded'); }, 15050);
-      pushToast('🛡 Shield up for 15s', 'acc');
+      pushToast('Shield up for 15s', 'acc', 'shield');
       return true;
     case 'frost':
     case 'fog':
       if (!battleActive) return false;
       sendAttack(kind);
-      pushToast(a.icon + ' ' + a.name + ' sent!', 'acc');
+      pushToast(a.name + ' sent', 'acc', a.icon);
       return true;
   }
   return false;
@@ -154,7 +154,7 @@ function receiveAttack(d) {
   const who = d.fromName || 'A rival';
   if (now < shieldUntil) {
     shieldUntil = 0; document.getElementById('game').classList.remove('shielded');
-    pushToast('🛡 Blocked ' + ABILITIES[d.kind].name + ' from ' + d.fromName, 'acc');
+    pushToast('Shield blocked ' + ABILITIES[d.kind].name + ' from ' + d.fromName, 'acc', 'shieldOk');
     sfx('pickup'); return;
   }
   sfx('hit'); buzz([40, 30, 40]);
@@ -162,12 +162,12 @@ function receiveAttack(d) {
   if (d.kind === 'frost') {
     inputLockedUntil = now + 2500; isDrawing = false;
     grid.classList.add('frosted');
-    pushToast('🧊 Frozen by ' + d.fromName + '!', 'warn');
+    pushToast('Frozen by ' + d.fromName, 'warn', 'snow');
   } else if (d.kind === 'fog') {
     grid.classList.add('fogged');
     clearTimeout(window._fogT);
     window._fogT = setTimeout(() => grid.classList.remove('fogged'), 4000);
-    pushToast('🌫 ' + d.fromName + ' fogged your board!', 'warn');
+    pushToast(d.fromName + ' fogged your board', 'warn', 'fog');
   }
-  addChatMsg(ABILITIES[d.kind].icon + ' ' + who + ' used ' + ABILITIES[d.kind].name, null, true);
+  addChatMsg(who + ' used ' + ABILITIES[d.kind].name, null, true);
 }

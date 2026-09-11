@@ -8,7 +8,7 @@ function copyRoomCode() {
   navigator.clipboard.writeText(roomCode).then(() => {
     pushToast('Room code copied!', 'acc');
     const btn = document.getElementById('copy-code-btn');
-    if (btn) { btn.innerText = '✓'; setTimeout(() => { btn.innerText = '⎘ Copy'; }, 1500); }
+    if (btn) { btn.innerHTML = ic('check') + 'Copied'; setTimeout(() => { btn.innerHTML = ic('copy') + 'Copy'; }, 1500); }
   }).catch(() => pushToast(roomCode, 'info'));
 }
 
@@ -18,6 +18,8 @@ function show(id) {
   const el = document.getElementById(id);
   if (el) el.classList.remove('hidden');
   document.body.dataset.screen = id;
+  // Any real screen means loading is over (safety net for every sign-in path)
+  document.getElementById('connecting').classList.add('hidden');
   if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); }
 }
 function isScreen(id) { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }
@@ -49,25 +51,21 @@ function updateMenuProfile() {
   document.getElementById('menu-lvl-badge-wrap').innerHTML   = getLevelBadge(xpp.lvl);
   document.getElementById('menu-name').innerText             = name;
   const title = titleName(av);
-  document.getElementById('menu-rank').innerText             = rank.icon + ' ' + rank.name + (title ? ' · ' + title : '') + ' · ' + cleared + ' cleared';
+  document.getElementById('menu-rank').innerHTML             = rankIcon(rank) + '<span>' + rank.name + (title ? ' · ' + escapeHtml(title) : '') + '</span><span class="dim">' + cleared + ' cleared</span>';
   document.getElementById('menu-xp-bar').style.width         = xpp.pct + '%';
-  document.getElementById('menu-xp-txt').innerText           = 'LVL ' + xpp.lvl + ' · ' + xpp.current + '/' + xpp.need + ' XP';
-  const uidEl = document.getElementById('menu-uid');
-  if (uidEl) {
-    const uid = (currentAccount && currentAccount.uid) || '';
-    uidEl.innerText = uid ? '#' + uid.slice(-8).toUpperCase() : '';
-    uidEl.style.display = uid ? '' : 'none';
-  }
+  document.getElementById('menu-xp-txt').innerText           = xpp.current + ' / ' + xpp.need + ' XP';
   const offlineEl = document.getElementById('menu-offline-badge');
   if (offlineEl) offlineEl.style.display = (currentAccount && (currentAccount.offline || currentAccount.local)) ? '' : 'none';
   const qb = document.getElementById('qm-bracket');
-  if (qb && typeof bracketFor === 'function') { const b = MM_BRACKETS[bracketFor(xpp.lvl)]; qb.innerText = b.icon + ' ' + b.name; }
+  if (qb && typeof bracketFor === 'function') { const i = bracketFor(xpp.lvl); qb.innerHTML = bracketIcon(i) + MM_BRACKETS[i].name; }
+  const adm = document.getElementById('menu-admin-btn');
+  if (adm) adm.hidden = !isAdminUser();
 }
 
 function updateDailyBtn() {
   const el = document.getElementById('daily-info'); if (!el) return;
   const best = (loadSave().daily || {})[todayKey()];
-  el.innerText = best ? '✓ ' + fmtMs(best) : 'NEW';
+  el.innerText = best ? fmtMs(best) : 'New';
   el.classList.toggle('done', !!best);
 }
 
@@ -81,7 +79,7 @@ function openNameEdit() {
   document.getElementById('name-input').value        = name;
   document.getElementById('name-err').innerText      = '';
   document.getElementById('name-checking').innerText = '';
-  document.getElementById('rp-icon').innerText       = rank.icon;
+  document.getElementById('rp-icon').innerHTML       = rankIcon(rank);
   document.getElementById('rp-rank').innerText       = rank.name + ' · Level ' + xpp.lvl;
   document.getElementById('rp-desc').innerText       = cleared + ' levels cleared · ' + xp + ' total XP';
   show('name-edit');
@@ -101,9 +99,9 @@ async function onNameInputChange() {
   _nameEditTimeout = setTimeout(async () => {
     if (document.getElementById('name-input').value.trim() !== val) return;
     const status = await checkNameAvailable(val);
-    if (status === 'available')   { el.innerText = '✓ Available'; el.className = 'name-checking ok'; }
-    else if (status === 'taken')  { el.innerText = '✗ Already taken globally'; el.className = 'name-checking bad'; }
-    else if (status === 'invalid'){ el.innerText = '✗ Invalid name'; el.className = 'name-checking bad'; }
+    if (status === 'available')   { el.innerHTML = ic('check') + 'Available'; el.className = 'name-checking ok'; }
+    else if (status === 'taken')  { el.innerHTML = ic('x') + 'Already taken'; el.className = 'name-checking bad'; }
+    else if (status === 'invalid'){ el.innerHTML = ic('x') + 'Invalid name'; el.className = 'name-checking bad'; }
     else el.innerText = '';
   }, 600);
 }
@@ -128,7 +126,7 @@ async function saveName() {
   if (btn) { btn.disabled = true; btn.innerText = '…'; }
   errEl.innerText = '';
   const result = await renameAccount(val);
-  if (btn) { btn.disabled = false; btn.innerText = 'Save →'; }
+  if (btn) { btn.disabled = false; btn.innerHTML = 'Save' + ic('arrowR'); }
   if (result && result.error) { errEl.innerText = result.error; return; }
 
   myName = val;
@@ -153,11 +151,11 @@ async function saveName() {
   } else {
     show('menu');
   }
-  pushToast('Profile saved! 👾', 'acc');
+  pushToast('Profile saved', 'acc');
 }
 
 // ── Chat ──
-const QUICK_EMOTES = ['👋', 'GG', '🔥', '😂', '😱', '🧊 lol', '⚡ fast!', '💀'];
+const QUICK_EMOTES = ['Hi!', 'GG', 'Nice!', 'So close', 'Too fast', 'Rematch?', 'Good luck', 'Oops'];
 function openChat() {
   chatUnread = 0;
   document.getElementById('game-chat-btn').classList.remove('has-unread');
@@ -220,11 +218,13 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 });
 
 // ── Toast ──
-function pushToast(msg, type = 'info') {
+const TOAST_ICON = { acc:'check', warn:'alert', xp:'star', info:'info' };
+function pushToast(msg, type = 'info', icon) {
   const c = document.getElementById('toast-container');
   while (c.childElementCount >= 4) c.firstChild.remove();
   const t = document.createElement('div');
-  t.className = 'toast ' + type; t.innerText = msg;
+  t.className = 'toast ' + type;
+  t.innerHTML = ic(icon || TOAST_ICON[type] || 'info') + '<span>' + escapeHtml(msg) + '</span>';
   c.appendChild(t);
   setTimeout(() => t.remove(), 2700);
 }
@@ -250,7 +250,7 @@ function spawnParticles() {
 // ── Sound / haptics toggles ──
 function toggleSound() { setSetting('sound', !getSetting('sound', true)); syncSoundBtn(); sfx('node'); }
 function syncSoundBtn() {
-  const b = document.getElementById('sound-btn'); if (b) b.innerText = getSetting('sound', true) ? '🔊' : '🔇';
+  const b = document.getElementById('sound-btn'); if (b) b.innerHTML = ic(getSetting('sound', true) ? 'sound' : 'mute');
 }
 
 // ── Long-press helper (mobile admin access) ──

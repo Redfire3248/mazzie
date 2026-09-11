@@ -1,21 +1,31 @@
 /**
  * MAZZIE — Configuration
  * ─────────────────────────────────────────────────────────────────────────────
- * adminUids: list of full account UIDs that get admin access without a PIN.
- *            Anyone NOT in this list gets nothing when pressing F2.
+ * firebaseConfig: paste the "firebaseConfig" values from
+ *   Firebase console → Project settings → General → Your apps → Web app.
+ *   (These values are public by design — security comes from database.rules.json.)
+ *   While apiKey is empty the game keeps using the old login system.
+ *   Full step-by-step: FIREBASE_SETUP.md
  *
- * To find your UID: open the game → menu → your short ID shown under your name
- * (e.g. #_FTZ83AQ is the last 8 chars — the full UID is in localStorage under
- *  key "mazzie_uid". Open DevTools → Application → Local Storage to see it.)
+ * adminEmails: Google accounts that see the Admin button. The real power comes
+ *   from the database: the same email must also be listed under /admins
+ *   (dots replaced by commas), which only you can edit in the Firebase console.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 window.MAZZIE_CONFIG = {
-  pinHash:     "5db1fee4b5703808c48078a76768b155b421b210c0761cd6a5d223f4d99f1eaa",
   firebaseUrl: "https://mazzzie-7d6bb-default-rtdb.asia-southeast1.firebasedatabase.app",
 
-  // Add full UIDs here. These players get the admin panel instantly — no PIN.
-  // Everyone else: F2 does absolutely nothing.
-  adminUids: [
-    "mz_mmw94igc_ftz83aq"   // placeholder — replace with your real full UID from localStorage
-  ]
+  firebaseConfig: {
+    apiKey:            "",                                   // ← paste from the Firebase console
+    authDomain:        "mazzzie-7d6bb.firebaseapp.com",
+    databaseURL:       "https://mazzzie-7d6bb-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId:         "mazzzie-7d6bb",
+    appId:             ""                                    // ← paste from the Firebase console
+  },
+
+  adminEmails: ["redjai1981@gmail.com"],
+
+  // Old-login fallback only (used until apiKey above is filled in)
+  adminUids: ["mz_mmw94igc_ftz83aq"],
+  pinHash:   "5db1fee4b5703808c48078a76768b155b421b210c0761cd6a5d223f4d99f1eaa"
 };

@@ -1,483 +1,625 @@
 // ══════════════════════════════════════════════════
-// js/account.js — Global account system (Firebase Realtime DB via REST)
+// js/account.js — Accounts
+//
+// Three modes (picked from config.js):
+//   secure — Firebase Authentication + locked-down database rules (database.rules.json).
+//            PIN sign-in, Google sign-in / linking, Forgot PIN, 5-try lock, bans, admin.
+//   legacy — old PIN-hash-in-database system (only until firebaseConfig.apiKey is set).
+//   local  — no Firebase at all: offline guest profile.
 // ══════════════════════════════════════════════════
 
 const ACC_UID  = 'mazzie_uid';
 const ACC_TOK  = 'mazzie_tok';
 const ACC_NAME = 'mazzie_uname';
+const LOCK_MS = 15 * 60 * 1000, MAX_TRIES = 5;
+const PIN_RE  = /^\d{4,12}$/;
+const NAME_ERR = 'Name must be 2–16 characters (letters, numbers, spaces).';
 
-let currentAccount = null;   // full account object once logged in
-let accountReady   = false;  // true once init completes
+let currentAccount = null;   // { id, name, nameLower, xp, … }
+let accountReady   = false;
+let _authUser      = null;   // firebase.User (secure mode)
 
-// ── Firebase URL from config ──
+const CFG = () => window.MAZZIE_CONFIG || {};
 function fbUrl() {
-  return (window.MAZZIE_CONFIG && window.MAZZIE_CONFIG.firebaseUrl &&
-    !window.MAZZIE_CONFIG.firebaseUrl.includes('YOUR-PROJECT'))
-    ? window.MAZZIE_CONFIG.firebaseUrl
-    : null;
+  const u = CFG().firebaseUrl;
+  return u && !u.includes('YOUR-PROJECT') ? u.replace(/\/$/, '') : null;
 }
+function fbCfg()   { const c = CFG().firebaseConfig; return c && c.apiKey ? c : null; }
+function authMode(){ return !fbUrl() ? 'local' : fbCfg() ? 'secure' : 'legacy'; }
 
-// ── REST helpers ──
-async function dbGet(path) {
-  const base = fbUrl(); if (!base) throw new Error('NO_CONFIG');
-  const r = await fetch(base + path + '.json', { cache: 'no-store' });
-  if (!r.ok) throw new Error('DB_READ_ERROR');
+// ── REST (adds the signed-in user's ID token so database rules can check it) ──
+async function dbUrl(path) {
+  const qs = [];
+  if (CFG().dbNamespace) qs.push('ns=' + encodeURIComponent(CFG().dbNamespace));
+  if (_authUser) qs.push('auth=' + encodeURIComponent(await _authUser.getIdToken()));
+  return fbUrl() + path + '.json' + (qs.length ? '?' + qs.join('&') : '');
+}
+async function dbReq(method, path, data) {
+  if (!fbUrl()) throw new Error('NO_CONFIG');
+  let r;
+  try {
+    r = await fetch(await dbUrl(path), { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+      body: data === undefined ? undefined : JSON.stringify(data) });
+  } catch (e) { throw new Error('NETWORK'); }
+  if (r.status === 401 || r.status === 403) throw new Error('DENIED');
+  if (!r.ok) throw new Error('DB_' + r.status);
   return r.json();
 }
-async function dbPut(path, data) {
-  const base = fbUrl(); if (!base) throw new Error('NO_CONFIG');
-  const r = await fetch(base + path + '.json', {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-  if (!r.ok) throw new Error('DB_WRITE_ERROR');
-  return r.json();
+const dbGet    = p => dbReq('GET', p);
+const dbPut    = (p, d) => dbReq('PUT', p, d);
+const dbPatch  = (p, d) => dbReq('PATCH', p, d);
+const dbDelete = p => dbReq('DELETE', p);
+const SERVER_TIME = { '.sv': 'timestamp' };
+
+// ── Small helpers ──
+function nameKey(name) { return String(name || '').toLowerCase().replace(/[^a-z0-9_-]/g, ''); }
+function validName(n)  { return n && n.length >= 2 && n.length <= 16 && /^[a-zA-Z0-9_ -]+$/.test(n) && nameKey(n).length >= 2; }
+function randStr(n, alphabet) {
+  const a = alphabet || 'abcdefghijkmnpqrstuvwxyz23456789';
+  return [...crypto.getRandomValues(new Uint8Array(n))].map(x => a[x % a.length]).join('');
 }
-async function dbPatch(path, data) {
-  const base = fbUrl(); if (!base) throw new Error('NO_CONFIG');
-  const r = await fetch(base + path + '.json', {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-  return r.json();
+function genUid()          { return 'mz_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9); }
+const newAccId        = () => 'ma_' + randStr(14);
+const newPlayerEmail  = () => 'p.' + randStr(14) + '@players.mazzie.game';   // never shown; PIN logins map name → this
+const pinPass         = pin => 'mz-pin:' + pin;                               // Firebase needs ≥6 chars
+function newRecoveryCode() { const s = randStr(12, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); return s.slice(0, 4) + '-' + s.slice(4, 8) + '-' + s.slice(8); }
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^(.{4})(.{4})(.{4})$/, '$1-$2-$3');
+function fmtWait(ms) { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function isNet(e) { return e && (e.message === 'NETWORK' || e.code === 'auth/network-request-failed'); }
+
+// ══════════════════════════════════════════════════
+// FIREBASE SDK (loaded only in secure mode)
+// ══════════════════════════════════════════════════
+// Modular SDK: Google's popup iframe is only loaded when someone taps a Google button
+const FB = {};           // firebase/auth functions + the app/auth instances
+let _fbReady = null;
+function initFirebase() {
+  if (_fbReady) return _fbReady;
+  _fbReady = (async () => {
+    const V = '10.12.5';
+    const [appMod, authMod] = await Promise.all([
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`)
+    ]);
+    Object.assign(FB, authMod);
+    FB.appMod = appMod;
+    const app = appMod.getApps().find(a => a.name === '[DEFAULT]') || appMod.initializeApp(fbCfg());
+    FB.auth = authMod.initializeAuth(app, { persistence: [authMod.indexedDBLocalPersistence, authMod.browserLocalPersistence] });
+    if (CFG().emulator && CFG().emulator.auth) authMod.connectAuthEmulator(FB.auth, CFG().emulator.auth, { disableWarnings: true });
+    return FB.auth;
+  })();
+  _fbReady.catch(() => { _fbReady = null; });
+  return _fbReady;
 }
-async function dbDelete(path) {
-  const base = fbUrl(); if (!base) return;
-  await fetch(base + path + '.json', { method: 'DELETE' });
+function fbUser()    { return FB.auth ? FB.auth.currentUser : null; }
+function fbSignOut() { _authUser = null; return FB.auth ? FB.signOut(FB.auth).catch(() => {}) : Promise.resolve(); }
+function waitAuthState(auth) { return new Promise(res => { const off = FB.onAuthStateChanged(auth, u => { off(); res(u); }); }); }
+function googleProvider() { const p = new FB.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; }
+function authErr(e) {
+  const c = (e && e.code) || '';
+  if (c === 'auth/network-request-failed') return 'Could not reach the server. Check your internet.';
+  if (c === 'auth/too-many-requests')      return 'Too many attempts from this device — wait a few minutes.';
+  if (c === 'auth/popup-blocked')          return 'Your browser blocked the Google window. Allow pop-ups and try again.';
+  if (c === 'auth/unauthorized-domain')    return 'Google sign-in is not enabled for this website yet (admin: add the domain in Firebase).';
+  if (c === 'auth/operation-not-allowed')  return 'This sign-in method is not switched on in Firebase yet.';
+  if (c === 'auth/credential-already-in-use' || c === 'auth/email-already-in-use') return 'That Google account already belongs to another player.';
+  if (c === 'auth/requires-recent-login')  return 'For safety, sign out and back in, then try again.';
+  return (e && e.message) || 'Something went wrong.';
+}
+const hasProvider = (u, id) => !!(u && u.providerData.some(p => p.providerId === id));
+
+// ══════════════════════════════════════════════════
+// LOCKS (5 wrong PINs → 15 minutes) + BANS — enforced by database rules
+// ══════════════════════════════════════════════════
+async function readLock(key)  { try { return await dbGet('/locks/' + key); } catch (e) { return null; } }
+function lockLeft(lock)       { return lock && lock.lockedAt ? Math.max(0, lock.lockedAt + LOCK_MS - Date.now()) : 0; }
+async function readBan(acc)   { try { const b = await dbGet('/bans/' + acc); return b && b.until > Date.now() ? b : null; } catch (e) { return null; } }
+async function recordFailure(key) {
+  const lock = (await readLock(key)) || { fails: 0, lockedAt: 0 };
+  if (lockLeft(lock)) return { locked: lockLeft(lock) };
+  const fails = (lock.fails || 0) + 1;
+  if (fails >= MAX_TRIES) {
+    await dbPut('/locks/' + key, { fails: 0, lockedAt: SERVER_TIME }).catch(() => {});
+    return { locked: lockLeft(await readLock(key)) || LOCK_MS };
+  }
+  await dbPut('/locks/' + key, { fails, lockedAt: lock.lockedAt || 0 }).catch(() => {});
+  return { left: MAX_TRIES - fails };
+}
+async function clearFailures(key) {
+  const lock = await readLock(key);
+  if (lock && lock.fails) await dbPut('/locks/' + key, { fails: 0, lockedAt: lock.lockedAt || 0 }).catch(() => {});
+}
+async function failureResult(key, what) {
+  const r = await recordFailure(key);
+  if (r.locked) return { locked: r.locked };
+  return { error: `Wrong ${what} — ${r.left} ${r.left === 1 ? 'try' : 'tries'} left before a 15 minute lock.` };
 }
 
-// ── Sanitise name for use as a Firebase key ──
-function nameKey(name) {
-  return name.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-}
-
-// ── Generate a fresh UID ──
-function genUid() {
-  return 'mz_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
-}
-
-// ════════════════════════════════════════════════
-// CHECK NAME AVAILABLE (globally)
-// Returns: 'available' | 'taken' | 'invalid' | 'error'
-// ════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// NAME AVAILABILITY
+// ══════════════════════════════════════════════════
 async function checkNameAvailable(name) {
-  const n = name.trim();
-  if (!n || n.length < 2 || n.length > 16)     return 'invalid';
-  if (!/^[a-zA-Z0-9_ -]+$/.test(n))             return 'invalid';
-  const key = nameKey(n);
-  if (!key || key.length < 2)                   return 'invalid';
-  try {
-    const rec = await dbGet('/usernames/' + key);
-    return rec === null ? 'available' : 'taken';
-  } catch(e) {
-    if (e.message === 'NO_CONFIG') return 'available'; // local mode — no global check
-    return 'error';
-  }
+  const n = String(name || '').trim();
+  if (!validName(n)) return 'invalid';
+  try { return (await dbGet('/usernames/' + nameKey(n))) === null ? 'available' : 'taken'; }
+  catch (e) { return e.message === 'NO_CONFIG' ? 'available' : 'error'; }
 }
 
-// ════════════════════════════════════════════════
-// REGISTER
-// ════════════════════════════════════════════════
-async function registerAccount(name, pin) {
-  const n = name.trim();
-  if (!n || n.length < 2 || n.length > 16 || !/^[a-zA-Z0-9_ -]+$/.test(n))
-    return { error: 'Name must be 2–16 characters (letters, numbers, spaces).' };
-  if (!pin || pin.length < 4 || !/^\d+$/.test(pin))
-    return { error: 'PIN must be at least 4 digits.' };
+// ══════════════════════════════════════════════════
+// SECURE MODE — sign in / register / Google / recovery
+// ══════════════════════════════════════════════════
+async function secureSignInPin(name, pin) {
+  const key = nameKey(name.trim());
+  if (!key) return { error: 'Enter your username.' };
+  if (!PIN_RE.test(pin)) return { error: 'PIN must be 4–12 digits.' };
+  let auth, rec;
+  try { auth = await initFirebase(); } catch (e) { return { error: 'Could not load sign-in. Check your internet.' }; }
+  try { rec = await dbGet('/usernames/' + key); } catch (e) { return { error: 'Could not reach the server. Check your internet.' }; }
+  if (!rec) return { error: 'No account found with that name.' };
+  const lock = await readLock(key);
+  if (lockLeft(lock)) return { locked: lockLeft(lock) };
 
-  const key = nameKey(n);
-  if (!fbUrl()) {
-    // Local mode — just save locally, no global uniqueness
-    const uid      = genUid();
-    const pinHash  = await sha256(pin + uid);
-    const account  = buildAccountObj(n, uid, pinHash);
-    saveTokenLocally(uid, pinHash, n);
-    applyAccountLocally(account);
-    return { ok: true, account, offline: true };
+  if (!rec.acc && rec.uid) return migrateLegacy(auth, key, rec, pin);
+  if (!rec.email) return { error: 'This account uses Google sign-in. Tap "Continue with Google".' };
+  try { await FB.signInWithEmailAndPassword(auth, rec.email, pinPass(pin)); }
+  catch (e) {
+    if (['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/user-not-found'].includes(e.code))
+      return failureResult(key, 'PIN');
+    return { error: authErr(e) };
   }
+  return loadSignedInAccount(key);
+}
 
-  // Check name globally
+// Old accounts (PIN hash stored in the database) are upgraded on their first sign-in
+async function migrateLegacy(auth, key, rec, pin) {
+  let legacy;
+  try { legacy = await dbGet('/accounts/' + rec.uid); } catch (e) { return { error: 'Could not reach the server.' }; }
+  if (!legacy || legacy.owner) return { error: 'Account data missing — ask an admin.' };
+  if ((await sha256(pin + rec.uid)) !== legacy.pinHash) return failureResult(key, 'PIN');
+  const ban = await readBan(rec.uid);           // banned players see the ban, not a half-finished upgrade
+  if (ban) return { banned: ban };
+  try {
+    const email = newPlayerEmail();
+    const cred = await FB.createUserWithEmailAndPassword(auth, email, pinPass(pin));
+    _authUser = cred.user;
+    await dbPatch('/accounts/' + rec.uid, { owner: cred.user.uid, legacyProof: legacy.pinHash });
+    await dbPut('/owners/' + cred.user.uid, rec.uid);
+    await dbPut('/usernames/' + key, { acc: rec.uid, email, createdAt: rec.createdAt || Date.now() });
+    await dbPatch('/accounts/' + rec.uid, { pinHash: null, legacyProof: null });
+    const code = newRecoveryCode();
+    await dbPut('/recovery/' + rec.uid, { code });
+    const r = await loadSignedInAccount(key);
+    return { ...r, recoveryCode: code, migrated: true };
+  } catch (e) { return { error: 'Upgrade failed: ' + authErr(e) }; }
+}
+
+async function secureRegister(name, pin) {
+  const n = name.trim();
+  if (!validName(n)) return { error: NAME_ERR };
+  if (!PIN_RE.test(pin)) return { error: 'PIN must be 4–12 digits.' };
   const status = await checkNameAvailable(n);
-  if (status === 'taken')   return { error: 'That name is already taken. Choose another.' };
-  if (status === 'invalid') return { error: 'Name must be 2–16 characters (letters, numbers, spaces).' };
-  if (status === 'error')   return { error: 'Could not reach server. Check your internet.' };
-
-  const uid     = genUid();
-  const pinHash = await sha256(pin + uid);
-  const account = buildAccountObj(n, uid, pinHash);
-
-  // Claim the name (Firebase rule: !data.exists() prevents overwrites)
-  try {
-    await dbPut('/usernames/' + key, { uid, createdAt: Date.now() });
-  } catch(e) {
-    return { error: 'That name was just taken. Try another.' };
-  }
-  // Create account record
-  try {
-    await dbPut('/accounts/' + uid, account);
-  } catch(e) {
-    await dbDelete('/usernames/' + key); // rollback
-    return { error: 'Account creation failed. Try again.' };
-  }
-
-  saveTokenLocally(uid, pinHash, n);
-  applyAccountLocally(account);
-  return { ok: true, account };
+  if (status === 'taken') return { error: 'That name is already taken. Choose another.' };
+  if (status === 'error') return { error: 'Could not reach the server. Check your internet.' };
+  let auth, cred;
+  const email = newPlayerEmail();
+  try { auth = await initFirebase(); cred = await FB.createUserWithEmailAndPassword(auth, email, pinPass(pin)); }
+  catch (e) { return { error: authErr(e) }; }
+  return createAccountFor(cred.user, n, email);
 }
 
-// ════════════════════════════════════════════════
-// LOGIN
-// ════════════════════════════════════════════════
-async function loginAccount(name, pin) {
-  const n = name.trim();
-  if (!fbUrl()) return { error: 'Firebase not configured — cannot sign in online.' };
-
-  const key = nameKey(n);
-  let nameRec;
-  try { nameRec = await dbGet('/usernames/' + key); }
-  catch(e) { return { error: 'Could not reach server. Check your internet.' }; }
-
-  if (!nameRec || !nameRec.uid)
-    return { error: 'No account found with that name.' };
-
-  let account;
-  try { account = await dbGet('/accounts/' + nameRec.uid); }
-  catch(e) { return { error: 'Could not reach server.' }; }
-  if (!account) return { error: 'Account data missing. Contact admin.' };
-
-  const pinHash = await sha256(pin + nameRec.uid);
-  if (pinHash !== account.pinHash)
-    return { error: 'Wrong PIN. Try again.' };
-
-  // Update last seen
-  dbPatch('/accounts/' + nameRec.uid, { lastSeen: Date.now() }).catch(() => {});
-
-  saveTokenLocally(nameRec.uid, pinHash, account.name);
-  applyAccountLocally(account);
-  return { ok: true, account };
+// Creates the game account for a freshly signed-in Firebase user
+async function createAccountFor(user, name, email) {
+  _authUser = user;
+  const key = nameKey(name), acc = newAccId();
+  const google = user.providerData.find(p => p.providerId === 'google.com');
+  try {
+    await dbPut('/accounts/' + acc, {
+      owner: user.uid, name, nameLower: key, xp: 0, totalCleared: 0, xpAt: SERVER_TIME, level: 1, diff: 'easy',
+      avatar: getMyAvatar(), google: google ? { email: google.email } : null,
+      createdAt: SERVER_TIME, lastSeen: SERVER_TIME
+    });
+    await dbPut('/owners/' + user.uid, acc);
+  } catch (e) { return { error: 'Account creation failed. Try again.' }; }
+  try { await dbPut('/usernames/' + key, { acc, email: email || null, createdAt: Date.now() }); }
+  catch (e) { await dbDelete('/owners/' + user.uid).catch(() => {}); return { error: 'That name was just taken. Try another.' }; }
+  const code = newRecoveryCode();
+  await dbPut('/recovery/' + acc, { code }).catch(() => {});
+  const r = await loadSignedInAccount(key);
+  return { ...r, recoveryCode: code, created: true };
 }
 
-// ════════════════════════════════════════════════
-// AUTO-LOGIN (on app start)
-// ════════════════════════════════════════════════
-async function tryAutoLogin() {
-  const uid  = localStorage.getItem(ACC_UID);
-  const tok  = localStorage.getItem(ACC_TOK);
+// After Firebase says who you are: find + load your game account (honours bans & locks)
+async function loadSignedInAccount(keyHint) {
+  const u = fbUser(); _authUser = u;
+  if (!u) return { error: 'Not signed in.' };
+  let acc, account;
+  try { acc = await dbGet('/owners/' + u.uid); }
+  catch (e) { return isNet(e) ? offlineSession() : { error: 'Could not load your account.' }; }
+  if (!acc) return { needsName: true, email: u.email || '' };
+  const [ban, got] = await Promise.all([readBan(acc), dbGet('/accounts/' + acc).then(a => ({ a }), e => ({ e }))]);
+  if (ban) { await fbSignOut(); return { banned: ban }; }
+  try { if (got.e) throw got.e; account = got.a; }
+  catch (e) {
+    if (isNet(e)) return offlineSession();
+    if (e.message === 'DENIED') {
+      const key = keyHint || nameKey(localStorage.getItem(ACC_NAME) || '');
+      const lock = key ? await readLock(key) : null;
+      await fbSignOut();
+      if (lockLeft(lock)) return { locked: lockLeft(lock) };
+      return { error: 'Your account is locked right now. Try again soon.' };
+    }
+    return { error: 'Could not load your account.' };
+  }
+  if (!account) return { needsName: true, email: u.email || '' };
+  account.id = acc;
+  if (account.pinHash || account.legacyProof) dbPatch('/accounts/' + acc, { pinHash: null, legacyProof: null }).catch(() => {});
+  applyAccountLocally(account);
+  localStorage.setItem(ACC_NAME, account.name);
+  clearFailures(account.nameLower).catch(() => {});
+  dbPatch('/accounts/' + acc, { lastSeen: SERVER_TIME }).catch(() => {});
+  return { ok: true, account };
+}
+function offlineSession() {
   const name = localStorage.getItem(ACC_NAME);
-
-  if (!uid || !tok) return false;
-
-  if (!fbUrl()) {
-    // Local mode — trust the stored token
-    if (name) {
-      currentAccount = { uid, name, pinHash: tok, local: true, xp: 0, totalCleared: 0 };
-      applyAccountLocally(currentAccount);
-      return true;
-    }
-    return false;
-  }
-
-  try {
-    const account = await dbGet('/accounts/' + uid);
-    if (!account || account.pinHash !== tok) {
-      clearTokenLocally();
-      return false;
-    }
-    dbPatch('/accounts/' + uid, { lastSeen: Date.now() }).catch(() => {});
-    applyAccountLocally(account);
-    return true;
-  } catch(e) {
-    // Offline — allow using cached credentials
-    if (name) {
-      currentAccount = { uid, name, pinHash: tok, offline: true, xp: 0, totalCleared: 0 };
-      applyAccountLocally(currentAccount);
-      pushToast('Playing offline — stats will sync later.', 'info');
-      return true;
-    }
-    return false;
-  }
+  if (!name) return { error: 'You are offline. Connect to sign in.' };
+  currentAccount = { id: myId, name, offline: true };
+  myName = name; writeSave({ name });
+  pushToast('Playing offline — progress syncs later', 'info');
+  return { ok: true, account: currentAccount, offline: true };
 }
 
-// ════════════════════════════════════════════════
-// RENAME (change username, globally enforced)
-// ════════════════════════════════════════════════
-async function renameAccount(newName) {
-  if (!currentAccount) return { error: 'Not logged in.' };
-  const n = newName.trim();
-  if (!n || n.length < 2 || n.length > 16 || !/^[a-zA-Z0-9_ -]+$/.test(n))
-    return { error: 'Name must be 2–16 characters (letters, numbers, spaces).' };
-
-  const newKey = nameKey(n);
-  const oldKey = nameKey(currentAccount.name);
-
-  if (newKey === oldKey) {
-    // Same name (maybe different capitalisation) — just update display
-    currentAccount.name = n;
-    if (fbUrl()) dbPatch('/accounts/' + currentAccount.uid, { name: n }).catch(() => {});
-    localStorage.setItem(ACC_NAME, n);
-    return { ok: true };
-  }
-
-  if (!fbUrl()) {
-    // Local mode — just update
-    const oldName = currentAccount.name;
-    currentAccount.name = n;
-    localStorage.setItem(ACC_NAME, n);
-    writeSave({ name: n });
-    return { ok: true, offline: true };
-  }
-
-  const status = await checkNameAvailable(n);
-  if (status === 'taken')   return { error: 'That name is already taken.' };
-  if (status === 'invalid') return { error: 'Name must be 2–16 chars (letters, numbers, spaces).' };
-  if (status === 'error')   return { error: 'Could not reach server.' };
-
-  // Claim new name
+// ── Google ──
+async function googleUserFlow(fn) {
+  let auth;
+  try { auth = await initFirebase(); } catch (e) { return { error: 'Could not load sign-in. Check your internet.' }; }
   try {
-    await dbPut('/usernames/' + newKey, { uid: currentAccount.uid, createdAt: Date.now() });
-  } catch(e) {
-    return { error: 'That name was just taken. Try another.' };
+    // Automated tests (emulator only) inject a fake Google credential instead of a popup
+    if (CFG().emulator && window.__mzGoogleIdToken) await fn(auth, FB.GoogleAuthProvider.credential(window.__mzGoogleIdToken));
+    else await fn(auth, null);
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return { cancelled: true };
+    if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+      if (fn === _googleSignInFn) { sessionStorage.setItem('mz_redirect', '1'); await FB.signInWithRedirect(auth, googleProvider(), FB.browserPopupRedirectResolver); return { redirect: true }; }
+    }
+    return { error: authErr(e) };
   }
-  // Release old name
-  dbDelete('/usernames/' + oldKey).catch(() => {});
-  // Update account
-  currentAccount.name = n;
-  dbPatch('/accounts/' + currentAccount.uid, { name: n }).catch(() => {});
-  localStorage.setItem(ACC_NAME, n);
-  writeSave({ name: n });
+  return null;
+}
+const _googleSignInFn = (auth, cred) => cred ? FB.signInWithCredential(auth, cred) : FB.signInWithPopup(auth, googleProvider(), FB.browserPopupRedirectResolver);
+async function secureGoogleSignIn() {
+  const fail = await googleUserFlow(_googleSignInFn);
+  if (fail) return fail;
+  return loadSignedInAccount();
+}
+async function completeGoogleSignup(name) {
+  const n = name.trim();
+  if (!validName(n)) return { error: NAME_ERR };
+  const status = await checkNameAvailable(n);
+  if (status === 'taken') return { error: 'That name is already taken. Choose another.' };
+  if (status === 'error') return { error: 'Could not reach the server.' };
+  const u = fbUser();
+  if (!u) return { error: 'Google session expired — try again.' };
+  return createAccountFor(u, n, null);
+}
+async function linkGoogle() {
+  const u = fbUser();
+  if (!u) return { error: 'Sign in first.' };
+  if (hasProvider(u, 'google.com')) return { error: 'Google is already linked.' };
+  const fail = await googleUserFlow((auth, cred) => cred ? FB.linkWithCredential(u, cred) : FB.linkWithPopup(u, googleProvider(), FB.browserPopupRedirectResolver));
+  if (fail) return fail;
+  await FB.reload(u);
+  const g = fbUser().providerData.find(p => p.providerId === 'google.com');
+  const email = g ? g.email : '';
+  await dbPatch('/accounts/' + currentAccount.id, { google: { email } }).catch(() => {});
+  currentAccount.google = { email };
+  return { ok: true, email };
+}
+async function unlinkGoogle() {
+  const u = fbUser();
+  if (!hasProvider(u, 'password')) return { error: 'Set a PIN first — otherwise you could not sign in any more.' };
+  try { await FB.unlink(u, 'google.com'); } catch (e) { return { error: authErr(e) }; }
+  await dbPatch('/accounts/' + currentAccount.id, { google: null }).catch(() => {});
+  currentAccount.google = null;
   return { ok: true };
 }
 
-// ════════════════════════════════════════════════
-// SYNC stats to cloud (call after every win)
-// ════════════════════════════════════════════════
-async function syncAccountToCloud() {
-  if (!currentAccount || currentAccount.local || currentAccount.offline) return;
-  const uid = currentAccount.uid;
-  if (!uid || !fbUrl()) return;
-  const s = loadSave();
+// ── PIN change / first PIN for Google-only players ──
+async function setAccountPin(newPin, currentPin) {
+  if (!PIN_RE.test(newPin)) return { error: 'PIN must be 4–12 digits.' };
+  const u = fbUser();
+  if (!u) return { error: 'Sign in first.' };
   try {
-    await dbPatch('/accounts/' + uid, {
-      xp:           s.xp || 0,
-      totalCleared: s.totalCleared || 0,
-      level:        s.level || 1,
-      diff:         s.diff || 'easy',
-      avatar:       getMyAvatar(),
-      lastSeen:     Date.now()
-    });
-  } catch(e) { /* offline — will sync next time */ }
+    if (hasProvider(u, 'password')) {
+      if (currentPin) await FB.reauthenticateWithCredential(u, FB.EmailAuthProvider.credential(u.email, pinPass(currentPin)));
+      await FB.updatePassword(u, pinPass(newPin));
+    } else {
+      const email = newPlayerEmail();
+      await FB.linkWithCredential(u, FB.EmailAuthProvider.credential(email, pinPass(newPin)));
+      const rec = (await dbGet('/usernames/' + currentAccount.nameLower)) || {};
+      await dbPut('/usernames/' + currentAccount.nameLower, { acc: currentAccount.id, email, createdAt: rec.createdAt || Date.now() });
+    }
+  } catch (e) {
+    if (['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(e.code)) return failureResult(currentAccount.nameLower, 'current PIN');
+    return { error: authErr(e) };
+  }
+  return { ok: true };
+}
+function accountHasPin()    { return hasProvider(_authUser, 'password'); }
+function accountHasGoogle() { return hasProvider(_authUser, 'google.com'); }
+
+async function regenerateRecoveryCode() {
+  const code = newRecoveryCode();
+  try { await dbPut('/recovery/' + currentAccount.id, { code }); } catch (e) { return { error: 'Could not save a new code.' }; }
+  return { ok: true, code };
 }
 
-// ════════════════════════════════════════════════
-// INIT (called on app load)
-// ════════════════════════════════════════════════
+// ── Forgot PIN: recovery code ──
+async function recoverWithCode(name, code, newPin) {
+  const key = nameKey(name.trim());
+  if (!key) return { error: 'Enter your username.' };
+  if (!PIN_RE.test(newPin)) return { error: 'New PIN must be 4–12 digits.' };
+  const proof = normCode(code);
+  if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(proof)) return { error: 'Recovery codes look like ABCD-EFGH-JKMN.' };
+  let auth, rec;
+  try { auth = await initFirebase(); rec = await dbGet('/usernames/' + key); } catch (e) { return { error: 'Could not reach the server.' }; }
+  if (!rec) return { error: 'No account found with that name.' };
+  if (!rec.acc) return { error: 'This account has not been upgraded yet — sign in with your PIN once, or ask an admin.' };
+  const lock = await readLock(key);
+  if (lockLeft(lock)) return { locked: lockLeft(lock) };
+  let cred;
+  const email = newPlayerEmail();
+  try { cred = await FB.createUserWithEmailAndPassword(auth, email, pinPass(newPin)); } catch (e) { return { error: authErr(e) }; }
+  _authUser = cred.user;
+  try { await dbPatch('/accounts/' + rec.acc, { owner: cred.user.uid, recoveryProof: proof, google: null }); }
+  catch (e) {
+    await FB.deleteUser(cred.user).catch(() => {}); _authUser = null;
+    return e.message === 'DENIED' ? failureResult(key, 'recovery code') : { error: 'Could not reach the server.' };
+  }
+  try {
+    await dbPut('/owners/' + cred.user.uid, rec.acc);
+    await dbPut('/usernames/' + key, { acc: rec.acc, email, createdAt: rec.createdAt || Date.now() });
+    await dbPatch('/accounts/' + rec.acc, { recoveryProof: null });
+  } catch (e) { return { error: 'Recovery half-finished — try again.' }; }
+  const newCode = newRecoveryCode();
+  await dbPut('/recovery/' + rec.acc, { code: newCode }).catch(() => {});
+  const r = await loadSignedInAccount(key);
+  return { ...r, recoveryCode: newCode, recovered: true };
+}
+
+// ══════════════════════════════════════════════════
+// ADMIN (all enforced by the database rules — the UI only decides what to show)
+// ══════════════════════════════════════════════════
+function isAdminUser() {
+  const cfg = CFG();
+  if (authMode() === 'secure') {
+    const u = _authUser;
+    return !!(u && u.emailVerified && (cfg.adminEmails || []).some(e => e.toLowerCase() === String(u.email || '').toLowerCase()));
+  }
+  // legacy / local fallback: UID whitelist (not tamper-proof — secure mode fixes that)
+  const uid = (currentAccount && (currentAccount.id || currentAccount.uid)) || localStorage.getItem(ACC_UID) || '';
+  if (!uid) return false;
+  const short = uid.slice(-8).toUpperCase();
+  return (cfg.adminUids || []).some(a => a === uid || a.replace('#', '').toUpperCase() === short);
+}
+async function adminListAccounts() {
+  const [accs, bans, locks] = await Promise.all([dbGet('/accounts'), dbGet('/bans').catch(() => null), dbGet('/locks').catch(() => null)]);
+  return Object.entries(accs || {}).map(([id, a]) => ({
+    id, name: a.name || '?', nameLower: a.nameLower || nameKey(a.name), xp: a.xp || 0, lvl: getXpLevel(a.xp || 0),
+    cleared: a.totalCleared || 0, lastSeen: typeof a.lastSeen === 'number' ? a.lastSeen : 0, createdAt: a.createdAt || 0,
+    google: a.google && a.google.email || '', legacy: !a.owner,
+    ban: bans && bans[id] && bans[id].until > Date.now() ? bans[id] : null,
+    lockLeft: locks && lockLeft(locks[a.nameLower])
+  }));
+}
+async function adminBan(acc, minutes, reason) {
+  const until = Date.now() + minutes * 60000;
+  await dbPut('/bans/' + acc, { until, reason: reason || '', by: (_authUser && _authUser.email) || 'admin' });
+  return until;
+}
+const adminUnban  = acc => dbDelete('/bans/' + acc);
+const adminSetProgress = (acc, xp, cleared) => dbPatch('/accounts/' + acc, cleared == null ? { xp } : { xp, totalCleared: cleared });
+const adminUnlock = key => dbPut('/locks/' + key, { fails: 0, lockedAt: 0 });
+// Issue a temporary PIN: a helper Firebase app creates a fresh login and the account is moved onto it
+async function adminResetPin(acc) {
+  const account = await dbGet('/accounts/' + acc);
+  if (!account) throw new Error('no such account');
+  const pin = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+  if (!FB.helperAuth) {   // separate in-memory auth so the admin stays signed in
+    const helper = FB.appMod.getApps().find(a => a.name === 'mz-admin-helper') || FB.appMod.initializeApp(fbCfg(), 'mz-admin-helper');
+    FB.helperAuth = FB.initializeAuth(helper, { persistence: FB.inMemoryPersistence });
+    if (CFG().emulator && CFG().emulator.auth) FB.connectAuthEmulator(FB.helperAuth, CFG().emulator.auth, { disableWarnings: true });
+  }
+  const email = newPlayerEmail();
+  const cred = await FB.createUserWithEmailAndPassword(FB.helperAuth, email, pinPass(pin));
+  const newUid = cred.user.uid;
+  await FB.signOut(FB.helperAuth);
+  const key = account.nameLower || nameKey(account.name);
+  const rec = (await dbGet('/usernames/' + key)) || {};
+  await dbPatch('/accounts/' + acc, { owner: newUid, google: null, pinHash: null });
+  await dbPut('/owners/' + newUid, acc);
+  await dbPut('/usernames/' + key, { acc, email, createdAt: rec.createdAt || Date.now() });
+  if (account.owner) await dbDelete('/owners/' + account.owner).catch(() => {});
+  await adminUnlock(key).catch(() => {});
+  return { pin, hadGoogle: !!(account.google && account.google.email) };
+}
+
+// ══════════════════════════════════════════════════
+// LEGACY MODE (until firebaseConfig.apiKey is filled in)
+// ══════════════════════════════════════════════════
+async function legacyRegister(name, pin) {
+  const n = name.trim();
+  if (!validName(n)) return { error: NAME_ERR };
+  if (!PIN_RE.test(pin)) return { error: 'PIN must be 4–12 digits.' };
+  const status = await checkNameAvailable(n);
+  if (status === 'taken') return { error: 'That name is already taken. Choose another.' };
+  if (status === 'error') return { error: 'Could not reach the server. Check your internet.' };
+  const uid = genUid(), pinHash = await sha256(pin + uid), key = nameKey(n);
+  const account = { uid, name: n, nameLower: key, pinHash, xp: 0, totalCleared: 0, level: 1, diff: 'easy', createdAt: Date.now(), lastSeen: Date.now() };
+  try { await dbPut('/usernames/' + key, { uid, createdAt: Date.now() }); } catch (e) { return { error: 'That name was just taken. Try another.' }; }
+  try { await dbPut('/accounts/' + uid, account); } catch (e) { await dbDelete('/usernames/' + key).catch(() => {}); return { error: 'Account creation failed. Try again.' }; }
+  saveTokenLocally(uid, pinHash, n);
+  applyAccountLocally({ ...account, id: uid });
+  return { ok: true, account: currentAccount };
+}
+async function legacyLogin(name, pin) {
+  const key = nameKey(name.trim());
+  let rec, account;
+  try { rec = await dbGet('/usernames/' + key); } catch (e) { return { error: 'Could not reach the server. Check your internet.' }; }
+  if (!rec || !rec.uid) return { error: 'No account found with that name.' };
+  try { account = await dbGet('/accounts/' + rec.uid); } catch (e) { return { error: 'Could not reach the server.' }; }
+  if (!account) return { error: 'Account data missing. Contact admin.' };
+  const pinHash = await sha256(pin + rec.uid);
+  if (pinHash !== account.pinHash) return { error: 'Wrong PIN. Try again.' };
+  dbPatch('/accounts/' + rec.uid, { lastSeen: Date.now() }).catch(() => {});
+  saveTokenLocally(rec.uid, pinHash, account.name);
+  applyAccountLocally({ ...account, id: rec.uid });
+  return { ok: true, account: currentAccount };
+}
+async function legacyAutoLogin() {
+  const uid = localStorage.getItem(ACC_UID), tok = localStorage.getItem(ACC_TOK), name = localStorage.getItem(ACC_NAME);
+  if (!uid || !tok) return false;
+  try {
+    const account = await dbGet('/accounts/' + uid);
+    if (!account || account.pinHash !== tok) { clearTokenLocally(); return false; }
+    dbPatch('/accounts/' + uid, { lastSeen: Date.now() }).catch(() => {});
+    applyAccountLocally({ ...account, id: uid });
+    return true;
+  } catch (e) {
+    if (!name) return false;
+    currentAccount = { id: uid, name, offline: true }; myName = name; myId = uid; writeSave({ name });
+    pushToast('Playing offline — progress syncs later', 'info');
+    return true;
+  }
+}
+
+// ══════════════════════════════════════════════════
+// COMMON: rename, sync, init, logout
+// ══════════════════════════════════════════════════
+async function renameAccount(newName) {
+  if (!currentAccount) return { error: 'Not signed in.' };
+  const n = newName.trim();
+  if (!validName(n)) return { error: NAME_ERR };
+  const newKey = nameKey(n), oldKey = nameKey(currentAccount.name), acc = currentAccount.id;
+  const finish = () => { currentAccount.name = n; currentAccount.nameLower = newKey; localStorage.setItem(ACC_NAME, n); writeSave({ name: n }); return { ok: true }; };
+  if (authMode() === 'local' || currentAccount.offline) return finish();
+  if (newKey === oldKey) { dbPatch('/accounts/' + acc, { name: n }).catch(() => {}); return finish(); }
+  const status = await checkNameAvailable(n);
+  if (status === 'taken') return { error: 'That name is already taken.' };
+  if (status !== 'available') return { error: status === 'invalid' ? NAME_ERR : 'Could not reach the server.' };
+  try {
+    if (authMode() === 'secure') {
+      const old = (await dbGet('/usernames/' + oldKey)) || {};
+      await dbPut('/usernames/' + newKey, { acc, email: old.email || null, createdAt: Date.now() });
+      await dbPatch('/accounts/' + acc, { name: n, nameLower: newKey });
+      await dbDelete('/usernames/' + oldKey).catch(() => {});
+    } else {
+      await dbPut('/usernames/' + newKey, { uid: acc, createdAt: Date.now() });
+      await dbDelete('/usernames/' + oldKey).catch(() => {});
+      await dbPatch('/accounts/' + acc, { name: n, nameLower: newKey });
+    }
+  } catch (e) { return { error: 'That name was just taken. Try another.' }; }
+  return finish();
+}
+
+async function syncAccountToCloud() {
+  if (!currentAccount || currentAccount.local || currentAccount.offline || !fbUrl()) return;
+  if (authMode() === 'secure' && !_authUser) return;
+  const s = loadSave(), id = currentAccount.id, secure = authMode() === 'secure';
+  // Looks + position first: these never get held back by the anti-cheat limits
+  try {
+    await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), lastSeen: secure ? SERVER_TIME : Date.now() });
+  } catch (e) { return; }
+  // Progress is stamped with the server clock; the database rejects impossible jumps.
+  // A rejected jump simply retries on later syncs, once enough real time has passed.
+  try {
+    await dbPatch('/accounts/' + id, secure
+      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, xpAt: SERVER_TIME }
+      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0 });
+  } catch (e) { /* offline or over the speed limit — next sync */ }
+}
+
 async function initAccount(onReady) {
   document.getElementById('conn-txt').innerText = 'LOADING…';
-
-  // ── LOCAL MODE: no Firebase URL configured ──
-  // Behave exactly like the old version — no auth screen, just load name from localStorage
-  if (!fbUrl()) {
-    const s    = loadSave();
+  const mode = authMode();
+  if (mode === 'local') {
+    const s = loadSave();
     const name = s.name || localStorage.getItem(ACC_NAME) || '';
     const uid  = localStorage.getItem(ACC_UID) || genUid();
     localStorage.setItem(ACC_UID, uid);
-    currentAccount = { uid, name: name || 'Racer', local: true, xp: s.xp||0, totalCleared: s.totalCleared||0 };
-    myName = currentAccount.name;
-    myId   = uid;
-    accountReady = true;
+    currentAccount = { id: uid, name: name || 'Racer', local: true };
+    myName = currentAccount.name; myId = uid; accountReady = true;
     hideConnecting();
-    if (!name) {
-      // First time — show name edit screen like the original game did
-      updateMenuProfile();
-      show('menu');
-      setTimeout(openNameEdit, 400);
-    } else {
-      onReady(name);
-    }
+    if (!name) { updateMenuProfile(); show('menu'); setTimeout(openNameEdit, 400); }
+    else onReady(name);
     return;
   }
+  if (mode === 'legacy') {
+    if (await legacyAutoLogin()) { accountReady = true; onReady(currentAccount.name); return; }
+    hideConnecting(); showAuthScreen(); return;
+  }
+  // secure
+  let auth;
+  try { auth = await initFirebase(); }
+  catch (e) {
+    const r = offlineSession(); hideConnecting();
+    if (r.ok) { accountReady = true; onReady(currentAccount.name); } else showAuthScreen();
+    return;
+  }
+  // Only returning from a Google redirect needs this (it loads a slow Google iframe)
+  if (sessionStorage.getItem('mz_redirect')) {
+    sessionStorage.removeItem('mz_redirect');
+    try { await FB.getRedirectResult(auth, FB.browserPopupRedirectResolver); } catch (e) { pushToast(authErr(e), 'warn'); }
+  }
+  performance.mark('mz-sdk-ready');
+  const user = await waitAuthState(auth);
+  performance.mark('mz-auth-state');
+  if (!user) { hideConnecting(); showAuthScreen(); return; }
+  _authUser = user;
+  handleAuthResult(await loadSignedInAccount(), 'auto');
+}
 
-  // ── FIREBASE MODE ──
-  const ok = await tryAutoLogin();
-  if (ok) {
-    accountReady = true;
-    onReady(currentAccount.name);
-    return;
-  }
-  // No saved session — show auth screen
-  hideConnecting();
+function logoutAccount() {
+  syncAccountToCloud().catch(() => {});
+  const mode = authMode();
+  currentAccount = null; accountReady = false; myName = 'Racer';
+  if (mode === 'local') { writeSave({ name: '' }); updateMenuProfile(); show('menu'); setTimeout(openNameEdit, 200); return; }
+  clearTokenLocally();
+  // Progress lives in the cloud — don't leave it for the next person on this device
+  const s = loadSave();
+  localStorage.setItem('mazzie', JSON.stringify({ settings: s.settings || {} }));
+  applyMyCosmetics();
+  if (mode === 'secure') fbSignOut();
+  _authUser = null;
   showAuthScreen();
 }
 
-// ── logoutAccount: local mode just clears name and re-opens name edit ──
-function logoutAccount() {
-  syncAccountToCloud().catch(() => {});
-  if (!fbUrl()) {
-    // Local mode logout — just clear name, go back to name edit
-    currentAccount = null; accountReady = false;
-    writeSave({ name: '' });
-    myName = 'Racer';
-    updateMenuProfile();
-    show('menu');
-    setTimeout(openNameEdit, 200);
-    return;
-  }
-  clearTokenLocally();
-  currentAccount = null; accountReady = false;
-  writeSave({ name: '' });
-  myName = 'Racer';
-  show('auth');
-  _renderAuthTab();
-}
-
-// ════════════════════════════════════════════════
-// AUTH SCREEN CONTROLLER
-// ════════════════════════════════════════════════
-let _authTab = 'login'; // 'login' | 'register'
-
-function showAuthScreen() {
-  _authTab = 'login';
-  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
-  document.getElementById('auth').classList.remove('hidden');
-  _renderAuthTab();
-  setTimeout(() => {
-    const f = document.getElementById('auth-name-input');
-    if (f) { f.style.touchAction = 'auto'; f.focus(); }
-  }, 300);
-}
-
-function authSwitchTab(tab) {
-  _authTab = tab;
-  _renderAuthTab();
-}
-
-function _renderAuthTab() {
-  const isReg = _authTab === 'register';
-  document.getElementById('auth-tab-login').classList.toggle('active',  !isReg);
-  document.getElementById('auth-tab-reg').classList.toggle('active',   isReg);
-  document.getElementById('auth-heading').innerText     = isReg ? 'Create Account' : 'Welcome Back';
-  document.getElementById('auth-sub').innerText         = isReg
-    ? 'Pick a unique name and PIN'
-    : 'Enter your name and PIN';
-  document.getElementById('auth-submit-btn').innerText  = isReg ? 'Create Account →' : 'Sign In →';
-  document.getElementById('auth-err').innerText         = '';
-  document.getElementById('auth-name-input').value      = '';
-  document.getElementById('auth-pin-input').value       = '';
-  if (isReg) {
-    document.getElementById('auth-name-status').innerText = '';
-  }
-  const checkRow = document.getElementById('auth-name-check-row');
-  if (checkRow) checkRow.style.display = isReg ? 'flex' : 'none';
-}
-
-// Live name availability check (register tab only)
-let _nameCheckTimeout = null;
-async function authCheckName() {
-  if (_authTab !== 'register') return;
-  const val = document.getElementById('auth-name-input').value.trim();
-  const el  = document.getElementById('auth-name-status');
-  clearTimeout(_nameCheckTimeout);
-  if (!el) return;
-  if (val.length < 2) { el.innerText = ''; el.className = 'auth-name-status'; return; }
-  el.innerText = '…'; el.className = 'auth-name-status checking';
-  _nameCheckTimeout = setTimeout(async () => {
-    const status = await checkNameAvailable(val);
-    if (document.getElementById('auth-name-input').value.trim() !== val) return; // stale
-    if (status === 'available') { el.innerText = '✓ Available'; el.className = 'auth-name-status ok'; }
-    else if (status === 'taken') { el.innerText = '✗ Already taken'; el.className = 'auth-name-status bad'; }
-    else if (status === 'invalid') { el.innerText = '✗ Invalid name'; el.className = 'auth-name-status bad'; }
-    else { el.innerText = '? Could not check'; el.className = 'auth-name-status bad'; }
-  }, 550);
-}
-
-async function authSubmit() {
-  const name = document.getElementById('auth-name-input').value.trim();
-  const pin  = document.getElementById('auth-pin-input').value.trim();
-  const btn  = document.getElementById('auth-submit-btn');
-  const err  = document.getElementById('auth-err');
-
-  err.innerText = '';
-  btn.disabled  = true;
-  btn.innerText = '…';
-
-  let result;
-  if (_authTab === 'register') {
-    result = await registerAccount(name, pin);
-  } else {
-    result = await loginAccount(name, pin);
-  }
-
-  btn.disabled = false;
-  btn.innerText = _authTab === 'register' ? 'Create Account →' : 'Sign In →';
-
-  if (result.error) {
-    err.innerText = result.error;
-    return;
-  }
-
-  // Success
-  accountReady = true;
-  const msg = _authTab === 'register' ? 'Account created! Welcome, ' + result.account.name + '!' : 'Welcome back, ' + result.account.name + '!';
-  document.getElementById('auth').classList.add('hidden');
-  document.getElementById('connecting').classList.remove('hidden');
-  document.getElementById('conn-txt').innerText = msg;
-  setTimeout(() => {
-    hideConnecting();
-    myName = currentAccount.name;
-    myId   = currentAccount.uid;
-    updateMenuProfile();
-    _setupContinueBtn();
-    show('menu');
-  }, 1200);
-}
-
-// Allow Enter key on auth inputs
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !document.getElementById('auth').classList.contains('hidden')) {
-    e.preventDefault(); authSubmit();
-  }
-});
-
-// ── Helpers ──
-function buildAccountObj(name, uid, pinHash) {
-  return {
-    uid, name, nameLower: nameKey(name), pinHash,
-    xp: 0, totalCleared: 0, level: 1, diff: 'easy',
-    createdAt: Date.now(), lastSeen: Date.now()
-  };
-}
-function saveTokenLocally(uid, tok, name) {
-  localStorage.setItem(ACC_UID, uid);
-  localStorage.setItem(ACC_TOK, tok);
-  localStorage.setItem(ACC_NAME, name);
-}
-function clearTokenLocally() {
-  localStorage.removeItem(ACC_UID);
-  localStorage.removeItem(ACC_TOK);
-  localStorage.removeItem(ACC_NAME);
-}
+// ── Local helpers ──
+function saveTokenLocally(uid, tok, name) { localStorage.setItem(ACC_UID, uid); localStorage.setItem(ACC_TOK, tok); localStorage.setItem(ACC_NAME, name); }
+function clearTokenLocally() { [ACC_UID, ACC_TOK, ACC_NAME].forEach(k => localStorage.removeItem(k)); }
 function applyAccountLocally(account) {
   currentAccount = account;
   myName = account.name;
-  myId   = account.uid;
+  myId   = account.id;
   adminTargetId = myId;
-  // Offline/local sessions carry placeholder zeros — never let them wipe real progress.
-  // Online: keep whichever side is further ahead (progress made offline survives).
   if (account.local || account.offline) { writeSave({ name: account.name }); return; }
   const s = loadSave();
+  // Secure mode: the server-checked cloud values win (so edited local saves can't creep back up).
+  // Legacy mode: keep whichever side is further ahead.
+  const secure = authMode() === 'secure';
   const patch = {
     name:         account.name,
-    xp:           Math.max(account.xp || 0, s.xp || 0),
-    totalCleared: Math.max(account.totalCleared || 0, s.totalCleared || 0),
+    xp:           secure ? (account.xp || 0) : Math.max(account.xp || 0, s.xp || 0),
+    totalCleared: secure ? (account.totalCleared || 0) : Math.max(account.totalCleared || 0, s.totalCleared || 0),
     level:        account.level || s.level || 1,
     diff:         account.diff  || s.diff  || 'easy'
   };
   if (account.avatar) patch.avatar = sanitizeAvatar(account.avatar);
   writeSave(patch);
+  applyMyCosmetics();
 }
 function _setupContinueBtn() {
   const s = loadSave();
-  const show = !!(s.level && s.level > 1 && s.diff);
-  document.getElementById('continue-btn').classList.toggle('hidden', !show);
-  if (show) document.getElementById('continue-info').innerText = s.diff.toUpperCase() + ' · LVL ' + s.level;
+  const on = !!(s.level && s.level > 1 && s.diff);
+  document.getElementById('continue-btn').classList.toggle('hidden', !on);
+  if (on) document.getElementById('continue-info').innerText = s.diff.toUpperCase() + ' · LVL ' + s.level;
 }

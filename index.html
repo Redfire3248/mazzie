@@ -8,9 +8,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>MAZZIE</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307070e'/%3E%3Cpath d='M8 9v14M8 9l8 9 8-9v14' stroke='%232dff7f' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=20260911b">
 </head>
 <body>
 
@@ -26,110 +27,217 @@
   <div id="conn-txt">LOADING…</div>
 </div>
 
-<!-- AUTH SCREEN -->
+<!-- AUTH -->
 <div id="auth" class="screen hidden">
   <div class="auth-screen-card">
     <div class="auth-logo">MAZZIE</div>
-    <div class="auth-tabs">
-      <button class="auth-tab active" id="auth-tab-login" onclick="authSwitchTab('login')">Sign In</button>
-      <button class="auth-tab"        id="auth-tab-reg"   onclick="authSwitchTab('register')">Register</button>
-    </div>
-    <div class="auth-heading" id="auth-heading">Welcome Back</div>
-    <div class="auth-sub"     id="auth-sub">Enter your name and PIN</div>
-    <div class="auth-form">
-      <div class="auth-field">
-        <div class="auth-lbl">Username</div>
-        <input class="auth-input txt" id="auth-name-input" maxlength="16" placeholder="YourName"
-          autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" oninput="authCheckName()">
-        <div class="auth-name-check-row" id="auth-name-check-row" style="display:none;">
-          <span class="auth-name-status" id="auth-name-status"></span>
-        </div>
+
+    <div id="auth-main" class="auth-stack">
+      <div class="seg" role="tablist">
+        <button class="seg-btn active" id="auth-tab-login" onclick="authSwitchTab('login')">Sign in</button>
+        <button class="seg-btn"        id="auth-tab-reg"   onclick="authSwitchTab('register')">Register</button>
       </div>
-      <div class="auth-field">
-        <div class="auth-lbl">PIN <span style="opacity:.5;font-size:9px;">(4+ digits)</span></div>
-        <input class="auth-input txt" id="auth-pin-input" type="password" inputmode="numeric"
-          maxlength="12" placeholder="••••" autocomplete="off" spellcheck="false" style="letter-spacing:6px;">
+      <div class="auth-head">
+        <div class="auth-heading" id="auth-heading">Welcome back</div>
+        <div class="auth-sub" id="auth-sub">Sign in with your name and PIN</div>
       </div>
+      <label class="field">
+        <span class="field-lbl">Username</span>
+        <span class="field-box"><i data-ic="user"></i>
+          <input class="txt" id="auth-name-input" maxlength="16" placeholder="YourName" autocomplete="username"
+            autocorrect="off" autocapitalize="words" spellcheck="false" oninput="authCheckName()"></span>
+        <span class="name-status" id="auth-name-status"></span>
+      </label>
+      <label class="field">
+        <span class="field-lbl">PIN <em>4–12 digits</em></span>
+        <span class="field-box"><i data-ic="lock"></i>
+          <input class="txt pin" id="auth-pin-input" type="password" inputmode="numeric" maxlength="12" placeholder="••••" autocomplete="current-password"></span>
+      </label>
+      <label class="field" id="auth-pin2-field" hidden>
+        <span class="field-lbl">Repeat PIN</span>
+        <span class="field-box"><i data-ic="lock"></i>
+          <input class="txt pin" id="auth-pin2-input" type="password" inputmode="numeric" maxlength="12" placeholder="••••" autocomplete="new-password"></span>
+      </label>
+      <div class="form-err" id="auth-err"></div>
+      <button class="btn primary big" id="auth-submit-btn" onclick="authSubmit()">Sign in</button>
+      <button class="link-btn" id="auth-forgot-link" onclick="showForgot()">Forgot PIN?</button>
+      <div class="or-row" id="auth-or"><span>or</span></div>
+      <button class="btn google" id="auth-google-btn" onclick="authGoogle()"><i data-ic="google"></i>Continue with Google</button>
     </div>
-    <div class="auth-err" id="auth-err"></div>
-    <button class="auth-submit-btn" id="auth-submit-btn" onclick="authSubmit()">Sign In →</button>
-    <div class="auth-note">Your name is globally unique across all players.</div>
+
+    <div id="auth-setup" class="auth-stack" hidden>
+      <div class="auth-head">
+        <div class="auth-heading">Pick a username</div>
+        <div class="auth-sub" id="setup-email">Signed in with Google</div>
+      </div>
+      <label class="field">
+        <span class="field-lbl">Username</span>
+        <span class="field-box"><i data-ic="user"></i>
+          <input class="txt" id="setup-name-input" maxlength="16" placeholder="YourName" autocomplete="off"
+            autocorrect="off" autocapitalize="words" spellcheck="false" oninput="setupCheckName()"></span>
+        <span class="name-status" id="setup-name-status"></span>
+      </label>
+      <div class="form-err" id="setup-err"></div>
+      <button class="btn primary big" id="setup-submit-btn" onclick="setupSubmit()">Create account<i data-ic="arrowR"></i></button>
+      <button class="link-btn" onclick="setupCancel()">Use a different account</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT PIN -->
+<div id="forgot" class="screen hidden">
+  <div class="panel-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="showAuthScreen()" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Forgot PIN</div><span class="icon-btn ghost"></span>
+    </div>
+    <div class="form-err" id="forgot-err"></div>
+    <div class="opt-card">
+      <div class="opt-head"><span class="opt-ic"><i data-ic="google"></i></span><div><b>Google linked?</b><small>Sign in with Google, then choose a new PIN.</small></div></div>
+      <button class="btn google" id="forgot-google-btn" onclick="authGoogle(true)"><i data-ic="google"></i>Continue with Google</button>
+    </div>
+    <div class="opt-card" id="forgot-code-form">
+      <div class="opt-head"><span class="opt-ic"><i data-ic="key"></i></span><div><b>Have your recovery code?</b><small>You got it when you created your account.</small></div></div>
+      <span class="field-box"><i data-ic="user"></i><input class="txt" id="forgot-name" maxlength="16" placeholder="Username" autocomplete="username" autocorrect="off" spellcheck="false"></span>
+      <span class="field-box"><i data-ic="key"></i><input class="txt mono" id="forgot-code" maxlength="16" placeholder="ABCD-EFGH-JKMN" autocomplete="off" autocapitalize="characters" spellcheck="false"></span>
+      <div class="two">
+        <span class="field-box"><i data-ic="lock"></i><input class="txt pin" id="forgot-pin" type="password" inputmode="numeric" maxlength="12" placeholder="New PIN" autocomplete="new-password"></span>
+        <span class="field-box"><i data-ic="lock"></i><input class="txt pin" id="forgot-pin2" type="password" inputmode="numeric" maxlength="12" placeholder="Repeat" autocomplete="new-password"></span>
+      </div>
+      <button class="btn primary" id="forgot-code-btn" onclick="forgotSubmitCode()">Reset PIN</button>
+    </div>
+    <div class="note"><i data-ic="info"></i>No Google and no code? Ask an admin to give you a temporary PIN.</div>
+  </div>
+</div>
+
+<!-- LOCKED / BANNED -->
+<div id="locked" class="screen hidden">
+  <div class="panel-card center">
+    <div class="lock-ring" id="locked-ring"><i data-ic="lock"></i></div>
+    <div class="panel-title" id="locked-title">Too many wrong PINs</div>
+    <div class="panel-sub" id="locked-sub"></div>
+    <div class="lock-time" id="locked-time">15:00</div>
+    <div class="lock-reason" id="locked-reason" hidden></div>
+    <button class="btn secondary" id="locked-back" onclick="lockedBack()"><i data-ic="arrowL"></i>Back to sign in</button>
   </div>
 </div>
 
 <!-- MENU -->
 <div id="menu" class="screen hidden">
-  <button class="corner-btn" id="sound-btn" onclick="toggleSound()" title="Sound">🔊</button>
-  <div class="logo">MAZZIE</div>
-  <div class="tagline">Connect the numbers</div>
-  <div class="profile-card" onclick="openNameEdit()">
-    <div class="profile-ava-wrap">
-      <div id="menu-ava"></div>
-      <div class="profile-lvl-badge" id="menu-lvl-badge-wrap"></div>
-    </div>
-    <div class="profile-info">
-      <div class="profile-name-row">
-        <div class="profile-name" id="menu-name">Racer</div>
-        <div class="profile-uid" id="menu-uid" style="display:none;"></div>
+  <div class="menu-top">
+    <button class="icon-btn admin" id="menu-admin-btn" hidden onclick="adminOpen()" title="Admin terminal"><i data-ic="terminal"></i></button>
+    <span class="flex"></span>
+    <button class="icon-btn" id="sound-btn" onclick="toggleSound()" title="Sound"><i data-ic="sound"></i></button>
+    <button class="icon-btn" onclick="openSettings()" title="Settings"><i data-ic="gear"></i></button>
+  </div>
+  <div class="menu-body">
+    <div class="logo">MAZZIE</div>
+    <div class="tagline">Connect the numbers</div>
+    <button class="profile-card" onclick="openNameEdit()">
+      <div class="profile-ava-wrap">
+        <div id="menu-ava"></div>
+        <div class="profile-lvl-badge" id="menu-lvl-badge-wrap"></div>
       </div>
-      <div class="profile-rank" id="menu-rank">🌱 Newbie · 0 cleared</div>
-      <div class="profile-xp-row">
-        <div class="profile-xp-txt" id="menu-xp-txt">LVL 1</div>
-        <div class="xp-bar-wrap" style="flex:1;"><div class="xp-bar-fill" id="menu-xp-bar" style="width:0%"></div></div>
+      <div class="profile-info">
+        <div class="profile-name-row">
+          <div class="profile-name" id="menu-name">Racer</div>
+          <div class="chip warn" id="menu-offline-badge" style="display:none;">Offline</div>
+        </div>
+        <div class="profile-rank" id="menu-rank"></div>
+        <div class="profile-xp-row">
+          <div class="xp-bar-wrap"><div class="xp-bar-fill" id="menu-xp-bar" style="width:0%"></div></div>
+          <div class="profile-xp-txt" id="menu-xp-txt"></div>
+        </div>
       </div>
+      <i data-ic="chevR" class="profile-chev"></i>
+    </button>
+    <button class="continue-btn hidden" id="continue-btn" onclick="continueGame()">
+      <span class="cb-l"><i data-ic="play"></i>Continue</span><span id="continue-info"></span>
+    </button>
+    <div class="diff-grid">
+      <button class="diff-btn" onclick="startFresh('baby')">Baby</button>
+      <button class="diff-btn" onclick="startFresh('easy')">Easy</button>
+      <button class="diff-btn" onclick="startFresh('medium')">Medium</button>
+      <button class="diff-btn" onclick="startFresh('hard')">Hard</button>
+      <button class="diff-btn full" onclick="startFresh('expert')"><i data-ic="bolt"></i>Expert</button>
     </div>
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-      <div class="profile-edit-hint">Edit →</div>
-      <div class="menu-offline-badge" id="menu-offline-badge" style="display:none;">OFFLINE</div>
+    <button class="menu-qm-btn" onclick="startQuickMatch()">
+      <span class="qm-l"><span class="qm-ic"><i data-ic="target"></i></span><span class="qm-main">Quick Match</span></span>
+      <span class="qm-sub" id="qm-bracket"></span>
+    </button>
+    <div class="menu-row">
+      <button class="tile" onclick="show('battle-mode')"><i data-ic="swords"></i><b>Rooms</b><small>Host · Join</small></button>
+      <button class="tile daily" onclick="startDaily()"><i data-ic="calendar"></i><b>Daily</b><small id="daily-info">New</small></button>
+      <button class="tile locker" onclick="openLocker()"><i data-ic="palette"></i><b>Locker</b><small>Customize</small></button>
     </div>
   </div>
-  <button class="continue-btn hidden" id="continue-btn" onclick="continueGame()">
-    Continue <span id="continue-info"></span>
-  </button>
-  <div class="diff-grid">
-    <button class="diff-btn" onclick="startFresh('baby')">Baby</button>
-    <button class="diff-btn" onclick="startFresh('easy')">Easy</button>
-    <button class="diff-btn" onclick="startFresh('medium')">Medium</button>
-    <button class="diff-btn" onclick="startFresh('hard')">Hard</button>
-    <button class="diff-btn full" onclick="startFresh('expert')">⚡ Expert</button>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings" class="screen hidden">
+  <div class="panel-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="show('menu')" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Settings</div><span class="icon-btn ghost"></span>
+    </div>
+    <div class="set-profile"><div id="set-ava"></div><div><b id="set-name"></b><small id="set-meta"></small></div></div>
+
+    <div class="set-group-lbl">Account</div>
+    <div class="set-group">
+      <div class="set-row" id="set-google"><span class="set-ic"><i data-ic="google"></i></span><div class="set-txt"><b>Google account</b><span class="set-val"></span></div>
+        <button class="btn sm secondary" id="set-google-btn" onclick="settingsGoogle()">Link</button></div>
+      <div class="set-row" id="set-pin"><span class="set-ic"><i data-ic="key"></i></span><div class="set-txt"><b>PIN</b><span class="set-val">Used to sign in with your name</span></div>
+        <button class="btn sm secondary" id="set-pin-btn" onclick="openPinModal(false)">Change</button></div>
+      <div class="set-row" id="set-recovery"><span class="set-ic"><i data-ic="shieldOk"></i></span><div class="set-txt"><b>Recovery code</b><span class="set-val">Resets your PIN without Google</span></div>
+        <button class="btn sm secondary" onclick="settingsNewCode()"><i data-ic="refresh"></i>New</button></div>
+    </div>
+
+    <div class="set-group-lbl">Game</div>
+    <div class="set-group">
+      <div class="set-row"><span class="set-ic"><i data-ic="sound"></i></span><div class="set-txt"><b>Sound effects</b></div><button class="switch" id="set-sound" onclick="settingToggle('sound', true)"><span></span></button></div>
+      <div class="set-row"><span class="set-ic"><i data-ic="vibrate"></i></span><div class="set-txt"><b>Vibration</b></div><button class="switch" id="set-haptics" onclick="settingToggle('haptics', true)"><span></span></button></div>
+      <div class="set-row"><span class="set-ic"><i data-ic="arrowR"></i></span><div class="set-txt"><b>Auto-advance</b><span class="set-val">Next level starts by itself</span></div><button class="switch" id="set-autonext" onclick="settingToggle('autoNext', false)"><span></span></button></div>
+    </div>
+
+    <div id="set-admin" hidden>
+      <div class="set-group-lbl">Admin</div>
+      <div class="set-group"><button class="set-row as-btn" onclick="adminOpen()"><span class="set-ic acc"><i data-ic="terminal"></i></span><div class="set-txt"><b>Admin terminal</b><span class="set-val">Accounts, bans, game tools · F2</span></div><i data-ic="chevR"></i></button></div>
+    </div>
+
+    <button class="btn danger-soft" onclick="logoutAccount()"><i data-ic="logout"></i>Sign out</button>
   </div>
-  <button class="menu-qm-btn" onclick="startQuickMatch()">
-    <span class="qm-main">🎯 Quick Match</span><span class="qm-sub" id="qm-bracket">🥉 Bronze</span>
-  </button>
-  <div class="menu-row">
-    <button class="menu-battle-btn" onclick="show('battle-mode')">⚔ Rooms</button>
-    <button class="menu-battle-btn daily" onclick="startDaily()">📅 Daily <span class="daily-info" id="daily-info">NEW</span></button>
-    <button class="menu-battle-btn locker" onclick="openLocker()">🎨 Locker</button>
-  </div>
-  <button class="menu-logout-btn" onclick="logoutAccount()">Sign Out</button>
 </div>
 
 <!-- NAME EDIT -->
 <div id="name-edit" class="screen hidden">
-  <div class="name-card">
-    <h2>Change Username</h2>
-    <input class="name-input txt" id="name-input" maxlength="16" placeholder="NewUsername"
-      autocomplete="off" autocorrect="off" spellcheck="false" oninput="onNameInputChange()">
-    <div class="name-checking" id="name-checking"></div>
-    <div class="name-err" id="name-err"></div>
+  <div class="panel-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="cancelNameEdit()" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Profile</div><span class="icon-btn ghost"></span>
+    </div>
+    <label class="field">
+      <span class="field-lbl">Username</span>
+      <span class="field-box"><i data-ic="user"></i>
+        <input class="txt" id="name-input" maxlength="16" placeholder="NewUsername" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onNameInputChange()"></span>
+      <span class="name-checking" id="name-checking"></span>
+    </label>
+    <div class="form-err" id="name-err"></div>
     <div class="rank-preview">
-      <div class="rp-icon" id="rp-icon">🌱</div>
-      <div class="rp-info">
-        <div class="rp-rank" id="rp-rank">Newbie</div>
-        <div class="rp-desc" id="rp-desc">0 levels cleared</div>
-      </div>
+      <div class="rp-icon" id="rp-icon"></div>
+      <div class="rp-info"><div class="rp-rank" id="rp-rank">Newbie</div><div class="rp-desc" id="rp-desc">0 levels cleared</div></div>
     </div>
-    <button class="b-btn secondary" style="width:100%;flex:none;" onclick="openLocker()">🎨 Customize avatar</button>
-    <div class="name-actions">
-      <button class="b-btn secondary" onclick="cancelNameEdit()">Cancel</button>
-      <button class="b-btn primary" onclick="saveName()">Save →</button>
-    </div>
+    <button class="btn secondary" onclick="openLocker()"><i data-ic="palette"></i>Customize avatar</button>
+    <button class="btn primary" onclick="saveName()">Save<i data-ic="arrowR"></i></button>
   </div>
 </div>
 
-<!-- LOCKER (avatar customization) -->
+<!-- LOCKER -->
 <div id="locker" class="screen hidden">
   <div class="locker-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="cancelLocker()" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Locker</div><span class="icon-btn ghost"></span>
+    </div>
     <div class="locker-head">
       <div class="locker-preview" id="locker-preview"></div>
       <div class="locker-meta">
@@ -138,64 +246,60 @@
         <div class="locker-lvl" id="locker-lvl"></div>
       </div>
     </div>
-    <div class="locker-tabs">
-      <button class="locker-tab" data-tab="icon"  onclick="lockerTab('icon')">Icon</button>
-      <button class="locker-tab" data-tab="color" onclick="lockerTab('color')">Color</button>
-      <button class="locker-tab" data-tab="frame" onclick="lockerTab('frame')">Frame</button>
-      <button class="locker-tab" data-tab="trail" onclick="lockerTab('trail')">Trail</button>
-      <button class="locker-tab" data-tab="title" onclick="lockerTab('title')">Title</button>
+    <div class="seg locker-tabs">
+      <button class="seg-btn locker-tab" data-tab="icon"  onclick="lockerTab('icon')">Icon</button>
+      <button class="seg-btn locker-tab" data-tab="color" onclick="lockerTab('color')">Color</button>
+      <button class="seg-btn locker-tab" data-tab="frame" onclick="lockerTab('frame')">Frame</button>
+      <button class="seg-btn locker-tab" data-tab="trail" onclick="lockerTab('trail')">Trail</button>
+      <button class="seg-btn locker-tab" data-tab="title" onclick="lockerTab('title')">Title</button>
     </div>
     <div class="locker-count" id="locker-count"></div>
     <div class="locker-grid" id="locker-grid"></div>
-    <div class="name-actions">
-      <button class="b-btn secondary" onclick="cancelLocker()">Cancel</button>
-      <button class="b-btn primary" onclick="saveLocker()">Equip →</button>
-    </div>
+    <button class="btn primary" onclick="saveLocker()"><i data-ic="check"></i>Equip</button>
   </div>
 </div>
 
 <!-- QUICK MATCH QUEUE -->
 <div id="queue" class="screen hidden">
   <div class="q-card">
-    <div class="q-radar"><div class="q-sweep"></div><div class="q-ring r1"></div><div class="q-ring r2"></div><div class="q-center">🎯</div></div>
+    <div class="q-radar"><div class="q-sweep"></div><div class="q-ring r1"></div><div class="q-ring r2"></div><div class="q-center"><i data-ic="target"></i></div></div>
     <div class="q-title">QUICK MATCH</div>
-    <div class="q-bracket" id="q-bracket">🥉 Bronze</div>
+    <div class="q-bracket" id="q-bracket"></div>
     <div class="q-range" id="q-range">Searching</div>
     <div class="q-time" id="q-time">00:00</div>
     <div class="q-players" id="q-players"></div>
     <div class="q-countdown" id="q-countdown" style="display:none;"></div>
     <div class="q-status" id="q-status">Looking for a match…</div>
-    <button class="b-btn secondary" style="width:100%;flex:none;" onclick="cancelQuickMatch()">Cancel</button>
+    <button class="btn secondary" onclick="cancelQuickMatch()"><i data-ic="x"></i>Cancel</button>
   </div>
 </div>
 
 <!-- BATTLE MODE -->
 <div id="battle-mode" class="screen hidden">
-  <div class="bm-card">
-    <div class="bm-title">⚔ BATTLE</div>
-    <div class="bm-sub">Play against anyone</div>
-    <button class="bm-btn gold" onclick="startQuickMatch()">🎯 Quick Match</button>
-    <button class="bm-btn" onclick="openHostLobby()">🏠 Host a Room</button>
-    <button class="bm-btn red" onclick="show('join-screen')">🔗 Join a Room</button>
-    <button class="bm-back" onclick="show('menu')">← Back</button>
+  <div class="panel-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="show('menu')" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Battle</div><span class="icon-btn ghost"></span>
+    </div>
+    <div class="panel-sub">Race friends or strangers on the same board</div>
+    <button class="big-opt gold" onclick="startQuickMatch()"><i data-ic="target"></i><span><b>Quick Match</b><small>Random players near your level</small></span><i data-ic="chevR"></i></button>
+    <button class="big-opt" onclick="openHostLobby()"><i data-ic="home"></i><span><b>Host a room</b><small>Get a code to share</small></span><i data-ic="chevR"></i></button>
+    <button class="big-opt red" onclick="show('join-screen')"><i data-ic="login"></i><span><b>Join a room</b><small>Enter a friend's code</small></span><i data-ic="chevR"></i></button>
   </div>
 </div>
 
 <!-- JOIN SCREEN -->
 <div id="join-screen" class="screen hidden">
-  <div class="join-card">
-    <h2>Join Room</h2>
-    <div class="code-wrap">
-      <div class="code-lbl">Enter the 4-letter room code</div>
-      <input class="code-input txt" id="join-input" maxlength="4" placeholder="ABCD"
-        autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
-        onkeydown="if(event.key==='Enter')doJoin()">
+  <div class="panel-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="show('battle-mode')" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Join room</div><span class="icon-btn ghost"></span>
     </div>
+    <div class="field-lbl center">Enter the 4-letter room code</div>
+    <input class="code-input txt" id="join-input" maxlength="4" placeholder="ABCD"
+      autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" onkeydown="if(event.key==='Enter')doJoin()">
     <div class="join-status" id="join-status"></div>
-    <div class="join-actions">
-      <button class="b-btn secondary" onclick="show('battle-mode')">Back</button>
-      <button class="b-btn primary" onclick="doJoin()">Join →</button>
-    </div>
+    <button class="btn primary" onclick="doJoin()">Join<i data-ic="arrowR"></i></button>
   </div>
 </div>
 
@@ -207,7 +311,7 @@
       <div class="rc-lbl">Share this code with friends</div>
       <div class="rc-code-row">
         <div class="rc-code" id="room-code-disp">----</div>
-        <button class="copy-code-btn" id="copy-code-btn" onclick="copyRoomCode()">⎘ Copy</button>
+        <button class="copy-code-btn" id="copy-code-btn" onclick="copyRoomCode()"><i data-ic="copy"></i>Copy</button>
       </div>
     </div>
     <div id="host-settings" style="width:100%;display:none;flex-direction:column;gap:11px;">
@@ -218,18 +322,18 @@
         <button class="bdiff-btn" data-diff="medium" onclick="pickDiff(this,'medium')">Medium</button>
         <button class="bdiff-btn" data-diff="hard"   onclick="pickDiff(this,'hard')">Hard</button>
         <button class="bdiff-btn" data-diff="expert" onclick="pickDiff(this,'expert')">Expert</button>
-        <button class="bdiff-btn" data-diff="random" onclick="pickDiff(this,'random')">🎲 Random</button>
+        <button class="bdiff-btn" data-diff="random" onclick="pickDiff(this,'random')"><i data-ic="dice"></i>Random</button>
       </div>
       <div class="rounds-row">
         <div class="rounds-label">Rounds</div>
         <div class="rounds-stepper">
-          <button class="rounds-btn" onclick="changeRounds(-1)">−</button>
+          <button class="rounds-btn" onclick="changeRounds(-1)"><i data-ic="minus"></i></button>
           <div class="rounds-val" id="rounds-disp">3</div>
-          <button class="rounds-btn" onclick="changeRounds(1)">+</button>
+          <button class="rounds-btn" onclick="changeRounds(1)"><i data-ic="plus"></i></button>
         </div>
       </div>
       <div class="rounds-row">
-        <div class="rounds-label">⚡ Boosts &amp; abilities</div>
+        <div class="rounds-label">Boosts &amp; abilities</div>
         <button class="toggle-btn on" id="boost-toggle" onclick="toggleBoosts()">ON</button>
       </div>
     </div>
@@ -239,8 +343,8 @@
     <div class="wait-msg" id="wait-msg">Waiting for players <span class="dots"><i></i><i></i><i></i></span></div>
     <div class="status-line" id="lob-status"></div>
     <div class="b-actions">
-      <button class="b-btn secondary" onclick="leaveLobby()">Leave</button>
-      <button class="b-btn primary" id="start-btn" style="display:none;" onclick="hostStart()" disabled>Start!</button>
+      <button class="b-btn secondary" onclick="leaveLobby()"><i data-ic="logout"></i>Leave</button>
+      <button class="b-btn primary" id="start-btn" style="display:none;" onclick="hostStart()" disabled><i data-ic="play"></i>Start</button>
     </div>
   </div>
 </div>
@@ -250,7 +354,7 @@
   <div class="top-bar">
     <div class="tb-left">
       <div class="diff-label" id="diff-label">—</div>
-      <div id="battle-pill">⚔ BATTLE</div>
+      <div id="battle-pill"><i data-ic="swords"></i>Battle</div>
     </div>
     <div id="timer">00:00</div>
     <div class="tb-right">
@@ -266,35 +370,35 @@
   </div>
   <div class="ability-bar" id="ability-bar"></div>
   <div class="bottom-bar">
-    <button class="ctrl-btn" onclick="undoStep()" title="Undo (Backspace)">↶ Undo</button>
-    <button class="ctrl-btn" onclick="resetPath()" title="Reset (R)">⟲ Reset</button>
-    <button class="chat-btn" id="game-chat-btn" onclick="openChat()" title="Chat" style="display:none;">💬</button>
-    <button class="ctrl-btn" onclick="gameMenuBtn()">Menu</button>
+    <button class="ctrl-btn" onclick="undoStep()" title="Undo (Backspace)"><i data-ic="undo"></i>Undo</button>
+    <button class="ctrl-btn" onclick="resetPath()" title="Reset (R)"><i data-ic="reset"></i>Reset</button>
+    <button class="chat-btn" id="game-chat-btn" onclick="openChat()" title="Chat" style="display:none;"><i data-ic="chat"></i></button>
+    <button class="ctrl-btn" onclick="gameMenuBtn()"><i data-ic="menu"></i>Menu</button>
   </div>
 </div>
 
 <!-- WIN (solo) -->
 <div id="win" class="screen hidden">
   <div class="win-card">
-    <div class="win-title">WIN!</div>
-    <div class="win-sub">Level cleared</div>
+    <div class="win-badge"><i data-ic="flag"></i></div>
+    <div class="win-title">SOLVED</div>
     <div class="win-time" id="win-time">0:00.0</div>
     <div id="win-best"></div>
     <div class="win-xp-row" id="win-xp-row"></div>
-    <button class="next-btn" id="next-btn" onclick="nextLevel()">Next Level →</button>
+    <button class="next-btn" id="next-btn" onclick="nextLevel()">Next level<i data-ic="arrowR"></i></button>
     <div class="auto-next-row" id="auto-next-row">
       <span>Auto-advance</span>
       <button class="toggle-btn" id="auto-next-toggle" onclick="toggleAutoNext()">OFF</button>
-      <span class="kbd-hint">Space ⏎</span>
+      <span class="kbd-hint">Space / Enter</span>
     </div>
-    <button class="b-btn secondary" style="width:100%;flex:none;" onclick="goMenu()">Menu</button>
+    <button class="btn secondary" onclick="goMenu()"><i data-ic="home"></i>Menu</button>
   </div>
 </div>
 
 <!-- SPECTATE -->
 <div id="spectate" class="screen hidden">
   <div class="spec-card">
-    <div class="spec-title">👁 SPEC</div>
+    <div class="spec-title"><i data-ic="eye"></i>Spectating</div>
     <div class="spec-sub" id="spec-sub">You finished!</div>
     <div class="spec-round-badge" id="spec-round-badge">Round 1 of 3</div>
     <div class="spec-live-wrap" id="spec-live-wrap" style="display:none;">
@@ -304,15 +408,15 @@
     <div class="spec-list" id="spec-list"></div>
   </div>
   <div class="spec-nav-row">
-    <button class="spec-nav-arrow" id="spec-prev-btn" onclick="specNavigate(-1)">◀</button>
+    <button class="spec-nav-arrow" id="spec-prev-btn" onclick="specNavigate(-1)"><i data-ic="chevL"></i></button>
     <div class="spec-viewer-info">
       <div class="spec-viewer-name" id="spec-viewer-name">All Players</div>
       <div class="spec-viewer-sub" id="spec-viewer-sub">Tap a player to watch live</div>
     </div>
-    <button class="spec-nav-arrow" id="spec-next-btn" onclick="specNavigate(1)">▶</button>
+    <button class="spec-nav-arrow" id="spec-next-btn" onclick="specNavigate(1)"><i data-ic="chevR"></i></button>
   </div>
   <div class="spec-chat-wrap">
-    <button class="chat-btn" id="spec-chat-btn" onclick="openChat()">💬</button>
+    <button class="chat-btn" id="spec-chat-btn" onclick="openChat()"><i data-ic="chat"></i></button>
   </div>
 </div>
 
@@ -323,24 +427,25 @@
     <div class="rr-sub" id="rr-sub">Round Complete</div>
     <div class="rr-list" id="rr-list"></div>
     <div class="rr-countdown" id="rr-countdown" style="display:none;"><span id="rr-countdown-lbl">Next round in</span><span class="rr-num" id="rr-countdown-num">6</span></div>
-    <button class="b-btn primary" id="next-round-btn" style="display:none;width:100%;flex:none;" onclick="hostNextRound()">Next Round →</button>
+    <button class="btn primary" id="next-round-btn" style="display:none;" onclick="hostNextRound()">Next round<i data-ic="arrowR"></i></button>
     <div class="wait-msg" id="waiting-next" style="display:none;">Waiting for host <span class="dots"><i></i><i></i><i></i></span></div>
-    <button class="b-btn secondary" id="final-leaderboard-btn" style="display:none;width:100%;flex:none;" onclick="hostShowFinal()">Final Leaderboard →</button>
+    <button class="btn secondary" id="final-leaderboard-btn" style="display:none;" onclick="hostShowFinal()"><i data-ic="trophy"></i>Final standings</button>
   </div>
 </div>
 
 <!-- FINAL RESULTS -->
 <div id="final-results" class="screen hidden">
   <div class="fin-card">
-    <div class="fin-title">🏆 FINISH!</div>
-    <div class="fin-sub">Final Standings</div>
+    <div class="win-badge gold"><i data-ic="trophy"></i></div>
+    <div class="fin-title">FINISH</div>
+    <div class="fin-sub">Final standings</div>
     <div class="fin-winner" id="fin-winner"></div>
     <div class="fin-bonus" id="fin-bonus" style="display:none;"></div>
     <div class="fin-list" id="fin-list"></div>
-    <button class="b-btn primary" id="fin-queue-btn" style="width:100%;flex:none;display:none;" onclick="queueAgain()">🎯 Queue Again</button>
-    <button class="b-btn primary" id="fin-play-again-btn" style="width:100%;flex:none;display:none;" onclick="playAgain()">Play Again ↺</button>
+    <button class="btn primary" id="fin-queue-btn" style="display:none;" onclick="queueAgain()"><i data-ic="target"></i>Queue again</button>
+    <button class="btn primary" id="fin-play-again-btn" style="display:none;" onclick="playAgain()"><i data-ic="refresh"></i>Play again</button>
     <div class="wait-msg" id="fin-wait-host" style="display:none;">Waiting for host <span class="dots"><i></i><i></i><i></i></span></div>
-    <button class="b-btn secondary" style="width:100%;flex:none;" onclick="goMenu()">← Back to Menu</button>
+    <button class="btn secondary" onclick="goMenu()"><i data-ic="home"></i>Back to menu</button>
   </div>
 </div>
 
@@ -349,15 +454,45 @@
   <div style="flex:1;" onclick="closeChat()"></div>
   <div class="chat-panel">
     <div class="chat-header">
-      <div class="chat-title">💬 Battle Chat</div>
-      <button class="chat-close" onclick="closeChat()">✕</button>
+      <div class="chat-title"><i data-ic="chat"></i>Battle chat</div>
+      <button class="icon-btn" onclick="closeChat()"><i data-ic="x"></i></button>
     </div>
     <div class="chat-msgs" id="chat-msgs"></div>
     <div class="chat-emotes" id="chat-emotes"></div>
     <div class="chat-input-row">
       <input class="chat-input txt" id="chat-input" maxlength="80" placeholder="Say something…"
         autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
-      <button class="chat-send-btn" onclick="sendChat()">↑</button>
+      <button class="chat-send-btn" onclick="sendChat()"><i data-ic="send"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- RECOVERY CODE MODAL -->
+<div id="code-modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-ic"><i data-ic="shieldOk"></i></div>
+    <div class="panel-title">Save your recovery code</div>
+    <div class="panel-sub" id="code-lead"></div>
+    <div class="code-value" id="code-value">XXXX-XXXX-XXXX</div>
+    <button class="btn secondary" onclick="copyRecoveryCode()"><i data-ic="copy"></i>Copy code</button>
+    <div class="note warn"><i data-ic="alert"></i>Write it down or screenshot it. It can't be shown again.</div>
+    <button class="btn primary" onclick="closeRecoveryCode()"><i data-ic="check"></i>I saved it</button>
+  </div>
+</div>
+
+<!-- PIN MODAL -->
+<div id="pin-modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-ic"><i data-ic="key"></i></div>
+    <div class="panel-title" id="pin-modal-title">Change PIN</div>
+    <div class="panel-sub" id="pin-modal-sub"></div>
+    <span class="field-box" id="pin-cur-field"><i data-ic="lock"></i><input class="txt pin" id="pin-cur" type="password" inputmode="numeric" maxlength="12" placeholder="Current PIN" autocomplete="current-password"></span>
+    <span class="field-box"><i data-ic="key"></i><input class="txt pin" id="pin-new" type="password" inputmode="numeric" maxlength="12" placeholder="New PIN" autocomplete="new-password"></span>
+    <span class="field-box"><i data-ic="key"></i><input class="txt pin" id="pin-new2" type="password" inputmode="numeric" maxlength="12" placeholder="Repeat new PIN" autocomplete="new-password"></span>
+    <div class="form-err" id="pin-err"></div>
+    <div class="two">
+      <button class="btn secondary" id="pin-cancel" onclick="closePinModal(false)">Cancel</button>
+      <button class="btn primary" id="pin-save" onclick="savePinModal()">Save</button>
     </div>
   </div>
 </div>
@@ -368,7 +503,7 @@
     <div class="term-bar">
       <span class="term-lights"><i class="r" onclick="adminClose()"></i><i class="y"></i><i class="g"></i></span>
       <span class="term-title">admin@mazzie — <span id="term-mode">SOLO</span></span>
-      <button class="term-close" onclick="adminClose()">✕</button>
+      <button class="term-close" onclick="adminClose()"><i data-ic="x"></i></button>
     </div>
     <div class="term-out" id="term-out"></div>
     <div class="term-suggest" id="term-suggest"></div>
@@ -381,28 +516,30 @@
       </div>
     </div>
     <div class="term-keys">
-      <button onpointerdown="event.preventDefault()" onclick="termKey('tab')">TAB ⇥</button>
-      <button onpointerdown="event.preventDefault()" onclick="termKey('up')">↑</button>
-      <button onpointerdown="event.preventDefault()" onclick="termKey('down')">↓</button>
+      <button onpointerdown="event.preventDefault()" onclick="termKey('tab')">TAB</button>
+      <button onpointerdown="event.preventDefault()" onclick="termKey('up')"><i data-ic="chevL" class="rot90"></i></button>
+      <button onpointerdown="event.preventDefault()" onclick="termKey('down')"><i data-ic="chevR" class="rot90"></i></button>
       <button onpointerdown="event.preventDefault()" onclick="termKey('clear')">CLR</button>
-      <button class="run" onpointerdown="event.preventDefault()" onclick="termKey('enter')">RUN ⏎</button>
+      <button class="run" onpointerdown="event.preventDefault()" onclick="termKey('enter')">RUN</button>
     </div>
   </div>
 </div>
 
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="config.js"></script>
-<script src="js/state.js"></script>
-<script src="js/save.js"></script>
-<script src="js/cosmetics.js"></script>
-<script src="js/account.js"></script>
-<script src="js/game.js"></script>
-<script src="js/abilities.js"></script>
-<script src="js/battle.js"></script>
-<script src="js/matchmaking.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/terminal.js"></script>
+<script src="config.js?v=20260911b"></script>
+<script src="js/icons.js?v=20260911b"></script>
+<script src="js/state.js?v=20260911b"></script>
+<script src="js/save.js?v=20260911b"></script>
+<script src="js/cosmetics.js?v=20260911b"></script>
+<script src="js/account.js?v=20260911b"></script>
+<script src="js/auth-ui.js?v=20260911b"></script>
+<script src="js/game.js?v=20260911b"></script>
+<script src="js/abilities.js?v=20260911b"></script>
+<script src="js/battle.js?v=20260911b"></script>
+<script src="js/matchmaking.js?v=20260911b"></script>
+<script src="js/ui.js?v=20260911b"></script>
+<script src="js/terminal.js?v=20260911b"></script>
 
 </body>
 </html>

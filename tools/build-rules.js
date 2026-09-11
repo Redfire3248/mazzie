@@ -1,0 +1,114 @@
+﻿// Builds database.rules.json from readable macros (Firebase rules have no variables)
+const fs = require('fs');
+const out = process.argv[2] || require('path').join(__dirname, '..', 'database.rules.json');
+
+const ADMIN   = "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)";
+const LOCK_MS = 900000; // 15 minutes
+// Fastest legit earning: an expert solve (80 + 80 speed bonus) in ~15 s â‰ˆ 11 XP/s
+const XP_PER_SEC = 12, XP_BURST = 300, MS_PER_CLEAR = 4000;
+// No stamp yet (old accounts) â†’ only the small burst is allowed, never "since 1970"
+const OLD_XPAT = "(data.parent().child('xpAt').isNumber() ? data.parent().child('xpAt').val() : now)";
+const OLD_F   = "(data.exists() ? data.child('fails').val() : 0)";
+const OLD_L   = "(data.exists() ? data.child('lockedAt').val() : 0)";
+const NOT_LOCKED_NOW = `(${OLD_L} + ${LOCK_MS} < now)`;
+const acctOwnerOf = (accExpr) => `root.child('accounts').child(${accExpr}).child('owner').val()`;
+// Account read/write is refused while the owner is banned or under the 5-try lock
+const NOT_BANNED = "(!root.child('bans').child($acc).exists() || root.child('bans').child($acc).child('until').val() < now)";
+const NOT_PIN_LOCKED = `(!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + ${LOCK_MS} < now)`;
+
+const rules = {
+  rules: {
+    '.read': false,
+    '.write': false,
+
+    // Admin list â€” only editable from the Firebase console
+    admins: { '.read': ADMIN, '.write': false },
+
+    // username key â†’ { acc, email } (public: needed to sign in by name)
+    usernames: {
+      '.read': true,
+      '$key': {
+        '.write': `${ADMIN} || (auth != null && (
+            (newData.exists() && newData.child('acc').isString() && ${acctOwnerOf("newData.child('acc').val()")} == auth.uid
+              && (!data.exists() || data.child('acc').val() == newData.child('acc').val() || data.child('uid').val() == newData.child('acc').val()))
+         || (!newData.exists() && data.child('acc').isString() && ${acctOwnerOf("data.child('acc').val()")} == auth.uid)))`,
+        '.validate': "!newData.exists() || (newData.child('acc').isString() && (!newData.child('email').exists() || newData.child('email').isString()))"
+      }
+    },
+
+    // Game data. Legacy (pre-Firebase-Auth) records have no owner and stay readable until claimed.
+    accounts: {
+      '.read': ADMIN,
+      '.indexOn': ['owner', 'nameLower'],
+      '$acc': {
+        '.read': `${ADMIN} || !data.child('owner').exists() || (auth != null && data.child('owner').val() == auth.uid && ${NOT_BANNED} && ${NOT_PIN_LOCKED})`,
+        '.write': `${ADMIN} || (auth != null && newData.child('owner').val() == auth.uid && (
+            (data.child('owner').val() == auth.uid && ${NOT_BANNED} && ${NOT_PIN_LOCKED})
+         || !data.exists()
+         || (data.exists() && !data.child('owner').exists() && newData.child('legacyProof').val() == data.child('pinHash').val())
+         || (root.child('recovery').child($acc).child('code').isString() && newData.child('recoveryProof').val() == root.child('recovery').child($acc).child('code').val())))`,
+        '.validate': "newData.child('name').isString() && newData.child('nameLower').isString()",
+        // Anti-cheat: progress can only grow at a humanly possible speed, measured with the
+        // SERVER clock (xpAt must be stamped with server time whenever xp/clears go up).
+        xp: { '.validate': `newData.isNumber() && newData.val() >= 0 && newData.val() <= 50000000 && (${ADMIN} || (data.exists()
+              ? (newData.val() <= data.val() || (newData.parent().child('xpAt').val() == now && newData.val() - data.val() <= ${XP_BURST} + (now - ${OLD_XPAT}) / 1000 * ${XP_PER_SEC}))
+              : newData.val() == 0))` },
+        totalCleared: { '.validate': `newData.isNumber() && newData.val() >= 0 && (${ADMIN} || (data.exists()
+              ? (newData.val() <= data.val() || (newData.parent().child('xpAt').val() == now && newData.val() - data.val() <= 3 + (now - ${OLD_XPAT}) / ${MS_PER_CLEAR}))
+              : newData.val() == 0))` },
+        xpAt: { '.validate': `newData.isNumber() && (${ADMIN} || newData.val() == now || newData.val() == data.val())` }
+      }
+    },
+
+    // Firebase user â†’ account id
+    owners: {
+      '$uid': {
+        '.read': `(auth != null && auth.uid == $uid) || ${ADMIN}`,
+        '.write': `${ADMIN} || (auth != null && auth.uid == $uid && (!newData.exists() || ${acctOwnerOf('newData.val()')} == auth.uid))`,
+        '.validate': '!newData.exists() || newData.isString()'
+      }
+    },
+
+    // Recovery codes: nobody can read them back; rules compare against them during recovery
+    recovery: {
+      '$acc': {
+        '.read': false,
+        '.write': `${ADMIN} || (auth != null && ${acctOwnerOf('$acc')} == auth.uid)`,
+        '.validate': "!newData.exists() || (newData.child('code').isString() && newData.child('code').val().length >= 10)"
+      }
+    },
+
+    // 5 wrong PINs â†’ 15 minute lock. Counters can only move forward; only the owner
+    // (after a successful sign-in, once the lock expired) or an admin can reset them.
+    locks: {
+      '.read': ADMIN,
+      '$key': {
+        '.read': true,
+        '.write': `newData.exists() || ${ADMIN}`,
+        '.validate': `newData.child('fails').isNumber() && newData.child('lockedAt').isNumber() && (
+            ${ADMIN}
+         || (${NOT_LOCKED_NOW} && newData.child('fails').val() == ${OLD_F} + 1 && newData.child('fails').val() < 5 && newData.child('lockedAt').val() == ${OLD_L})
+         || (${NOT_LOCKED_NOW} && ${OLD_F} == 4 && newData.child('fails').val() == 0 && newData.child('lockedAt').val() == now)
+         || (auth != null && data.exists() && ${NOT_LOCKED_NOW} && newData.child('fails').val() == 0 && newData.child('lockedAt').val() == ${OLD_L}
+              && root.child('usernames').child($key).child('acc').isString()
+              && ${acctOwnerOf("root.child('usernames').child($key).child('acc').val()")} == auth.uid))`
+      }
+    },
+
+    // Admin bans (public read so the sign-in screen can say why)
+    bans: {
+      '.read': ADMIN,
+      '$acc': {
+        '.read': true,
+        '.write': ADMIN,
+        '.validate': "!newData.exists() || (newData.child('until').isNumber() && (!newData.child('reason').exists() || newData.child('reason').isString()))"
+      }
+    }
+  }
+};
+
+// Collapse the readable whitespace inside expressions
+const clean = o => { for (const k in o) { if (typeof o[k] === 'string') o[k] = o[k].replace(/\s+/g, ' ').trim(); else if (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k])) clean(o[k]); } };
+clean(rules);
+fs.writeFileSync(out, JSON.stringify(rules, null, 2) + '\n');
+console.log('wrote', out);

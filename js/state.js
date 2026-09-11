@@ -12,7 +12,6 @@ const CONFIGS = {
 };
 const DIFFS = Object.keys(CONFIGS);
 const GPAD = 10, GAP = 5;
-const MEDALS = ['🥇','🥈','🥉'];
 const PAL = ['#2dff7f','#4dfffe','#ff4d6a','#ffe04d','#c084fc',
              '#ff9f43','#48dbfb','#ff6b9d','#a29bfe','#00b894'];
 const MAX_ROOM_PLAYERS = 8;

@@ -11,17 +11,18 @@
 // ══════════════════════════════════════════════════
 
 const MM_BRACKETS = [
-  { name:'Bronze',   icon:'🥉', min:1,  diffs:['baby', 'easy'] },
-  { name:'Silver',   icon:'🥈', min:5,  diffs:['easy', 'medium'] },
-  { name:'Gold',     icon:'🥇', min:15, diffs:['medium', 'hard'] },
-  { name:'Platinum', icon:'💠', min:30, diffs:['hard', 'expert'] },
-  { name:'Diamond',  icon:'💎', min:60, diffs:['hard', 'expert'] }
+  { name:'Bronze',   color:'#d08a4e', min:1,  diffs:['baby', 'easy'] },
+  { name:'Silver',   color:'#c9d1dc', min:5,  diffs:['easy', 'medium'] },
+  { name:'Gold',     color:'#ffd700', min:15, diffs:['medium', 'hard'] },
+  { name:'Platinum', color:'#7fe7ff', min:30, diffs:['hard', 'expert'] },
+  { name:'Diamond',  color:'#b98cff', min:60, diffs:['hard', 'expert'] }
 ];
 const MM_PREFIX    = 'mazzie-qm2-';
 const MM_MAX       = 4;
 const MM_START_SEC = 5;
 let mm = null;
 
+function bracketIcon(i) { return `<span class="tier-ic" style="color:${MM_BRACKETS[i].color}">${ic('tier')}</span>`; }
 function bracketFor(lvl) { let b = 0; MM_BRACKETS.forEach((x, i) => { if (lvl >= x.min) b = i; }); return b; }
 function bracketRange(i) {
   const b = MM_BRACKETS[i], n = MM_BRACKETS[i + 1];
@@ -211,7 +212,7 @@ function queueAgain() {
 function renderQueue() {
   if (!mm) return;
   const b = MM_BRACKETS[mm.bracket];
-  document.getElementById('q-bracket').innerHTML = `${b.icon} ${b.name} <span>${bracketRange(mm.bracket)}</span>`;
+  document.getElementById('q-bracket').innerHTML = `${bracketIcon(mm.bracket)}${b.name} <span>${bracketRange(mm.bracket)}</span>`;
   const secs = Math.floor((Date.now() - mm.t0) / 1000);
   document.getElementById('q-time').innerText = fmt(secs);
   const range = document.getElementById('q-range');
@@ -228,7 +229,7 @@ function renderQueue() {
     } else if (i === 0 && !pids.length) {
       slots.push(`<div class="q-slot filled">${renderAvatar(getMyAvatar(), myName, 44)}<div class="q-slot-name">${escapeHtml(myName)} (you)</div><div class="q-slot-lvl">${getLevelBadge(myXpLevel())}</div></div>`);
     } else {
-      slots.push(`<div class="q-slot"><div class="q-slot-empty">?</div><div class="q-slot-name">Searching</div></div>`);
+      slots.push(`<div class="q-slot"><div class="q-slot-empty">${ic('search')}</div><div class="q-slot-name">Searching</div></div>`);
     }
   }
   list.innerHTML = slots.join('');

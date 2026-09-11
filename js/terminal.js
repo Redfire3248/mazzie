@@ -4,22 +4,17 @@
 //   • Inline ghost suggestion (→ or Tab accepts) + tappable suggestion chips
 //   • Command history (↑/↓, persisted), Ctrl+L clear, Ctrl+C cancel, Esc close
 //   • Player-name completion with automatic quoting ("Racer 42")
-// Open with F2 or ` (admins only). On phones: long-press the MAZZIE logo or the timer.
+// Admins (Google sign-in with an email listed in config.js adminEmails AND in the
+// database /admins list) open it from the Admin button in the menu or Settings,
+// with F2 / ` on a keyboard, or by long-pressing the MAZZIE logo or the timer.
 // ══════════════════════════════════════════════════
 
 const TERM_HIST_KEY = 'mazzie_term_hist';
 let termHist = (() => { try { return JSON.parse(localStorage.getItem(TERM_HIST_KEY) || '[]'); } catch (e) { return []; } })();
 let termHistIdx = -1, termDraft = '', termBooted = false, tabState = null;
+let accountCache = [];   // admin: last fetched account list (for completion)
 
-// ── Admin gate (UID whitelist from config.js; silent for everyone else) ──
-function isAdminUid() {
-  const uid  = (currentAccount && currentAccount.uid) || localStorage.getItem('mazzie_uid') || '';
-  const list = (window.MAZZIE_CONFIG && window.MAZZIE_CONFIG.adminUids) || [];
-  if (!uid) return false;
-  const short = uid.slice(-8).toUpperCase();
-  return list.some(a => a === uid || a.replace('#', '').toUpperCase() === short);
-}
-function adminOpen()  { if (isAdminUid()) openTerminal(); }
+function adminOpen()  { if (isAdminUser()) openTerminal(); }
 function adminClose() {
   document.getElementById('admin-term').classList.add('adm-hidden');
   document.getElementById('term-input').blur();
@@ -38,6 +33,7 @@ function openTerminal() {
   }
   if (!matchMedia('(pointer:coarse)').matches) setTimeout(() => document.getElementById('term-input').focus(), 30);
   termUpdateAssist();
+  if (authMode() === 'secure') refreshAccountCache(true);
 }
 function termMode() {
   if (battleActive) return isHost ? 'BATTLE·HOST' : 'BATTLE·GUEST';
@@ -128,10 +124,66 @@ const CMDS = {
     if (inBattleSession()) tInfo('room     ' + (roomCode || '?') + ' · ' + Object.keys(lobbyPlayers).length + ' players · round ' + battleRound + '/' + maxRounds);
     tInfo('xp       LVL ' + myXpLevel() + ' · ' + (loadSave().xp || 0) + ' xp · ' + (loadSave().totalCleared || 0) + ' cleared');
   } },
-  whoami: { desc:'Your account + full UID (copied)', run() {
-    const uid = (currentAccount && currentAccount.uid) || localStorage.getItem('mazzie_uid') || myId;
-    tInfo(myName + '  uid=' + uid + '  admin=' + isAdminUid());
-    navigator.clipboard && navigator.clipboard.writeText(uid).then(() => termPrint('(uid copied to clipboard)', 'dim')).catch(() => {});
+  whoami: { desc:'Your account, sign-in and admin status', run() {
+    const id = (currentAccount && currentAccount.id) || myId;
+    tInfo(myName + '  account=' + id + '  admin=' + isAdminUser());
+    if (_authUser) tInfo('signed in as ' + (_authUser.email || _authUser.uid) + (_authUser.emailVerified ? ' (verified)' : ''));
+    tInfo('auth mode: ' + authMode());
+  } },
+
+  accounts: { desc:'List every account (admin)', args:[H('[search]')], async run(a) {
+    needSecure();
+    termPrint('loading…', 'dim');
+    const list = await refreshAccountCache();
+    const q = (a[0] || '').toLowerCase();
+    const rows = list.filter(x => !q || x.name.toLowerCase().includes(q) || x.id.toLowerCase().includes(q) || x.google.toLowerCase().includes(q))
+                     .sort((x, y) => y.lastSeen - x.lastSeen);
+    termPrint(pad('NAME', 17) + pad('LVL', 5) + pad('CLEARS', 7) + pad('LAST SEEN', 11) + 'STATUS', 'dim');
+    rows.forEach(x => {
+      const st = [x.ban ? 'BANNED ' + ago(x.ban.until - Date.now(), true) : '', x.lockLeft ? 'LOCKED ' + fmtWait(x.lockLeft) : '',
+                  x.google ? 'google' : '', x.legacy ? 'old-login' : ''].filter(Boolean).join(' · ') || 'ok';
+      termPrint(pad(x.name, 17) + pad(x.lvl, 5) + pad(x.cleared, 7) + pad(x.lastSeen ? ago(Date.now() - x.lastSeen) : '-', 11) + st,
+        x.ban || x.lockLeft ? 'warn' : '');
+    });
+    tInfo(rows.length + ' of ' + list.length + ' accounts' + (q ? ' matching "' + q + '"' : ''));
+  } },
+  account: { desc:'Inspect / moderate one account (admin)', sub:{
+    info:     { args:[H('<name>', accountNames)], desc:'Full details', async run(a) {
+      const x = await findAccount(a[0]);
+      [['name', x.name], ['account id', x.id], ['level', x.lvl + ' (' + x.xp + ' xp)'], ['cleared', x.cleared],
+       ['google', x.google || 'not linked'], ['created', x.createdAt ? new Date(x.createdAt).toLocaleString() : '-'],
+       ['last seen', x.lastSeen ? new Date(x.lastSeen).toLocaleString() : '-'],
+       ['ban', x.ban ? 'until ' + new Date(x.ban.until).toLocaleString() + (x.ban.reason ? ' — ' + x.ban.reason : '') : 'none'],
+       ['pin lock', x.lockLeft ? fmtWait(x.lockLeft) + ' left' : 'none'], ['login', x.legacy ? 'old (upgrades on next sign-in)' : 'secure']]
+        .forEach(([k, v]) => tInfo(pad(k, 11) + v));
+    } },
+    ban:      { args:[H('<name>', accountNames), H('<minutes>', ['15', '60', '1440', '10080']), H('[reason…]', null, true)], desc:'Ban for N minutes', async run(a) {
+      const x = await findAccount(a[0]);
+      const mins = needInt(a[1], 'minutes');
+      if (mins <= 0) throw new Error('minutes must be > 0');
+      const until = await adminBan(x.id, mins, a.slice(2).join(' '));
+      tWarn('banned ' + x.name + ' until ' + new Date(until).toLocaleString());
+      refreshAccountCache(true);
+    } },
+    setxp:    { args:[H('<name>', accountNames), H('<xp>', ['0']), H('[clears]')], desc:'Fix a cheater: set XP (and clears)', async run(a) {
+      const x = await findAccount(a[0]);
+      const xp = needInt(a[1], 'xp'); if (xp < 0) throw new Error('xp must be ≥ 0');
+      const cl = a[2] != null ? needInt(a[2], 'clears') : null;
+      await adminSetProgress(x.id, xp, cl);
+      tOk(x.name + ' → ' + xp + ' xp (LVL ' + getXpLevel(xp) + ')' + (cl != null ? ', ' + cl + ' clears' : ''));
+      termPrint('they may need to sign out and in again to see it', 'dim');
+      refreshAccountCache(true);
+    } },
+    unban:    { args:[H('<name>', accountNames)], desc:'Lift a ban', async run(a) { const x = await findAccount(a[0]); await adminUnban(x.id); tOk('unbanned ' + x.name); refreshAccountCache(true); } },
+    unlock:   { args:[H('<name>', accountNames)], desc:'Clear the 5-wrong-PIN lock', async run(a) { const x = await findAccount(a[0]); await adminUnlock(x.nameLower); tOk('lock cleared for ' + x.name); refreshAccountCache(true); } },
+    resetpin: { args:[H('<name>', accountNames)], desc:'Give a player a temporary PIN', async run(a) {
+      const x = await findAccount(a[0]);
+      const r = await adminResetPin(x.id);
+      tOk('temporary PIN for ' + x.name + ':  ' + r.pin);
+      termPrint('tell them to sign in with it, then change it in Settings', 'dim');
+      if (r.hadGoogle) tWarn('their Google link was removed — they can re-link it in Settings');
+      refreshAccountCache(true);
+    } }
   } },
   players: { desc:'List players in the room', run() {
     const e = Object.entries(lobbyPlayers);
@@ -246,7 +298,7 @@ const CMDS = {
   say:      { desc:'Announce to the room', args:[H('<message…>', null, true)], run(a) {
     const msg = a.join(' ').slice(0, 80); if (!msg) throw new Error('nothing to say');
     if (isHost) broadcastAll({ type:'announce', msg });
-    addChatMsg('📢 ' + msg, null, true); pushToast('📢 ' + msg, 'info'); tOk('announced');
+    addChatMsg('Admin: ' + msg, null, true); pushToast(msg, 'info', 'alert'); tOk('announced');
   } },
   unlock:   { desc:'Cosmetics: unlock everything / relock', args:[H('<all|reset>', ['all', 'reset'])], run(a) {
     if (a[0] === 'reset') { writeSave({ unlockAll:false }); tWarn('cosmetics relocked'); }
@@ -274,7 +326,31 @@ const CMDS = {
     localStorage.removeItem('mazzie'); updateMenuProfile(); applyMyCosmetics(); tWarn('local save wiped');
   } }
 };
-const ALIASES = { cls:'clear', '?':'help', q:'exit', quit:'exit', lvl:'level', t:'timer', b:'board', ann:'say', announce:'say' };
+const ALIASES = { cls:'clear', '?':'help', q:'exit', quit:'exit', lvl:'level', t:'timer', b:'board', ann:'say', announce:'say', users:'accounts', acc:'account' };
+
+// ── Account helpers (admin) ──
+function needSecure() { if (authMode() !== 'secure') throw new Error('account tools need Firebase Auth set up (see FIREBASE_SETUP.md)'); if (!isAdminUser()) throw new Error('sign in with your admin Google account'); }
+async function refreshAccountCache(quiet) {
+  try { accountCache = await adminListAccounts(); }
+  catch (e) { if (!quiet) throw new Error(e.message === 'DENIED' ? 'database refused — is your email in /admins?' : 'could not load accounts'); }
+  return accountCache;
+}
+function accountNames() { return accountCache.map(x => x.name); }
+async function findAccount(tok) {
+  needSecure();
+  if (!tok) throw new Error('which account?');
+  if (!accountCache.length) await refreshAccountCache();
+  const t = tok.toLowerCase();
+  let hit = accountCache.find(x => x.name.toLowerCase() === t || x.id.toLowerCase() === t);
+  if (!hit) { const pre = accountCache.filter(x => x.name.toLowerCase().startsWith(t)); if (pre.length === 1) hit = pre[0]; else if (pre.length > 1) throw new Error('ambiguous: ' + pre.map(x => x.name).join(', ')); }
+  if (!hit) throw new Error('no account named "' + tok + '"');
+  return hit;
+}
+function ago(ms, future) {
+  const m = Math.round(ms / 60000);
+  const s = m < 1 ? 'now' : m < 60 ? m + 'm' : m < 1440 ? Math.round(m / 60) + 'h' : Math.round(m / 1440) + 'd';
+  return future ? s : (s === 'now' ? 'just now' : s + ' ago');
+}
 
 // Regenerate a solo board at the current level
 function soloRegen() {
@@ -451,8 +527,12 @@ function termRun(line) {
     if (cmd.sub) {
       const sub = cmd.sub[(vals[1] || '').toLowerCase()];
       if (!sub) return tWarn('usage: ' + name + ' <' + Object.keys(cmd.sub).join('|') + '>   (help ' + name + ')');
-      sub.run(vals.slice(2));
-    } else cmd.run(vals.slice(1));
+      const res = sub.run(vals.slice(2));
+      if (res && res.then) res.catch(e => tErr('error: ' + e.message));
+    } else {
+      const res = cmd.run(vals.slice(1));
+      if (res && res.then) res.catch(e => tErr('error: ' + e.message));
+    }
   } catch (e) { tErr('error: ' + e.message); }
   document.getElementById('term-mode').innerText = termMode();
 }
@@ -504,7 +584,7 @@ function termFocus(e) {
 document.addEventListener('keydown', e => {
   const isToggle = e.key === 'F2' || (e.key === '`' && !(document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && document.activeElement.id !== 'term-input'));
   if (!isToggle) return;
-  if (!isAdminUid()) return;
+  if (!isAdminUser()) return;
   e.preventDefault();
   termIsOpen() ? adminClose() : openTerminal();
 });

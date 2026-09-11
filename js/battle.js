@@ -56,10 +56,17 @@ function showConnecting(txt) {
 function hideConnecting() { document.getElementById('connecting').classList.add('hidden'); }
 
 // ── App init ──
-window.addEventListener('load', () => {
+// Boot as soon as the DOM exists (not on 'load', which waits for web fonts)
+async function bootApp() {
+  hydrateIcons();
   applyMyCosmetics();
   syncSoundBtn();
+  // Download the sign-in SDK and custom avatar art in parallel
+  if (authMode() === 'secure') initFirebase().catch(() => {});
+  await Promise.race([loadCustomCosmetics(), new Promise(r => setTimeout(r, 1200))]);
+  applyMyCosmetics();
   initAccount(name => {
+    hideConnecting();
     myName = name;
     updateMenuProfile();
     _setupContinueBtn();
@@ -67,7 +74,9 @@ window.addEventListener('load', () => {
   });
   // Warm the signalling connection in the background
   if (typeof Peer !== 'undefined') { try { makePeer(); } catch (e) {} }
-});
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootApp);
+else setTimeout(bootApp, 0);
 
 // ── Room code generator ──
 function genCode() {
@@ -264,7 +273,7 @@ function renderLobby() {
     <div class="p-tag ${p.host ? 'host' : 'guest'}">${p.host ? 'HOST' : 'GUEST'}</div>`;
     if (isHost && !isMe) {
       const k = document.createElement('button');
-      k.className = 'p-kick'; k.title = 'Kick'; k.innerText = '✕';
+      k.className = 'p-kick'; k.title = 'Kick'; k.innerHTML = ic('userX');
       k.onclick = () => kickPlayer(pid);
       row.appendChild(k);
     }
@@ -472,7 +481,7 @@ function handleHostMsg(d) {
       quitPlayers.add(d.id);
       const nm = cleanName(d.name);
       pushToast(nm + ' left the game', 'warn');
-      addChatMsg('🚪 ' + nm + ' left the game', null, true);
+      addChatMsg(nm + ' left the game', null, true);
       updateSpectateRow(d.id, (progressState[d.id] && progressState[d.id].pct) || 0, false, '', true);
       break;
     }
@@ -484,11 +493,11 @@ function handleHostMsg(d) {
       { const q = isQuickMatch; resetBattleState(); show(q ? 'menu' : 'battle-mode'); }
       break;
     case 'announce':
-      pushToast('📢 ' + String(d.msg || '').slice(0, 80), 'info');
-      addChatMsg('📢 ' + String(d.msg || '').slice(0, 80), null, true);
+      pushToast(String(d.msg || '').slice(0, 80), 'info', 'alert');
+      addChatMsg('Admin: ' + String(d.msg || '').slice(0, 80), null, true);
       break;
     case 'freeze':
-      if (!d.id || d.id === myId) { timerFrozen = true; pushToast('⏸ Timer frozen by admin', 'warn'); }
+      if (!d.id || d.id === myId) { timerFrozen = true; pushToast('Timer frozen by admin', 'warn', 'pause'); }
       break;
     case 'unfreeze':
       if (!d.id || d.id === myId) timerFrozen = false;
@@ -506,17 +515,17 @@ function handleHostMsg(d) {
     case 'grant_xp':
       if (d.id === myId) {
         const amt = Math.max(-100000, Math.min(100000, parseInt(d.amount) || 0));
-        addXp(amt); updateMenuProfile(); pushToast('⬡ +' + amt + ' XP from admin!', 'xp');
+        addXp(amt); updateMenuProfile(); pushToast('+' + amt + ' XP from admin', 'xp');
       }
       break;
     case 'grant_boost':
       if ((d.id === myId || !d.id) && ABILITIES[d.kind] && abilityInv.length < MAX_SLOTS) {
         abilityInv.push(d.kind); renderAbilityBar(abilityInv.length - 1);
-        pushToast(ABILITIES[d.kind].icon + ' Admin gave you ' + ABILITIES[d.kind].name, 'acc');
+        pushToast('Admin gave you ' + ABILITIES[d.kind].name, 'acc', ABILITIES[d.kind].icon);
       }
       break;
     case 'reset_path':
-      resetPath(); pushToast('↩ Admin reset your path', 'warn');
+      resetPath(); pushToast('Admin reset your path', 'warn', 'reset');
       break;
     case 'ability_hit':
       receiveAttack({ ...d, fromName:cleanName(d.fromName) });
@@ -529,7 +538,7 @@ function handleHostMsg(d) {
 
 function renderGuestSettings() {
   const el = document.getElementById('guest-settings'); if (!el) return;
-  const diff = battleDiffSetting === 'random' ? '🎲 Random' : battleDiffSetting === 'mm' ? '🎯 Level-based' : battleDiffSetting.toUpperCase();
+  const diff = battleDiffSetting === 'random' ? 'Random' : battleDiffSetting === 'mm' ? 'Level-based' : battleDiffSetting.toUpperCase();
   el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>`;
 }
 
@@ -612,7 +621,7 @@ function handlePlayerQuit(pid) {
   quitPlayers.add(pid);
   progressState[pid] = { ...(progressState[pid] || { pct:0 }), quit:true };
   pushToast(pname + ' left the game', 'warn');
-  addChatMsg('🚪 ' + pname + ' left the game', null, true);
+  addChatMsg(pname + ' left the game', null, true);
   if (isHost) broadcastAll({ type:'player_quit', id:pid, name:pname });
   updateSpectateRow(pid, progressState[pid].pct || 0, false, '', true);
   if (isHost) checkRoundComplete();
@@ -754,7 +763,7 @@ function showRoundResults(order) {
     const row = document.createElement('div');
     row.className = 'rr-row ' + (pClasses[i] || '') + (e.id === myId ? ' me' : '');
     row.style.animationDelay = (i * 60) + 'ms';
-    row.innerHTML = `<div class="rr-medal">${MEDALS[i] || '#' + (i + 1)}</div>
+    row.innerHTML = `<div class="rr-medal">${medal(i)}</div>
       ${renderAvatar(p && p.avatar, e.name, 30)}
       <div class="rr-info">
         <div class="rr-name">${escapeHtml(e.name)}${e.id === myId ? ' (you)' : ''}</div>
@@ -797,7 +806,7 @@ function showFinalResults() {
   const pinfo  = pid => lobbyPlayers[pid] || playerCache[pid] || null;
   const winnerName = sorted.length > 0 ? ((pinfo(sorted[0][0]) || {}).name || '???') : '';
   const isWinner = sorted.length > 0 && sorted[0][0] === myId;
-  document.getElementById('fin-winner').innerText = winnerName + (isWinner ? ' 🎉 (you!)' : ' wins! 🎉');
+  document.getElementById('fin-winner').innerText = isWinner ? 'You win!' : winnerName + ' wins!';
   const list = document.getElementById('fin-list'); list.innerHTML = '';
   let myPlace = -1;
   sorted.forEach(([pid, pts], i) => {
@@ -806,7 +815,7 @@ function showFinalResults() {
     const row = document.createElement('div');
     row.className = 'fin-row' + (i === 0 ? ' rank1' : '') + (pid === myId ? ' me' : '');
     row.style.animationDelay = (i * 80) + 'ms';
-    row.innerHTML = `<div class="fin-medal">${MEDALS[i] || '#' + (i + 1)}</div>
+    row.innerHTML = `<div class="fin-medal">${medal(i)}</div>
       ${renderAvatar(p && p.avatar, p ? p.name : '?', 36)}
       <div class="fin-info">
         <div class="fin-name">${escapeHtml(p ? p.name : '???')}${pid === myId ? ' (you)' : ''}</div>

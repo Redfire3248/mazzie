@@ -38,14 +38,15 @@ function cleanName(n) {
 
 // ── Ranks ──
 const RANKS = [
-  { min:0,   name:'Newbie',  icon:'🌱' },
-  { min:5,   name:'Rookie',  icon:'⚡' },
-  { min:15,  name:'Solver',  icon:'🔥' },
-  { min:30,  name:'Pro',     icon:'💎' },
-  { min:60,  name:'Master',  icon:'👑' },
-  { min:100, name:'Legend',  icon:'🌟' },
-  { min:200, name:'Mythic',  icon:'🔮' }
+  { min:0,   name:'Newbie',  icon:'seed',  color:'#7ee8a2' },
+  { min:5,   name:'Rookie',  icon:'bolt',  color:'#ffe04d' },
+  { min:15,  name:'Solver',  icon:'flame', color:'#ff9f43' },
+  { min:30,  name:'Pro',     icon:'gem',   color:'#4dfffe' },
+  { min:60,  name:'Master',  icon:'crown', color:'#ffd700' },
+  { min:100, name:'Legend',  icon:'star',  color:'#ff6b9d' },
+  { min:200, name:'Mythic',  icon:'orb',   color:'#c084fc' }
 ];
+function rankIcon(rank) { return `<span class="rank-ic" style="color:${rank.color}">${ic(rank.icon)}</span>`; }
 const DIFF_XP = { baby:10, easy:20, medium:35, hard:55, expert:80 };
 
 function getRank(cleared) {
@@ -70,9 +71,9 @@ function addXp(amount) {
   writeSave({ xp: newXp });
   const after = getXpLevel(newXp);
   if (after > before) {
-    pushToast('⬡ Level up! Now level ' + after, 'xp'); spawnParticles(); sfx('level');
+    pushToast('Level up! Now level ' + after, 'xp'); spawnParticles(); sfx('level');
     const unlocked = typeof cosmeticsUnlockedAt === 'function' ? cosmeticsUnlockedAt(before + 1, after) : 0;
-    if (unlocked > 0) setTimeout(() => pushToast('🎨 ' + unlocked + ' new Locker item' + (unlocked > 1 ? 's' : '') + '!', 'acc'), 900);
+    if (unlocked > 0) setTimeout(() => pushToast(unlocked + ' new Locker item' + (unlocked > 1 ? 's' : '') + ' unlocked', 'acc', 'palette'), 900);
   }
   return { gained: amount, newXp, newLvl: after };
 }

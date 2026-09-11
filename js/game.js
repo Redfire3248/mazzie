@@ -550,7 +550,7 @@ function onWin() {
   const base  = DIFF_XP[currentDiff] || 20;
   const par   = solvableCount * 1.1;               // seconds
   const speed = Math.max(0, Math.min(base, Math.round(base * (1 - sec / par))));
-  let bonusTxt = speed > 0 ? `<span class="xp-bonus">⚡ +${speed} speed</span>` : '';
+  let bonusTxt = speed > 0 ? `<span class="xp-bonus">${ic('bolt')}+${speed} speed</span>` : '';
   let total = base + speed;
   let bestHtml = '';
 
@@ -559,20 +559,20 @@ function onWin() {
     const prev = daily[todayKey()];
     const isNew = !prev || ms < prev;
     if (isNew) { daily[todayKey()] = ms; writeSave({ daily }); }
-    if (!prev) { total += 50; bonusTxt += `<span class="xp-bonus">📅 +50 daily</span>`; }
-    bestHtml = isNew ? '<div class="win-best new">★ New daily best!</div>' : `<div class="win-best">Daily best ${fmtMs(prev)}</div>`;
+    if (!prev) { total += 50; bonusTxt += `<span class="xp-bonus">${ic('calendar')}+50 daily</span>`; }
+    bestHtml = isNew ? '<div class="win-best new">' + ic('star') + 'New daily best</div>' : `<div class="win-best">Daily best ${fmtMs(prev)}</div>`;
     writeSave({ totalCleared: (s.totalCleared || 0) + 1 });
   } else {
     writeSave({ totalCleared: (s.totalCleared || 0) + 1, level: level + 1, diff: currentDiff });
     const prevBest = getBest(currentDiff);
     const isNew = recordBest(currentDiff, ms);
-    bestHtml = isNew ? '<div class="win-best new">★ New ' + currentDiff + ' best!</div>'
+    bestHtml = isNew ? '<div class="win-best new">' + ic('star') + 'New ' + currentDiff + ' best</div>'
                      : `<div class="win-best">Best ${fmtMs(prevBest)}</div>`;
   }
   const xpRes = addXp(total);
   updateMenuProfile();
   document.getElementById('win-time').innerText = time;
-  document.getElementById('win-xp-row').innerHTML = `<span class="xp-gain">+${xpRes.gained} XP ⬡</span>${bonusTxt}`;
+  document.getElementById('win-xp-row').innerHTML = `<span class="xp-gain">+${xpRes.gained} XP</span>${bonusTxt}`;
   document.getElementById('win-best').innerHTML = bestHtml;
   const nb = document.getElementById('next-btn');
   nb.style.display = dailyMode ? 'none' : 'block';
