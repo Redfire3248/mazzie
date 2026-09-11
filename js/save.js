@@ -38,13 +38,13 @@ function cleanName(n) {
 
 // ── Ranks ──
 const RANKS = [
-  { min:0,   name:'Newbie',  icon:'seed',  color:'#7ee8a2' },
-  { min:5,   name:'Rookie',  icon:'bolt',  color:'#ffe04d' },
-  { min:15,  name:'Solver',  icon:'flame', color:'#ff9f43' },
-  { min:30,  name:'Pro',     icon:'gem',   color:'#4dfffe' },
-  { min:60,  name:'Master',  icon:'crown', color:'#ffd700' },
-  { min:100, name:'Legend',  icon:'star',  color:'#ff6b9d' },
-  { min:200, name:'Mythic',  icon:'orb',   color:'#c084fc' }
+  { min:0,   name:'Newbie',  icon:'seed',  color:'var(--txt2)' },
+  { min:5,   name:'Rookie',  icon:'bolt',  color:'var(--acc)' },
+  { min:15,  name:'Solver',  icon:'flame', color:'var(--cyan)' },
+  { min:30,  name:'Pro',     icon:'gem',   color:'var(--xp)' },
+  { min:60,  name:'Master',  icon:'crown', color:'var(--gold)' },
+  { min:100, name:'Legend',  icon:'star',  color:'var(--orange)' },
+  { min:200, name:'Mythic',  icon:'orb',   color:'var(--danger)' }
 ];
 function rankIcon(rank) { return `<span class="rank-ic" style="color:${rank.color}">${ic(rank.icon)}</span>`; }
 const DIFF_XP = { baby:10, easy:20, medium:35, hard:55, expert:80 };
@@ -93,7 +93,7 @@ function recordBest(diff, ms) {
 }
 
 // ── Level badge — fixed circle, never stretches ──
-// Tiers: 0 grey · 1 green · 2 teal · 3 blue · 4 purple · 5 gold · 6 orange · 7 red · 8 rainbow
+// Tiers (same colour order as ranks): 0 grey · 1 green · 2 cyan · 3 violet · 4 gold · 5 orange · 6 red · 7 red pulse · 8 rainbow
 function levelTier(lvl) {
   if (lvl >= 5000) return 8;
   if (lvl >= 1000) return 7;

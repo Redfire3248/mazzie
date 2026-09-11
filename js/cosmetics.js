@@ -10,19 +10,20 @@
 
 // Initials + every icon in assets/avatars/manifest.json (loaded at start-up)
 const AVA_ICONS = [ { id:'init', lvl:1, name:'Initials' } ];
+// Palette: green #2dff7f · cyan #4dfffe · violet #a78bfa · gold #ffd700 · orange #ff9f43 · red #ff4d6a (+ darker shades)
 const AVA_COLORS = [
-  { id:'mint',     lvl:1,  name:'Mint',     bg:'linear-gradient(135deg,#2dff7f,#00b86b)' },
-  { id:'ice',      lvl:1,  name:'Ice',      bg:'linear-gradient(135deg,#4dfffe,#2b7bff)' },
-  { id:'rose',     lvl:2,  name:'Rose',     bg:'linear-gradient(135deg,#ff6b9d,#ff4d6a)' },
-  { id:'sun',      lvl:3,  name:'Sun',      bg:'linear-gradient(135deg,#ffe04d,#ff9f43)' },
-  { id:'grape',    lvl:5,  name:'Grape',    bg:'linear-gradient(135deg,#c084fc,#6d28d9)' },
-  { id:'ember',    lvl:8,  name:'Ember',    bg:'linear-gradient(135deg,#ff9f43,#e11d48)' },
-  { id:'ocean',    lvl:12, name:'Ocean',    bg:'linear-gradient(135deg,#00b894,#0652dd)' },
-  { id:'toxic',    lvl:16, name:'Toxic',    bg:'linear-gradient(135deg,#d4ff00,#00b86b)' },
-  { id:'midnight', lvl:22, name:'Midnight', bg:'linear-gradient(135deg,#4b4bc8,#15153a)' },
+  { id:'mint',     lvl:1,  name:'Mint',     bg:'linear-gradient(135deg,#2dff7f,#0e9e57)' },
+  { id:'ice',      lvl:1,  name:'Ice',      bg:'linear-gradient(135deg,#4dfffe,#178aa8)' },
+  { id:'rose',     lvl:2,  name:'Rose',     bg:'linear-gradient(135deg,#ff4d6a,#a3183a)' },
+  { id:'sun',      lvl:3,  name:'Sun',      bg:'linear-gradient(135deg,#ffd700,#ff9f43)' },
+  { id:'grape',    lvl:5,  name:'Grape',    bg:'linear-gradient(135deg,#a78bfa,#5a3fc0)' },
+  { id:'ember',    lvl:8,  name:'Ember',    bg:'linear-gradient(135deg,#ff9f43,#ff4d6a)' },
+  { id:'ocean',    lvl:12, name:'Ocean',    bg:'linear-gradient(135deg,#4dfffe,#5a3fc0)' },
+  { id:'toxic',    lvl:16, name:'Toxic',    bg:'linear-gradient(135deg,#ffd700,#2dff7f)' },
+  { id:'midnight', lvl:22, name:'Midnight', bg:'linear-gradient(135deg,#5a3fc0,#161622)' },
   { id:'gold',     lvl:30, name:'Gold',     bg:'linear-gradient(135deg,#fff3a0,#ffd700 45%,#b8860b)' },
-  { id:'holo',     lvl:45, name:'Holo',     bg:'linear-gradient(135deg,#ff6b9d,#ffe04d,#2dff7f,#4dfffe,#c084fc)', anim:true },
-  { id:'void',     lvl:60, name:'Void',     bg:'radial-gradient(circle at 30% 30%,#8b5cf6,#0a0014 72%)' }
+  { id:'holo',     lvl:45, name:'Holo',     bg:'linear-gradient(135deg,#ff4d6a,#ffd700,#2dff7f,#4dfffe,#a78bfa)', anim:true },
+  { id:'void',     lvl:60, name:'Void',     bg:'radial-gradient(circle at 30% 30%,#a78bfa,#07070e 72%)' }
 ];
 const AVA_FRAMES = [
   { id:'none',    lvl:1,   name:'None' },    { id:'ring',  lvl:1,  name:'Ring' },   { id:'double', lvl:3,  name:'Double' },
@@ -32,34 +33,34 @@ const AVA_FRAMES = [
 ];
 // Path trails: a neon tube (glow + body + white core). grad = colours along the path,
 // flow = travelling sparks, pulse = breathing glow, zap = electric flicker, sparks = crackle at the head
-const RAINBOW = ['#ff4d6a', '#ffd700', '#2dff7f', '#4dfffe', '#b06bff'];
+const RAINBOW = ['#ff4d6a', '#ffd700', '#2dff7f', '#4dfffe', '#a78bfa'];
 const TRAILS = [
   { id:'mint',     lvl:1,  name:'Mint',      rgb:'45,255,127',  core:'#eafff3' },
-  { id:'cyan',     lvl:2,  name:'Cyan',      rgb:'60,225,255',  core:'#effffe' },
-  { id:'pink',     lvl:4,  name:'Bubblegum', rgb:'255,95,190',  core:'#fff0f8', pulse:true },
-  { id:'gold',     lvl:7,  name:'Gold Rush', rgb:'255,205,40',  core:'#fffbe0', grad:['#fff3a0', '#ffd21a', '#ff9a1a'], flow:true },
-  { id:'violet',   lvl:10, name:'Violet',    rgb:'170,110,255', core:'#f3ecff', pulse:true },
-  { id:'ember',    lvl:14, name:'Ember',     rgb:'255,122,48',  core:'#fff4d6', grad:['#ffe14d', '#ff7a1a', '#ff2d2d'], flow:true, sparks:true },
-  { id:'ice',      lvl:18, name:'Glacier',   rgb:'150,220,255', core:'#ffffff', grad:['#ffffff', '#9fe6ff', '#3aa0ff'] },
-  { id:'plasma',   lvl:22, name:'Plasma',    rgb:'255,60,220',  core:'#ffffff', grad:['#ff3cdc', '#7a3cff', '#00e5ff'], flow:true },
+  { id:'cyan',     lvl:2,  name:'Cyan',      rgb:'77,255,254',  core:'#effffe' },
+  { id:'pink',     lvl:4,  name:'Rose',      rgb:'255,77,106',  core:'#fff0f3', pulse:true },
+  { id:'gold',     lvl:7,  name:'Gold Rush', rgb:'255,215,0',   core:'#fffbe0', grad:['#fff3a0', '#ffd700', '#ff9f43'], flow:true },
+  { id:'violet',   lvl:10, name:'Violet',    rgb:'167,139,250', core:'#f3ecff', pulse:true },
+  { id:'ember',    lvl:14, name:'Ember',     rgb:'255,159,67',  core:'#fff4d6', grad:['#ffd700', '#ff9f43', '#ff4d6a'], flow:true, sparks:true },
+  { id:'ice',      lvl:18, name:'Glacier',   rgb:'77,255,254',  core:'#ffffff', grad:['#ffffff', '#4dfffe', '#a78bfa'] },
+  { id:'plasma',   lvl:22, name:'Plasma',    rgb:'167,139,250', core:'#ffffff', grad:['#ff4d6a', '#a78bfa', '#4dfffe'], flow:true },
   { id:'rainbow',  lvl:25, name:'Rainbow',   rgb:'45,255,127',  core:'#ffffff', grad:RAINBOW, flow:true, spin:true },
-  { id:'toxic',    lvl:32, name:'Toxic',     rgb:'124,255,0',   core:'#f4ffe0', grad:['#eaff00', '#7cff00', '#00c96b'], pulse:true, sparks:true },
-  { id:'void',     lvl:45, name:'Void',      rgb:'140,80,255',  core:'#e4d6ff', grad:['#4b1fa8', '#8c50ff', '#ff3cdc'], flow:true, sparks:true },
-  { id:'electric', lvl:60, name:'Electric',  rgb:'90,200,255',  core:'#ffffff', zap:true, flow:true, sparks:true }
+  { id:'toxic',    lvl:32, name:'Toxic',     rgb:'45,255,127',  core:'#f4ffe0', grad:['#ffd700', '#2dff7f', '#4dfffe'], pulse:true, sparks:true },
+  { id:'void',     lvl:45, name:'Void',      rgb:'167,139,250', core:'#efe8ff', grad:['#5a3fc0', '#a78bfa', '#ff4d6a'], flow:true, sparks:true },
+  { id:'electric', lvl:60, name:'Electric',  rgb:'77,255,254',  core:'#ffffff', zap:true, flow:true, sparks:true }
 ];
 // Every title has its own display font (loaded from Google Fonts in index.html)
 const TITLES = [
   { id:'none',        lvl:1,   name:'None' },
-  { id:'puzzler',     lvl:1,   name:'Puzzler',     font:"'Righteous'",         color:'#7ee8a2' },
-  { id:'speedster',   lvl:5,   name:'Speedster',   font:"'Russo One'",         color:'#ffe04d', italic:true },
-  { id:'dreamer',     lvl:8,   name:'Dreamer',     font:"'Pacifico'",          color:'#ff9ecf' },
-  { id:'pathfinder',  lvl:10,  name:'Pathfinder',  font:"'Orbitron'",          color:'#4dfffe' },
-  { id:'tactician',   lvl:15,  name:'Tactician',   font:"'Bungee'",            color:'#ff9f43' },
-  { id:'glitch',      lvl:20,  name:'Glitch',      font:"'Press Start 2P'",    color:'#c084fc' },
-  { id:'mazelord',    lvl:25,  name:'Maze Lord',   font:"'Cinzel Decorative'", color:'#ffd700' },
-  { id:'hustler',     lvl:35,  name:'Hustler',     font:"'Permanent Marker'",  color:'#ff6b9d' },
-  { id:'spooky',      lvl:40,  name:'Spooky',      font:"'Creepster'",         color:'#9dff5c' },
-  { id:'untouchable', lvl:50,  name:'Untouchable', font:"'Monoton'",           color:'#4dfffe' },
+  { id:'puzzler',     lvl:1,   name:'Puzzler',     font:"'Righteous'",         color:'var(--acc)' },
+  { id:'speedster',   lvl:5,   name:'Speedster',   font:"'Russo One'",         color:'var(--gold)', italic:true },
+  { id:'dreamer',     lvl:8,   name:'Dreamer',     font:"'Pacifico'",          color:'var(--xp)' },
+  { id:'pathfinder',  lvl:10,  name:'Pathfinder',  font:"'Orbitron'",          color:'var(--cyan)' },
+  { id:'tactician',   lvl:15,  name:'Tactician',   font:"'Bungee'",            color:'var(--orange)' },
+  { id:'glitch',      lvl:20,  name:'Glitch',      font:"'Press Start 2P'",    color:'var(--danger)' },
+  { id:'mazelord',    lvl:25,  name:'Maze Lord',   font:"'Cinzel Decorative'", color:'var(--gold)' },
+  { id:'hustler',     lvl:35,  name:'Hustler',     font:"'Permanent Marker'",  color:'var(--orange)' },
+  { id:'spooky',      lvl:40,  name:'Spooky',      font:"'Creepster'",         color:'var(--acc)' },
+  { id:'untouchable', lvl:50,  name:'Untouchable', font:"'Monoton'",           color:'var(--cyan)' },
   { id:'mythic',      lvl:100, name:'Mythic',      font:"'Cinzel Decorative'", rainbow:true }
 ];
 const COSMETIC_SETS = { icon:AVA_ICONS, color:AVA_COLORS, frame:AVA_FRAMES, trail:TRAILS, title:TITLES };

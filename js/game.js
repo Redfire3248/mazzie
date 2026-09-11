@@ -46,7 +46,7 @@ function updateInGameLevelBadge() {
   } else if (dailyMode) {
     el.innerHTML = `<span class="lvl-badge-txt" style="color:var(--gold)">DAILY</span>` + getLevelBadge(xpLvl);
   } else {
-    const pc = level >= 50 ? '#a78bfa' : level >= 20 ? '#48dbfb' : level >= 10 ? '#2dff7f' : 'var(--dim)';
+    const pc = level >= 50 ? 'var(--xp)' : level >= 20 ? 'var(--cyan)' : level >= 10 ? 'var(--acc)' : 'var(--dim)';
     el.innerHTML = `<span class="lvl-badge-txt" style="color:${pc}">P${level}</span>` + getLevelBadge(xpLvl);
   }
 }

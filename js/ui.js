@@ -277,7 +277,7 @@ function nextReward() {
 // ── Particles ──
 function spawnParticles() {
   const layer = document.getElementById('particles-layer');
-  const cols2 = ['#2dff7f', '#ffd700', '#a78bfa', '#48dbfb', '#ff4d6a'];
+  const cols2 = ['#2dff7f', '#ffd700', '#a78bfa', '#4dfffe', '#ff4d6a', '#ff9f43'];
   for (let i = 0; i < 22; i++) {
     setTimeout(() => {
       const p = document.createElement('div');

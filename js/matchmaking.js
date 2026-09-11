@@ -11,11 +11,11 @@
 // ══════════════════════════════════════════════════
 
 const MM_BRACKETS = [
-  { name:'Bronze',   color:'#d08a4e', min:1,  diffs:['baby', 'easy'] },
-  { name:'Silver',   color:'#c9d1dc', min:5,  diffs:['easy', 'medium'] },
-  { name:'Gold',     color:'#ffd700', min:15, diffs:['medium', 'hard'] },
-  { name:'Platinum', color:'#7fe7ff', min:30, diffs:['hard', 'expert'] },
-  { name:'Diamond',  color:'#b98cff', min:60, diffs:['hard', 'expert'] }
+  { name:'Bronze',   color:'var(--bronze)', min:1,  diffs:['baby', 'easy'] },
+  { name:'Silver',   color:'var(--silver)', min:5,  diffs:['easy', 'medium'] },
+  { name:'Gold',     color:'var(--gold)', min:15, diffs:['medium', 'hard'] },
+  { name:'Platinum', color:'var(--cyan)', min:30, diffs:['hard', 'expert'] },
+  { name:'Diamond',  color:'var(--xp)', min:60, diffs:['hard', 'expert'] }
 ];
 const MM_PREFIX    = 'mazzie-qm2-';
 const MM_MAX       = 4;
