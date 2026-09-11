@@ -2,27 +2,71 @@
 // js/battle.js — Networking, lobby, host/guest logic
 // ══════════════════════════════════════════════════
 
-// ── Peer init ──
-function initPeer(cb) {
+// ── Peer (lazy — the menu never waits on the signalling server) ──
+const _pendingConnects = new Map(); // peerId → fail callback
+
+function makePeer() {
   peer = new Peer({ debug: 0 });
-  peer.on('open', () => { hideConnecting(); cb(); });
-  peer.on('error', err => {
-    document.getElementById('conn-txt').innerText = 'NETWORK ERROR — ' + err.type;
-    setTimeout(() => { hideConnecting(); show('menu'); }, 2500);
+  peer.on('error', onPeerError);
+  peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) {} });
+  return peer;
+}
+function ensurePeer() {
+  return new Promise((resolve, reject) => {
+    if (typeof Peer === 'undefined') return reject(new Error('offline'));
+    if (!peer || peer.destroyed) makePeer();
+    if (peer.open) return resolve(peer);
+    const onOpen  = () => { cleanup(); resolve(peer); };
+    const t = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 12000);
+    const cleanup = () => { clearTimeout(t); peer.off('open', onOpen); };
+    peer.on('open', onOpen);
   });
+}
+function onPeerError(err) {
+  if (err.type === 'peer-unavailable') {
+    const m = /peer\s+(\S+)\s*$/i.exec(err.message || '');
+    const target = m && m[1];
+    for (const [id, fail] of [..._pendingConnects]) if (!target || target === id) fail();
+    return;
+  }
+  if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type))
+    console.warn('[peer]', err.type);
+}
+// Open a reliable data connection, rejecting fast if the peer doesn't exist
+function connectTo(peerId, timeoutMs = 7000) {
+  return ensurePeer().then(() => new Promise((resolve, reject) => {
+    const conn = peer.connect(peerId, { reliable: true });
+    let done = false;
+    const fail = why => {
+      if (done) return; done = true; clearTimeout(t); _pendingConnects.delete(peerId);
+      try { conn.close(); } catch (e) {}
+      reject(new Error(why));
+    };
+    const t = setTimeout(() => fail('timeout'), timeoutMs);
+    _pendingConnects.set(peerId, () => fail('unavailable'));
+    conn.on('open',  () => { if (done) return; done = true; clearTimeout(t); _pendingConnects.delete(peerId); resolve(conn); });
+    conn.on('error', () => fail('error'));
+  }));
+}
+
+function showConnecting(txt) {
+  document.getElementById('connecting').classList.remove('hidden');
+  document.getElementById('conn-txt').innerText = txt;
 }
 function hideConnecting() { document.getElementById('connecting').classList.add('hidden'); }
 
 // ── App init ──
 window.addEventListener('load', () => {
-  initPeer(() => {
-    initAccount(name => {
-      myName = name;
-      updateMenuProfile();
-      _setupContinueBtn();
-      show('menu');
-    });
+  applyMyCosmetics();
+  syncSoundBtn();
+  initAccount(name => {
+    myName = name;
+    updateMenuProfile();
+    _setupContinueBtn();
+    show('menu');
   });
+  // Warm the signalling connection in the background
+  if (typeof Peer !== 'undefined') { try { makePeer(); } catch (e) {} }
 });
 
 // ── Room code generator ──
@@ -32,341 +76,473 @@ function genCode() {
   return c;
 }
 
-// ── Host a room ──
-function openHostLobby() {
-  document.getElementById('connecting').classList.remove('hidden');
-  document.getElementById('conn-txt').innerText = 'CREATING ROOM…';
-  roomCode = genCode(); isHost = true;
-  lobbyPlayers = {}; roundScores = {}; finishOrder = []; quitPlayers.clear(); battleRound = 0;
-  lobbyPlayers[myId] = {
-    name: myName, host: true,
-    xpLevel:  getXpLevel(loadSave().xp || 0),
-    rankName: getRank(loadSave().totalCleared || 0).name
+function selfLobbyEntry(host) {
+  return {
+    name: myName, host: !!host,
+    xpLevel: myXpLevel(),
+    rankName: getRank(loadSave().totalCleared || 0).name,
+    avatar: getMyAvatar()
   };
-  if (codePeer) { try { codePeer.destroy(); } catch(e) {} }
-  codePeer = new Peer('mazzie-' + roomCode, { debug: 0 });
-  codePeer.on('open', () => {
-    hideConnecting();
-    showLobbyAsHost();
+}
+
+// ── Host a room (used by Host button and Quick Match) ──
+function hostRoom(opts = {}) {
+  return new Promise((resolve, reject) => {
+    if (typeof Peer === 'undefined') return reject(new Error('offline'));
+    roomCode = genCode(); isHost = true; isQuickMatch = !!opts.quick;
+    lobbyPlayers = {}; roundScores = {}; finishOrder = []; quitPlayers.clear(); battleRound = 0;
+    guestConns = []; connMap.clear();
+    lobbyPlayers[myId] = selfLobbyEntry(true);
+    if (codePeer) { try { codePeer.destroy(); } catch (e) {} }
+    const cp = new Peer('mazzie-' + roomCode, { debug: 0 });
+    codePeer = cp;
+    let opened = false;
+    cp.on('open', () => { opened = true; resolve(roomCode); });
+    cp.on('connection', conn => { guestConns.push(conn); setupGuestConn(conn); });
+    cp.on('error', err => {
+      if (opened) { console.warn('[room]', err.type); return; }
+      try { cp.destroy(); } catch (e) {}
+      if (err.type === 'unavailable-id') hostRoom(opts).then(resolve, reject);
+      else reject(err);
+    });
   });
-  codePeer.on('connection', conn => { guestConns.push(conn); setupGuestConn(conn); });
-  codePeer.on('error', err => {
-    hideConnecting();
-    if (err.type === 'unavailable-id') { openHostLobby(); }
-    else { pushToast('Could not create room: ' + err.type, 'warn'); show('battle-mode'); }
-  });
+}
+
+function openHostLobby() {
+  showConnecting('CREATING ROOM…');
+  hostRoom().then(() => { hideConnecting(); showLobbyAsHost(); })
+    .catch(err => { hideConnecting(); pushToast('Could not create room: ' + (err.type || err.message), 'warn'); show('battle-mode'); });
 }
 
 // ── Join a room ──
-async function doJoin() {
+function doJoin() {
   const code = document.getElementById('join-input').value.trim().toUpperCase();
-  if (code.length !== 4) { document.getElementById('join-status').innerText = 'Enter a 4-letter code'; return; }
-  document.getElementById('join-status').innerText = 'Connecting…';
-
-  // Re-init peer if it was destroyed or disconnected
-  if (!peer || peer.destroyed || peer.disconnected) {
-    document.getElementById('join-status').innerText = 'Reconnecting…';
-    await new Promise(resolve => {
-      peer = new Peer({ debug: 0 });
-      peer.on('open', resolve);
-      peer.on('error', () => {
-        document.getElementById('join-status').innerText = 'Network error. Refresh and try again.';
-      });
-    });
-  }
-
-  if (hostConn) { try { hostConn.close(); } catch(e) {} hostConn = null; }
-  lobbyPlayers = {}; roundScores = {}; finishOrder = []; quitPlayers.clear();
+  if (!/^[A-Z]{4}$/.test(code)) { document.getElementById('join-status').innerText = 'Enter a 4-letter code'; return; }
+  joinRoom(code);
+}
+async function joinRoom(code, opts = {}) {
+  const status = t => { const el = document.getElementById(opts.statusEl || 'join-status'); if (el) el.innerText = t; };
+  status('Connecting…');
+  if (hostConn) { try { hostConn.close(); } catch (e) {} hostConn = null; }
+  isHost = false; lobbyPlayers = {}; roundScores = {}; finishOrder = []; quitPlayers.clear();
   rejoinAfterConflict = false;
-  const conn = peer.connect('mazzie-' + code, { reliable: true });
-  hostConn = conn;
-  conn.on('open', () => {
-    const cleared = loadSave().totalCleared || 0;
-    conn.send({ type:'join', id:myId, name:myName,
-      xpLevel: getXpLevel(loadSave().xp||0), rankName: getRank(cleared).name });
-    document.getElementById('join-status').innerText = 'Connected! Waiting for host…';
-  });
+  let conn;
+  try { conn = await connectTo('mazzie-' + code, opts.timeout || 7000); }
+  catch (e) {
+    status(e.message === 'unavailable' ? 'Room not found — check the code.' : e.message === 'offline' ? 'You are offline.' : 'Could not connect. Try again.');
+    if (opts.onFail) opts.onFail(e);
+    return false;
+  }
+  hostConn = conn; roomCode = code; isQuickMatch = !!opts.quick;
   conn.on('data', d => handleHostMsg(d));
   conn.on('close', () => {
-    if (battleActive || document.getElementById('lobby') && !document.getElementById('lobby').classList.contains('hidden')) {
-      pushToast('Disconnected from host','warn');
-    }
+    if (hostConn !== conn) return;
     hostConn = null;
+    if (!battleActive && typeof mm !== 'undefined' && mm && mm.phase === 'guest') { mmRetry(); return; }
+    const wasIn = battleActive || isScreen('lobby') || isScreen('queue') || isScreen('spectate') || isScreen('round-results');
+    resetBattleState();
+    if (wasIn) { pushToast('Disconnected from host', 'warn'); stopTimer(); show(isQuickMatch ? 'menu' : 'battle-mode'); }
   });
-  conn.on('error', () => {
-    document.getElementById('join-status').innerText = 'Could not connect. Check the code.';
-    hostConn = null;
-  });
+  sendJoin();
+  status('Connected! Waiting for host…');
+  return true;
+}
+function sendJoin() {
+  if (!hostConn || !hostConn.open) return;
+  hostConn.send({ type:'join', id:myId, name:myName, xpLevel:myXpLevel(),
+    rankName:getRank(loadSave().totalCleared || 0).name, avatar:getMyAvatar() });
 }
 
-// ── Full battle state reset (shared by leaveLobby + tab close) ──
+// ── Full battle state reset ──
+function resetBattleState() {
+  isHost = false; battleActive = false; amSpectating = false; isQuickMatch = false;
+  lobbyPlayers = {}; roomCode = '';
+  roundScores = {}; finishOrder = []; battleRound = 0; roundEnded = false;
+  quitPlayers.clear(); progressState = {}; remotePaths = {};
+  clearInterval(autoNextTimer);
+  document.getElementById('grid').classList.remove('fogged', 'frosted');
+}
 function _destroyBattleSession() {
   try {
     if (isHost) {
       broadcastAll({ type: 'host_left' });
-      guestConns.forEach(c => { try { c.close(); } catch(e) {} });
-    } else {
-      if (hostConn && hostConn.open) {
-        hostConn.send({ type: 'guest_left', id: myId, name: myName });
-        hostConn.close();
-      }
+      guestConns.forEach(c => { try { c.close(); } catch (e) {} });
+    } else if (hostConn && hostConn.open) {
+      hostConn.send({ type: 'guest_left', id: myId, name: myName });
+      const c = hostConn; setTimeout(() => { try { c.close(); } catch (e) {} }, 150);
     }
-  } catch(e) {}
-  guestConns = []; hostConn = null;
-  if (codePeer) { try { codePeer.destroy(); } catch(e) {} codePeer = null; }
-  isHost = false; battleActive = false; amSpectating = false;
-  lobbyPlayers = {}; roomCode = '';
-  roundScores = {}; finishOrder = []; battleRound = 0;
-  quitPlayers.clear(); progressState = {}; remotePaths = {};
-  clearInterval(autoNextTimer);
+  } catch (e) {}
+  guestConns = []; hostConn = null; connMap.clear();
+  if (codePeer) { const cp = codePeer; setTimeout(() => { try { cp.destroy(); } catch (e) {} }, 200); codePeer = null; }
+  if (typeof mmStop === 'function') mmStop();
+  resetBattleState();
 }
+function inBattleSession() { return isHost || !!hostConn; }
 
-// ── Tab/window close — tell host we left ──
-window.addEventListener('beforeunload', () => {
-  if (isHost || hostConn) _destroyBattleSession();
-});
+window.addEventListener('beforeunload', () => { if (inBattleSession()) _destroyBattleSession(); });
 
 function leaveLobby() {
-  if (battleActive) {
-    if (!confirm('Leave the battle in progress?')) return;
-  }
+  if (battleActive && !confirm('Leave the battle in progress?')) return;
   _destroyBattleSession();
   show('battle-mode');
 }
 
 // ── Lobby settings ──
 function pickDiff(btn, diff) {
-  battleDiff = diff;
+  battleDiffSetting = diff;
+  if (diff !== 'random') battleDiff = diff;
   document.querySelectorAll('.bdiff-btn').forEach(b => b.classList.remove('sel'));
   btn.classList.add('sel');
+  broadcastLobbySettings();
 }
 function changeRounds(d) {
   maxRounds = Math.max(1, Math.min(10, maxRounds + d));
   document.getElementById('rounds-disp').innerText = maxRounds;
+  broadcastLobbySettings();
+}
+function toggleBoosts() {
+  abilitiesEnabled = !abilitiesEnabled;
+  syncBoostToggle();
+  broadcastLobbySettings();
+}
+function syncBoostToggle() {
+  const b = document.getElementById('boost-toggle');
+  if (b) { b.classList.toggle('on', abilitiesEnabled); b.innerText = abilitiesEnabled ? 'ON' : 'OFF'; }
+}
+function broadcastLobbySettings() {
+  if (!isHost) return;
+  broadcastAll({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled });
+}
+function pickRoundDiff() {
+  if (battleDiffSetting === 'mm') return mmRoundDiff();
+  if (battleDiffSetting === 'random') return DIFFS[Math.floor(Math.random() * DIFFS.length)];
+  return DIFFS.includes(battleDiffSetting) ? battleDiffSetting : 'easy';
 }
 
 // ── Start battle ──
 function hostStart() {
-  if (Object.keys(lobbyPlayers).length < 2) { pushToast('Need at least 2 players!','warn'); return; }
+  if (Object.keys(lobbyPlayers).length < 2) { pushToast('Need at least 2 players!', 'warn'); return; }
 
   // Final name-uniqueness safety pass — suffix any duplicates with a number
-  const seen = new Map(); // lowercase name → count
+  const seen = new Map();
   Object.entries(lobbyPlayers).forEach(([pid, p]) => {
     const key = p.name.toLowerCase();
-    if (seen.has(key)) {
-      const n = seen.get(key) + 1; seen.set(key, n);
-      lobbyPlayers[pid].name = p.name + ' ' + n;
-    } else {
-      seen.set(key, 1);
-    }
+    if (seen.has(key)) { const n = seen.get(key) + 1; seen.set(key, n); lobbyPlayers[pid].name = p.name + ' ' + n; }
+    else seen.set(key, 1);
   });
   broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
   renderLobby();
 
-  battleActive = true; battleRound = 1;
-  level = 1;
-  const seed = (Math.random() * 1e6) | 0; battleSeed = seed;
+  battleActive = true; battleRound = 1; level = 1; dailyMode = false; roundEnded = false;
+  battleDiff = pickRoundDiff();
+  const seed = randSeed(); battleSeed = seed;
   finishOrder = []; progressState = {}; roundScores = {}; remotePaths = {}; quitPlayers.clear();
   totalExpected = Object.keys(lobbyPlayers).length;
-  broadcastAll({ type:'start_round', round:1, maxRounds, seed, diff:battleDiff, level:1 });
+  broadcastAll({ type:'start_round', round:1, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled });
   initialSeed = seed;
   startGame(battleDiff, seed);
 }
 
 // ── Render lobby ──
+const playerCache = {}; // pid → last known {name, avatar} (for players who left before the final)
 function renderLobby() {
   const pids = Object.keys(lobbyPlayers);
-  document.getElementById('p-count').innerText = pids.length;
+  pids.forEach(pid => { playerCache[pid] = { name:lobbyPlayers[pid].name, avatar:lobbyPlayers[pid].avatar }; });
+  document.getElementById('p-count').innerText = pids.length + ' / ' + MAX_ROOM_PLAYERS;
   const box = document.getElementById('players-box'); box.innerHTML = '';
-  pids.forEach((pid, i) => {
+  pids.forEach(pid => {
     const p = lobbyPlayers[pid];
     const isMe = pid === myId;
+    const title = titleName(p.avatar);
     const row = document.createElement('div'); row.className = 'p-row';
-    row.innerHTML = `<div class="p-ava-wrap">
-      <div class="p-ava" style="background:${PAL[i%PAL.length]}">${p.name.slice(0,2).toUpperCase()}</div>
-      <div class="p-lvl-wrap">${getLevelBadge(p.xpLevel||1)}</div>
-    </div>
+    row.innerHTML = `<div class="p-ava-wrap">${renderAvatar(p.avatar, p.name, 38)}
+      <div class="p-lvl-wrap">${getLevelBadge(p.xpLevel || 1)}</div></div>
     <div class="p-info">
-      <div class="p-name">${p.name}${isMe?' (you)':''}</div>
-      <div class="p-meta">${p.rankName||'Newbie'}</div>
+      <div class="p-name">${escapeHtml(p.name)}${isMe ? ' <span class="you">(you)</span>' : ''}</div>
+      <div class="p-meta">${escapeHtml(p.rankName || 'Newbie')}${title ? ' · ' + escapeHtml(title) : ''}</div>
     </div>
-    <div class="p-tag ${p.host?'host':'guest'}">${p.host?'HOST':'GUEST'}</div>`;
+    <div class="p-tag ${p.host ? 'host' : 'guest'}">${p.host ? 'HOST' : 'GUEST'}</div>`;
+    if (isHost && !isMe) {
+      const k = document.createElement('button');
+      k.className = 'p-kick'; k.title = 'Kick'; k.innerText = '✕';
+      k.onclick = () => kickPlayer(pid);
+      row.appendChild(k);
+    }
     box.appendChild(row);
   });
   const sb = document.getElementById('start-btn');
   if (sb) sb.disabled = pids.length < 2;
+  if (typeof mmOnLobbyChanged === 'function') mmOnLobbyChanged();
 }
 
-// ── Host message handler (from guests) ──
+function kickPlayer(pid) {
+  if (!isHost || pid === myId || !lobbyPlayers[pid]) return;
+  const name = lobbyPlayers[pid].name;
+  broadcastAll({ type:'kick', id:pid });
+  handlePlayerQuit(pid);
+  adminLog('warn', 'Kicked: ' + name);
+}
+
+// ── Host: messages from guests ──
 function setupGuestConn(conn) {
-  conn.on('data',  d => handleGuestMsg(conn, d));
-  conn.on('close', () => { const pid = connMap.get(conn); if (pid) handlePlayerQuit(pid); });
+  conn.on('data',  d => { try { handleGuestMsg(conn, d); } catch (e) { console.warn(e); } });
+  conn.on('close', () => { const pid = connMap.get(conn); if (pid) handlePlayerQuit(pid); guestConns = guestConns.filter(c => c !== conn); });
   conn.on('error', () => { const pid = connMap.get(conn); if (pid) handlePlayerQuit(pid); });
 }
 
-function handleGuestMsg(conn, d) {
-  if (d.type === 'join') {
-    // FIX: unique name check (case-insensitive)
-    const nameTaken = Object.entries(lobbyPlayers).some(([pid, p]) =>
-      p.name.toLowerCase() === d.name.toLowerCase()
-    );
-    if (nameTaken) { conn.send({ type:'name_conflict' }); return; }
-    connMap.set(conn, d.id);
-    lobbyPlayers[d.id] = { name:d.name, host:false, xpLevel:d.xpLevel||1, rankName:d.rankName||'', _conn:conn };
-    broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
-    conn.send({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
-    renderLobby();
-    adminLog('ok', d.name + ' joined');
+function nameTakenInRoom(name, exceptPid) {
+  return Object.entries(lobbyPlayers).some(([pid, p]) => pid !== exceptPid && p.name.toLowerCase() === name.toLowerCase());
+}
+const RANK_NAMES = new Set(RANKS.map(r => r.name));
 
-  } else if (d.type === 'rename') {
-    // FIX: player changing name in lobby
-    const nameTaken = Object.entries(lobbyPlayers).some(([pid, p]) =>
-      pid !== d.id && p.name.toLowerCase() === d.name.toLowerCase()
-    );
-    if (nameTaken) { conn.send({ type:'name_conflict' }); return; }
-    if (lobbyPlayers[d.id]) {
-      lobbyPlayers[d.id].name = d.name;
+function handleGuestMsg(conn, d) {
+  if (!d || typeof d !== 'object') return;
+  const pid = connMap.get(conn);
+
+  if (d.type === 'join') {
+    if (pid) return;
+    const id = String(d.id || '').slice(0, 48);
+    if (!id || id === myId) { conn.send({ type:'name_conflict' }); return; }
+    if (battleActive) { conn.send({ type:'room_busy' }); setTimeout(() => conn.close(), 400); return; }
+    if (Object.keys(lobbyPlayers).length >= MAX_ROOM_PLAYERS) { conn.send({ type:'room_full' }); setTimeout(() => conn.close(), 400); return; }
+    let name = cleanName(d.name);
+    if (lobbyPlayers[id]) { conn.send({ type:'name_conflict' }); return; }
+    if (nameTakenInRoom(name)) {
+      if (!isQuickMatch) { conn.send({ type:'name_conflict' }); return; }
+      // Strangers in quick match can share a name — just number them
+      let n = 2; while (nameTakenInRoom(name.slice(0, 13) + ' ' + n)) n++;
+      name = name.slice(0, 13) + ' ' + n;
+    }
+    connMap.set(conn, id);
+    quitPlayers.delete(id);
+    lobbyPlayers[id] = {
+      name, host:false,
+      xpLevel: Math.max(1, Math.min(99999, parseInt(d.xpLevel) || 1)),
+      rankName: RANK_NAMES.has(d.rankName) ? d.rankName : 'Newbie',
+      avatar: sanitizeAvatar(d.avatar)
+    };
+    broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
+    conn.send({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled });
+    renderLobby();
+    sfx('node');
+    adminLog('ok', name + ' joined');
+    return;
+  }
+  if (!pid || !lobbyPlayers[pid]) return; // must join first
+
+  switch (d.type) {
+    case 'rename': {
+      const name = cleanName(d.name);
+      if (nameTakenInRoom(name, pid)) { conn.send({ type:'name_conflict' }); return; }
+      lobbyPlayers[pid].name = name;
       broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
       renderLobby();
-      adminLog('ok', 'Rename: ' + d.id + ' → ' + d.name);
+      adminLog('ok', 'Rename → ' + name);
+      break;
     }
-
-  } else if (d.type === 'done') {
-    const pts = calcPoints(d.sec, finishOrder.length);
-    finishOrder.push({ id:d.id, name:d.name, sec:d.sec, time:d.time, pts, rankName:d.rankName, xpLvl:d.xpLvl });
-    progressState[d.id] = { pct:100, done:true, path:d.path||[] };
-    remotePaths[d.id]   = d.path || [];
-    broadcastAll({ type:'progress', id:d.id, pct:100, done:true, time:d.time, path:d.path||[] });
-    if (specViewPid === d.id) renderMiniBoardForPlayer(d.id);
-    checkRoundComplete();
-
-  } else if (d.type === 'progress') {
-    progressState[d.id] = { pct:d.pct, done:false, path:d.path||[] };
-    remotePaths[d.id]   = d.path || [];
-    broadcastAll(d);
-    updateSpectateRow(d.id, d.pct, false, '', false);
-    if (specViewPid === d.id) renderMiniBoardForPlayer(d.id);
-
-  } else if (d.type === 'guest_left') {
-    const pid = d.id || connMap.get(conn);
-    if (pid) handlePlayerQuit(pid);
-
-  } else if (d.type === 'chat') {
-    broadcastAll(d);
-    receiveChatMsg(d);
+    case 'avatar':
+      lobbyPlayers[pid].avatar = sanitizeAvatar(d.avatar);
+      broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
+      renderLobby();
+      break;
+    case 'done': {
+      if (!battleActive || roundEnded || finishOrder.some(e => e.id === pid)) return;
+      const sec  = Math.max(0, Math.min(99999, Number(d.sec) || 0));
+      const time = fmtMs(Math.round(sec * 1000));
+      const path = Array.isArray(d.path) ? d.path.slice(0, 200).map(n => n | 0) : [];
+      const pts  = calcPoints(sec, finishOrder.length);
+      finishOrder.push({ id:pid, name:lobbyPlayers[pid].name, sec, time, pts });
+      progressState[pid] = { pct:100, done:true, path };
+      remotePaths[pid]   = path;
+      broadcastAll({ type:'progress', id:pid, pct:100, done:true, time, path });
+      updateSpectateRow(pid, 100, true, time, false);
+      if (specViewPid === pid) renderMiniBoardForPlayer(pid);
+      checkRoundComplete();
+      break;
+    }
+    case 'progress': {
+      if (!battleActive) return;
+      const path = Array.isArray(d.path) ? d.path.slice(0, 200).map(n => n | 0) : [];
+      const pct  = Math.max(0, Math.min(100, parseInt(d.pct) || 0));
+      progressState[pid] = { pct, done:false, path };
+      remotePaths[pid]   = path;
+      broadcastAll({ type:'progress', id:pid, pct, path });
+      updateSpectateRow(pid, pct, false, '', false);
+      if (specViewPid === pid) renderMiniBoardForPlayer(pid);
+      break;
+    }
+    case 'guest_left':
+      handlePlayerQuit(pid);
+      break;
+    case 'chat': {
+      const msg = String(d.msg || '').slice(0, 80).trim(); if (!msg) return;
+      const out = { type:'chat', id:pid, name:lobbyPlayers[pid].name, msg };
+      broadcastAll(out); receiveChatMsg(out);
+      break;
+    }
+    case 'ability':
+      relayAttack({ id:pid, name:lobbyPlayers[pid].name, kind:d.kind });
+      break;
   }
 }
 
 function sanitizePlayers(pl) {
   const out = {};
   Object.entries(pl).forEach(([pid, p]) => {
-    out[pid] = { name:p.name, host:p.host, xpLevel:p.xpLevel, rankName:p.rankName };
+    out[pid] = { name:p.name, host:!!p.host, xpLevel:p.xpLevel, rankName:p.rankName, avatar:sanitizeAvatar(p.avatar) };
+  });
+  return out;
+}
+function adoptPlayers(pl) {
+  const out = {};
+  if (pl && typeof pl === 'object') Object.entries(pl).forEach(([pid, p]) => {
+    if (!p) return;
+    out[String(pid).slice(0, 48)] = { name:cleanName(p.name), host:!!p.host, xpLevel:parseInt(p.xpLevel) || 1,
+      rankName:RANK_NAMES.has(p.rankName) ? p.rankName : 'Newbie', avatar:sanitizeAvatar(p.avatar) };
   });
   return out;
 }
 
-// ── Guest message handler (from host) ──
+// ── Guest: messages from host ──
 function handleHostMsg(d) {
-  if (d.type === 'lobby_update') {
-    lobbyPlayers = d.players;
-    renderLobby();
-    // Navigate guest from join-screen → lobby on first lobby_update
-    const joinScreen = document.getElementById('join-screen');
-    if (joinScreen && !joinScreen.classList.contains('hidden')) {
+  if (!d || typeof d !== 'object') return;
+  switch (d.type) {
+    case 'lobby_update':
+      lobbyPlayers = adoptPlayers(d.players);
+      renderLobby();
+      if (isScreen('join-screen')) showLobbyAsGuest();
+      break;
+    case 'lobby_settings':
+      battleDiffSetting = DIFFS.includes(d.diff) || d.diff === 'random' || d.diff === 'mm' ? d.diff : 'easy';
+      maxRounds = Math.max(1, Math.min(10, parseInt(d.rounds) || 3));
+      abilitiesEnabled = d.abilities !== false;
+      renderGuestSettings();
+      break;
+    case 'play_again':
+      battleActive = false; amSpectating = false;
+      roundScores = {}; finishOrder = []; battleRound = 0; quitPlayers.clear();
+      progressState = {}; remotePaths = {};
       showLobbyAsGuest();
+      pushToast('Host started a new game!', 'acc');
+      break;
+    case 'name_conflict':
+      rejoinAfterConflict = true;
+      pushToast('Name already taken! Choose another.', 'warn');
+      openNameEdit();
+      document.getElementById('name-err').innerText = 'That name is taken in this room!';
+      break;
+    case 'room_busy':
+    case 'room_full':
+      pushToast(d.type === 'room_busy' ? 'That match already started' : 'Room is full', 'warn');
+      document.getElementById('join-status').innerText = d.type === 'room_busy' ? 'Match in progress — try another room.' : 'Room is full.';
+      if (isQuickMatch && typeof mmRetry === 'function') mmRetry();
+      break;
+    case 'start_round':
+      battleActive = true; battleRound = d.round | 0; maxRounds = d.maxRounds | 0 || 3;
+      battleSeed = d.seed >>> 0; battleDiff = DIFFS.includes(d.diff) ? d.diff : 'easy';
+      abilitiesEnabled = d.abilities !== false;
+      level = d.level || 1; dailyMode = false; roundEnded = false;
+      finishOrder = []; progressState = {}; remotePaths = {}; quitPlayers.clear();
+      amSpectating = false;
+      initialSeed = battleSeed;
+      document.getElementById('spec-live-wrap').style.display = 'none';
+      if (typeof mmStop === 'function') mmStop(true);
+      startGame(battleDiff, battleSeed);
+      break;
+    case 'round_results':
+      stopTimer(); amSpectating = true;
+      battleRound = d.round | 0; maxRounds = d.maxRounds | 0;
+      finishOrder = (Array.isArray(d.order) ? d.order : []).map(e => ({ ...e, name:cleanName(e.name) }));
+      showRoundResults(finishOrder);
+      break;
+    case 'final_results':
+      roundScores = d.scores || {};
+      if (d.players) lobbyPlayers = adoptPlayers(d.players);
+      showFinalResults();
+      break;
+    case 'progress': {
+      const pct = Math.max(0, Math.min(100, parseInt(d.pct) || 0));
+      progressState[d.id] = { pct, done:!!d.done, path:d.path || [] };
+      remotePaths[d.id]   = Array.isArray(d.path) ? d.path : [];
+      updateSpectateRow(d.id, pct, !!d.done, d.time || '', false);
+      if (specViewPid === d.id) renderMiniBoardForPlayer(d.id);
+      break;
     }
-
-  } else if (d.type === 'play_again') {
-    // Host wants a rematch — guests go back to lobby
-    battleActive = false; amSpectating = false;
-    roundScores = {}; finishOrder = []; battleRound = 0; quitPlayers.clear();
-    progressState = {}; remotePaths = {};
-    showLobbyAsGuest();
-    pushToast('Host started a new game!', 'acc');
-
-  } else if (d.type === 'name_conflict') {
-    rejoinAfterConflict = true;
-    pushToast('Name already taken! Choose another.', 'warn');
-    show('name-edit');
-    document.getElementById('name-err').innerText = 'That name is taken in this room!';
-
-  } else if (d.type === 'start_round') {
-    battleActive = true; battleRound = d.round; maxRounds = d.maxRounds;
-    battleSeed = d.seed; battleDiff = d.diff;
-    level = d.level || 1; // FIX: sync level from host
-    finishOrder = []; progressState = {}; remotePaths = {}; quitPlayers.clear();
-    amSpectating = false;
-    initialSeed = d.seed;
-    document.getElementById('spec-live-wrap').style.display = 'none';
-    startGame(d.diff, d.seed);
-
-  } else if (d.type === 'round_results') {
-    battleRound = d.round; maxRounds = d.maxRounds;
-    finishOrder = d.order || [];
-    showRoundResults(finishOrder);
-
-  } else if (d.type === 'final_results') {
-    roundScores = d.scores || {};
-    if (d.players) lobbyPlayers = d.players;
-    showFinalResults();
-
-  } else if (d.type === 'progress') {
-    progressState[d.id] = { pct:d.pct, done:d.done||false, path:d.path||[] };
-    remotePaths[d.id]   = d.path || [];
-    updateSpectateRow(d.id, d.pct, d.done||false, d.time||'', false);
-    if (specViewPid === d.id) renderMiniBoardForPlayer(d.id);
-
-  } else if (d.type === 'player_quit') {
-    quitPlayers.add(d.id);
-    pushToast(d.name + ' left the game', 'warn');
-    addChatMsg('🚪 ' + d.name + ' left the game', null, true);
-    updateSpectateRow(d.id, progressState[d.id]?.pct||0, false, '', true);
-
-  } else if (d.type === 'host_left') {
-    pushToast('Host left the room', 'warn');
-    hostConn = null; battleActive = false; lobbyPlayers = {};
-    show('battle-mode');
-
-  } else if (d.type === 'announce') {
-    pushToast('📢 ' + d.msg, 'info');
-    addChatMsg('📢 ' + d.msg, null, true);
-
-  } else if (d.type === 'freeze') {
-    timerFrozen = true; pushToast('⏸ Timer frozen by admin', 'warn');
-
-  } else if (d.type === 'unfreeze') {
-    timerFrozen = false;
-
-  } else if (d.type === 'kick') {
-    if (d.id === myId) { pushToast('You were kicked from the room', 'warn'); setTimeout(() => goMenu(), 1200); }
-
-  } else if (d.type === 'force_win') {
-    if (d.id === myId || !d.id) onWin();
-
-  } else if (d.type === 'grant_xp') {
-    if (d.id === myId) { addXp(d.amount); updateMenuProfile(); pushToast('⬡ +'+d.amount+' XP from admin!','xp'); }
-
-  } else if (d.type === 'reset_path') {
-    resetPath(); pushToast('↩ Admin reset your path','warn');
-
-  } else if (d.type === 'chat') {
-    receiveChatMsg(d);
+    case 'player_quit': {
+      quitPlayers.add(d.id);
+      const nm = cleanName(d.name);
+      pushToast(nm + ' left the game', 'warn');
+      addChatMsg('🚪 ' + nm + ' left the game', null, true);
+      updateSpectateRow(d.id, (progressState[d.id] && progressState[d.id].pct) || 0, false, '', true);
+      break;
+    }
+    case 'host_left':
+      if (!battleActive && mm && mm.phase === 'guest') { mmRetry(); break; }
+      pushToast('Host left the room', 'warn');
+      stopTimer();
+      hostConn = null;
+      { const q = isQuickMatch; resetBattleState(); show(q ? 'menu' : 'battle-mode'); }
+      break;
+    case 'announce':
+      pushToast('📢 ' + String(d.msg || '').slice(0, 80), 'info');
+      addChatMsg('📢 ' + String(d.msg || '').slice(0, 80), null, true);
+      break;
+    case 'freeze':
+      if (!d.id || d.id === myId) { timerFrozen = true; pushToast('⏸ Timer frozen by admin', 'warn'); }
+      break;
+    case 'unfreeze':
+      if (!d.id || d.id === myId) timerFrozen = false;
+      break;
+    case 'kick':
+      if (d.id === myId) {
+        pushToast('You were kicked from the room', 'warn');
+        _destroyBattleSession(); stopTimer();
+        setTimeout(() => show('menu'), 600);
+      }
+      break;
+    case 'force_win':
+      if (d.id === myId || !d.id) onWin();
+      break;
+    case 'grant_xp':
+      if (d.id === myId) {
+        const amt = Math.max(-100000, Math.min(100000, parseInt(d.amount) || 0));
+        addXp(amt); updateMenuProfile(); pushToast('⬡ +' + amt + ' XP from admin!', 'xp');
+      }
+      break;
+    case 'grant_boost':
+      if ((d.id === myId || !d.id) && ABILITIES[d.kind] && abilityInv.length < MAX_SLOTS) {
+        abilityInv.push(d.kind); renderAbilityBar(abilityInv.length - 1);
+        pushToast(ABILITIES[d.kind].icon + ' Admin gave you ' + ABILITIES[d.kind].name, 'acc');
+      }
+      break;
+    case 'reset_path':
+      resetPath(); pushToast('↩ Admin reset your path', 'warn');
+      break;
+    case 'ability_hit':
+      receiveAttack({ ...d, fromName:cleanName(d.fromName) });
+      break;
+    case 'chat':
+      receiveChatMsg({ id:d.id, name:cleanName(d.name), msg:String(d.msg || '').slice(0, 80) });
+      break;
   }
+}
+
+function renderGuestSettings() {
+  const el = document.getElementById('guest-settings'); if (!el) return;
+  const diff = battleDiffSetting === 'random' ? '🎲 Random' : battleDiffSetting === 'mm' ? '🎯 Level-based' : battleDiffSetting.toUpperCase();
+  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>`;
 }
 
 // ── Host game management ──
 function calcPoints(sec, pos) {
   const base = [100, 75, 55, 40, 30, 20, 15, 10];
-  return (base[pos] || 8) + Math.max(0, 60 - sec);
+  return (base[pos] || 8) + Math.max(0, 60 - Math.floor(sec));
 }
 
 function hostRegisterFinish(sec, time) {
+  if (finishOrder.some(e => e.id === myId)) return;
   const pts = calcPoints(sec, finishOrder.length);
-  const cleared = loadSave().totalCleared || 0;
-  finishOrder.push({
-    id:myId, name:myName, sec, time, pts,
-    rankName:getRank(cleared).name, xpLvl:getXpLevel(loadSave().xp||0)
-  });
+  finishOrder.push({ id:myId, name:myName, sec, time, pts });
   progressState[myId] = { pct:100, done:true, path:[...pathIndices] };
   broadcastAll({ type:'progress', id:myId, pct:100, done:true, time, path:[...pathIndices] });
   checkRoundComplete();
@@ -374,15 +550,18 @@ function hostRegisterFinish(sec, time) {
 
 function checkRoundComplete() {
   const active = totalExpected - quitPlayers.size;
-  if (finishOrder.length >= active) setTimeout(() => broadcastRoundResults(), 400);
+  if (!roundEnded && finishOrder.length >= active) setTimeout(() => broadcastRoundResults(), 400);
 }
 
 function broadcastRoundResults() {
-  stopTimer();
+  if (roundEnded) return;
+  roundEnded = true;
+  stopTimer(); amSpectating = true;
   const fullOrder = [...finishOrder];
-  quitPlayers.forEach(pid => {
-    if (!fullOrder.find(e => e.id === pid) && lobbyPlayers[pid])
-      fullOrder.push({ id:pid, name:lobbyPlayers[pid].name, sec:9999, time:'QUIT', pts:0, quit:true });
+  Object.keys(lobbyPlayers).forEach(pid => {
+    if (fullOrder.find(e => e.id === pid)) return;
+    const q = quitPlayers.has(pid);
+    fullOrder.push({ id:pid, name:lobbyPlayers[pid].name, sec:9999, time:q ? 'QUIT' : 'DNF', pts:0, quit:q, dnf:!q });
   });
   broadcastAll({ type:'round_results', order:fullOrder, round:battleRound, maxRounds });
   showRoundResults(fullOrder);
@@ -390,39 +569,60 @@ function broadcastRoundResults() {
 
 function hostNextRound() {
   clearInterval(autoNextTimer);
+  if (!isHost) return;
   battleRound++;
-  level = 1; // FIX: reset level for each round
-  finishOrder = []; progressState = {}; remotePaths = {}; quitPlayers.clear();
+  level = 1; roundEnded = false;
+  battleDiff = pickRoundDiff();
+  finishOrder = []; progressState = {}; remotePaths = {};
+  // Players who left last round are dropped from the room now
+  if (quitPlayers.size) {
+    quitPlayers.forEach(pid => { if (pid !== myId) delete lobbyPlayers[pid]; });
+    quitPlayers.clear();
+    broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
+  }
+  totalExpected = Object.keys(lobbyPlayers).length;
+  if (totalExpected < 2) { pushToast('Everyone else left — match over', 'warn'); hostShowFinal(); return; }
   amSpectating = false;
-  const seed = (Math.random() * 1e6) | 0; battleSeed = seed;
-  broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level:1 });
+  const seed = randSeed(); battleSeed = seed;
+  broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled });
   startGame(battleDiff, seed);
 }
 
 function hostShowFinal() {
   clearInterval(autoNextTimer);
-  broadcastAll({ type:'final_results', scores:roundScores, players:lobbyPlayers });
+  broadcastAll({ type:'final_results', scores:roundScores, players:sanitizePlayers(lobbyPlayers) });
   showFinalResults();
 }
 
-function broadcastAll(msg) { guestConns.forEach(c => { if (c && c.open) c.send(msg); }); }
+function broadcastAll(msg) { guestConns.forEach(c => { if (c && c.open) { try { c.send(msg); } catch (e) {} } }); }
 
 function handlePlayerQuit(pid) {
   if (!lobbyPlayers[pid] || quitPlayers.has(pid)) return;
+  const pname = lobbyPlayers[pid].name;
+  // In the lobby a leaver simply disappears
+  if (!battleActive) {
+    delete lobbyPlayers[pid];
+    for (const [c, id] of connMap) if (id === pid) { connMap.delete(c); try { c.close(); } catch (e) {} }
+    if (isHost) broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
+    renderLobby();
+    pushToast(pname + ' left', 'warn');
+    adminLog('warn', pname + ' left the lobby');
+    return;
+  }
   quitPlayers.add(pid);
   progressState[pid] = { ...(progressState[pid] || { pct:0 }), quit:true };
-  const pname = lobbyPlayers[pid].name;
   pushToast(pname + ' left the game', 'warn');
   addChatMsg('🚪 ' + pname + ' left the game', null, true);
   if (isHost) broadcastAll({ type:'player_quit', id:pid, name:pname });
-  updateSpectateRow(pid, progressState[pid].pct||0, false, '', true);
-  if (battleActive && isHost) checkRoundComplete();
+  updateSpectateRow(pid, progressState[pid].pct || 0, false, '', true);
+  if (isHost) checkRoundComplete();
   adminLog('warn', pname + ' disconnected');
 }
 
 // ── Spectate screen ──
 function showSpectateScreen(myTime) {
   document.getElementById('spec-round-badge').innerText = 'Round ' + battleRound + ' of ' + maxRounds;
+  document.getElementById('spec-sub').innerText = 'You finished in ' + myTime;
   specPlayerOrder = Object.keys(lobbyPlayers).filter(pid => pid !== myId);
   specViewPid = null;
   document.getElementById('spec-viewer-name').innerText = 'All Players';
@@ -431,34 +631,32 @@ function showSpectateScreen(myTime) {
   renderSpectateList();
   updateSpecNavBtns();
   show('spectate');
+  // Auto-watch the first rival still racing
+  const racing = specPlayerOrder.find(pid => !finishOrder.some(e => e.id === pid) && !quitPlayers.has(pid));
+  if (racing) specSelectPlayer(racing);
 }
 
 function renderSpectateList() {
   const list = document.getElementById('spec-list'); list.innerHTML = '';
-  Object.entries(lobbyPlayers).forEach(([pid, p], i) => {
-    const entry   = finishOrder.find(e => e.id === pid);
-    const prog    = progressState[pid] || { pct:0, done:false };
-    const isQuit  = quitPlayers.has(pid);
-    const done    = !!entry;
-    const row     = document.createElement('div');
-    row.className = 'spec-row' + (done?' done':'') + (isQuit?' quit':'');
+  Object.entries(lobbyPlayers).forEach(([pid, p]) => {
+    const entry  = finishOrder.find(e => e.id === pid);
+    const prog   = progressState[pid] || { pct:0, done:false };
+    const isQuit = quitPlayers.has(pid);
+    const done   = !!entry || prog.done;
+    const isMe   = pid === myId;
+    const row    = document.createElement('div');
+    row.className = 'spec-row' + (done ? ' done' : '') + (isQuit ? ' quit' : '') + (isMe ? ' me' : '');
     row.id = 'spec-row-' + pid;
-    const isMe = pid === myId;
-    if (isMe) {
-      row.style.cssText = 'cursor:default;opacity:.7;';
-    } else {
-      row.onclick = () => specSelectPlayer(pid);
-    }
-    const statusTxt = done ? entry.time : (isQuit ? 'QUIT' : 'Racing…');
-    const pct       = done ? 100 : (isQuit ? prog.pct||0 : prog.pct||0);
-    const fillClass = isQuit ? 'quit-fill' : (done ? '' : ' racing');
-    const lvlBadge  = getLevelBadge(p.xpLevel || 1);
+    if (!isMe) row.onclick = () => specSelectPlayer(pid);
+    const statusTxt = entry ? entry.time : (isQuit ? 'QUIT' : done ? 'Done' : 'Racing…');
+    const pct       = done ? 100 : (prog.pct || 0);
+    const fillClass = isQuit ? ' quit-fill' : (done ? '' : ' racing');
     row.innerHTML = `<div class="spec-row-top">
-      <div class="spec-ava" style="background:${PAL[i%PAL.length]}">${p.name.slice(0,2).toUpperCase()}</div>
-      <div class="spec-name">${p.name}${pid===myId?' (you)':''} ${lvlBadge}</div>
-      <div class="spec-status${done?' done':''}${isQuit?' quit':''}">${statusTxt}</div>
+      ${renderAvatar(p.avatar, p.name, 30)}
+      <div class="spec-name">${escapeHtml(p.name)}${isMe ? ' (you)' : ''} ${getLevelBadge(p.xpLevel || 1)}</div>
+      <div class="spec-status${done ? ' done' : ''}${isQuit ? ' quit' : ''}">${escapeHtml(statusTxt)}</div>
     </div>
-    <div class="prog-bar-bg"><div class="prog-bar-fill${fillClass}" id="prog-${pid}" style="width:${pct}%"></div></div>`;
+    <div class="prog-bar-bg"><div class="prog-bar-fill${fillClass}" id="prog-${escapeHtml(pid)}" style="width:${pct}%"></div></div>`;
     list.appendChild(row);
   });
 }
@@ -467,16 +665,15 @@ function updateSpectateRow(pid, pct, done, time, quit) {
   const bar = document.getElementById('prog-' + pid);
   const row = document.getElementById('spec-row-' + pid);
   if (!bar || !row) return;
+  const stat = row.querySelector('.spec-status');
   if (quit) {
     bar.className = 'prog-bar-fill quit-fill';
     row.classList.add('quit');
-    const stat = row.querySelector('.spec-status');
     if (stat) { stat.innerText = 'QUIT'; stat.className = 'spec-status quit'; }
   } else if (done) {
     bar.classList.remove('racing'); bar.style.width = '100%';
     row.classList.add('done');
-    const stat = row.querySelector('.spec-status');
-    if (stat) { stat.innerText = time; stat.classList.add('done'); }
+    if (stat) { stat.innerText = time || 'Done'; stat.classList.add('done'); }
   } else {
     bar.style.width = pct + '%';
   }
@@ -488,27 +685,24 @@ function specNavigate(dir) {
     specViewPid = dir > 0 ? specPlayerOrder[0] : specPlayerOrder[specPlayerOrder.length - 1];
   } else {
     const idx = specPlayerOrder.indexOf(specViewPid);
-    const newIdx = (idx + dir + specPlayerOrder.length) % specPlayerOrder.length;
-    specViewPid = specPlayerOrder[newIdx];
+    specViewPid = specPlayerOrder[(idx + dir + specPlayerOrder.length) % specPlayerOrder.length];
   }
   specSelectPlayer(specViewPid);
 }
 
 function specSelectPlayer(pid) {
-  if (!lobbyPlayers[pid] || pid === myId) return; // can't spectate yourself
+  if (!lobbyPlayers[pid] || pid === myId) return;
   specViewPid = pid;
   const p = lobbyPlayers[pid];
   document.getElementById('spec-viewer-name').innerText = p.name;
   const isQuit = quitPlayers.has(pid);
   const entry  = finishOrder.find(e => e.id === pid);
-  document.getElementById('spec-viewer-sub').innerText =
-    isQuit ? 'Player quit' : entry ? 'Finished: ' + entry.time : 'Racing…';
+  document.getElementById('spec-viewer-sub').innerText = isQuit ? 'Player quit' : entry ? 'Finished: ' + entry.time : 'Racing…';
   document.getElementById('spec-live-wrap').style.display = 'block';
   document.getElementById('spec-live-name').innerText = p.name;
+  document.querySelectorAll('.spec-row').forEach(r => r.classList.toggle('watching', r.id === 'spec-row-' + pid));
   renderMiniBoardForPlayer(pid);
   updateSpecNavBtns();
-  const card = document.querySelector('.spec-card');
-  if (card) card.scrollTop = 0;
 }
 
 function updateSpecNavBtns() {
@@ -519,37 +713,32 @@ function updateSpecNavBtns() {
 
 function renderMiniBoardForPlayer(pid) {
   const wrap = document.getElementById('spec-mini-grid');
-  if (!wrap) return;
-  wrap.innerHTML = '';
+  if (!wrap || !cells.length) return;
   const path = remotePaths[pid] || [];
-  const miniCellSize = Math.min(Math.floor((Math.min(window.innerWidth - 80, 360) - GPAD * 2 - (cols - 1) * 2) / cols), 28);
-  wrap.style.cssText = `display:grid;grid-template-columns:repeat(${cols},${miniCellSize}px);gap:2px;padding:6px;background:var(--bg);border-radius:10px;`;
-  const visitedSet = new Set(solutionPath);
-  const pathSet    = new Set(path);
-  const pathHead   = path.length > 0 ? path[path.length - 1] : -1;
+  const mini = Math.max(10, Math.min(Math.floor((Math.min(window.innerWidth - 80, 360) - 12 - (cols - 1) * 2) / cols), 30));
+  wrap.style.gridTemplateColumns = `repeat(${cols},${mini}px)`;
+  const visible  = new Set(solutionPath);
+  const pSet     = new Set(path);
+  const pathHead = path.length > 0 ? path[path.length - 1] : -1;
+  const frag = document.createDocumentFragment();
   for (let i = 0; i < rows * cols; i++) {
     const el = document.createElement('div');
     el.className = 'mini-cell';
-    el.style.cssText = `width:${miniCellSize}px;height:${miniCellSize}px;border-radius:4px;`;
-    if (!visitedSet.has(i))      el.classList.add('hidden-cell');
+    el.style.width = el.style.height = mini + 'px';
+    if (obstacleSet.has(i))      el.classList.add('obstacle');
+    else if (!visible.has(i))    el.classList.add('hidden-cell');
     else if (i === pathHead)     el.classList.add('path-head');
-    else if (pathSet.has(i))     el.classList.add('active');
-    const mainCell = cells[i];
-    if (mainCell && mainCell.dataset.num) {
+    else if (pSet.has(i))        el.classList.add('active');
+    const num = cells[i] && cells[i].dataset.num;
+    if (num) {
       const nd = document.createElement('div');
-      nd.className = 'mini-node';
-      nd.style.cssText = `width:60%;height:60%;border-radius:50%;background:#fff;color:#111;`
-        + `display:flex;align-items:center;justify-content:center;font-weight:700;`
-        + `font-size:${Math.max(6,miniCellSize*0.28)}px;font-family:'DM Mono',monospace;`;
-      nd.innerText = mainCell.dataset.num;
+      nd.className = 'mini-node'; nd.innerText = num;
+      nd.style.fontSize = Math.max(6, mini * 0.32) + 'px';
       el.appendChild(nd);
-      if (pathSet.has(i) || i === pathHead) {
-        nd.style.background = i === pathHead ? '#08080f' : 'var(--acc)';
-        nd.style.color      = i === pathHead ? 'var(--acc)' : '#08080f';
-      }
     }
-    wrap.appendChild(el);
+    frag.appendChild(el);
   }
+  wrap.innerHTML = ''; wrap.appendChild(frag);
 }
 
 // ── Round / Final results ──
@@ -557,18 +746,21 @@ function showRoundResults(order) {
   document.getElementById('rr-title').innerText = 'Round ' + battleRound + ' of ' + maxRounds;
   document.getElementById('rr-sub').innerText   = battleRound < maxRounds ? 'Round Complete!' : 'Final Round!';
   const list = document.getElementById('rr-list'); list.innerHTML = '';
-  const pClasses = ['p1','p2','p3'];
+  const pClasses = ['p1', 'p2', 'p3'];
   order.forEach((e, i) => {
     const pts = e.pts || 0;
     roundScores[e.id] = (roundScores[e.id] || 0) + pts;
+    const p = lobbyPlayers[e.id];
     const row = document.createElement('div');
-    row.className = 'rr-row ' + (pClasses[i] || '');
-    row.innerHTML = `<div class="rr-medal">${MEDALS[i]||'#'+(i+1)}</div>
+    row.className = 'rr-row ' + (pClasses[i] || '') + (e.id === myId ? ' me' : '');
+    row.style.animationDelay = (i * 60) + 'ms';
+    row.innerHTML = `<div class="rr-medal">${MEDALS[i] || '#' + (i + 1)}</div>
+      ${renderAvatar(p && p.avatar, e.name, 30)}
       <div class="rr-info">
-        <div class="rr-name">${e.name}${e.id===myId?' (you)':''}</div>
+        <div class="rr-name">${escapeHtml(e.name)}${e.id === myId ? ' (you)' : ''}</div>
         <div class="rr-pts">+${pts} pts · Total: ${roundScores[e.id]} pts</div>
       </div>
-      <div class="rr-time">${e.quit?'QUIT':e.time}</div>`;
+      <div class="rr-time">${escapeHtml(e.quit ? 'QUIT' : e.time)}</div>`;
     list.appendChild(row);
   });
 
@@ -579,20 +771,18 @@ function showRoundResults(order) {
   const countdownNum = document.getElementById('rr-countdown-num');
 
   if (isHost) {
-    if (battleRound >= maxRounds) {
-      nextBtn.style.display  = 'none'; finalBtn.style.display = 'block';
-      waitDiv.style.display  = 'none'; countdownDiv.style.display = 'none';
-    } else {
-      finalBtn.style.display = 'none'; nextBtn.style.display  = 'block';
-      waitDiv.style.display  = 'none';
-      autoNextSec = 10; countdownNum.innerText = autoNextSec; countdownDiv.style.display = 'block';
-      clearInterval(autoNextTimer);
-      autoNextTimer = setInterval(() => {
-        autoNextSec--;
-        countdownNum.innerText = autoNextSec;
-        if (autoNextSec <= 0) { clearInterval(autoNextTimer); countdownDiv.style.display = 'none'; hostNextRound(); }
-      }, 1000);
-    }
+    waitDiv.style.display = 'none';
+    clearInterval(autoNextTimer);
+    const last = battleRound >= maxRounds;
+    nextBtn.style.display  = last ? 'none' : 'block';
+    finalBtn.style.display = last ? 'block' : 'none';
+    autoNextSec = last ? 5 : 6; countdownNum.innerText = autoNextSec; countdownDiv.style.display = 'block';
+    document.getElementById('rr-countdown-lbl').innerText = last ? 'Final standings in' : 'Next round in';
+    autoNextTimer = setInterval(() => {
+      autoNextSec--;
+      countdownNum.innerText = autoNextSec;
+      if (autoNextSec <= 0) { clearInterval(autoNextTimer); countdownDiv.style.display = 'none'; last ? hostShowFinal() : hostNextRound(); }
+    }, 1000);
   } else {
     nextBtn.style.display  = 'none'; finalBtn.style.display = 'none';
     waitDiv.style.display  = 'flex'; countdownDiv.style.display = 'none';
@@ -602,38 +792,48 @@ function showRoundResults(order) {
 
 function showFinalResults() {
   clearInterval(autoNextTimer);
+  stopTimer();
   const sorted = Object.entries(roundScores).sort((a, b) => b[1] - a[1]);
-  const winnerName = sorted.length > 0 ? (lobbyPlayers[sorted[0][0]]?.name || '???') : '';
+  const pinfo  = pid => lobbyPlayers[pid] || playerCache[pid] || null;
+  const winnerName = sorted.length > 0 ? ((pinfo(sorted[0][0]) || {}).name || '???') : '';
   const isWinner = sorted.length > 0 && sorted[0][0] === myId;
   document.getElementById('fin-winner').innerText = winnerName + (isWinner ? ' 🎉 (you!)' : ' wins! 🎉');
   const list = document.getElementById('fin-list'); list.innerHTML = '';
+  let myPlace = -1;
   sorted.forEach(([pid, pts], i) => {
-    const p = lobbyPlayers[pid];
+    if (pid === myId) myPlace = i;
+    const p = pinfo(pid);
     const row = document.createElement('div');
-    row.className = 'fin-row' + (i === 0 ? ' rank1' : '');
-    const roundCount = maxRounds;
-    row.innerHTML = `<div class="fin-medal">${MEDALS[i]||'#'+(i+1)}</div>
+    row.className = 'fin-row' + (i === 0 ? ' rank1' : '') + (pid === myId ? ' me' : '');
+    row.style.animationDelay = (i * 80) + 'ms';
+    row.innerHTML = `<div class="fin-medal">${MEDALS[i] || '#' + (i + 1)}</div>
+      ${renderAvatar(p && p.avatar, p ? p.name : '?', 36)}
       <div class="fin-info">
-        <div class="fin-name">${p?p.name:pid}${pid===myId?' (you)':''}</div>
-        <div class="fin-score">${roundCount} round${roundCount!==1?'s':''}</div>
+        <div class="fin-name">${escapeHtml(p ? p.name : '???')}${pid === myId ? ' (you)' : ''}</div>
+        <div class="fin-score">${maxRounds} round${maxRounds !== 1 ? 's' : ''}</div>
       </div>
       <div class="fin-pts">${pts} pts</div>`;
     list.appendChild(row);
   });
 
-  // Show play-again only for host; guests get it via play_again message
-  const paBtn = document.getElementById('fin-play-again-btn');
+  // Placement XP bonus (once per match)
+  const bonus = [60, 30, 15][myPlace] || 0;
+  const bEl = document.getElementById('fin-bonus');
+  if (bonus && battleActive) { addXp(bonus); bEl.innerText = '+' + bonus + ' XP placement bonus'; bEl.style.display = ''; }
+  else bEl.style.display = 'none';
+  battleActive = false;
+  syncAccountToCloud().catch(() => {});
+
+  const paBtn   = document.getElementById('fin-play-again-btn');
+  const qBtn    = document.getElementById('fin-queue-btn');
   const waitDiv = document.getElementById('fin-wait-host');
-  if (isHost) {
-    if (paBtn)  { paBtn.style.display = 'block'; }
-    if (waitDiv){ waitDiv.style.display = 'none'; }
-  } else {
-    if (paBtn)  { paBtn.style.display = 'none'; }
-    if (waitDiv){ waitDiv.style.display = 'flex'; }
-  }
+  paBtn.style.display   = (!isQuickMatch && isHost) ? 'block' : 'none';
+  waitDiv.style.display = (!isQuickMatch && !isHost) ? 'flex' : 'none';
+  qBtn.style.display    = isQuickMatch ? 'block' : 'none';
 
   show('final-results');
   spawnParticles();
+  if (isWinner) { sfx('win'); setTimeout(spawnParticles, 500); }
 }
 
 function playAgain() {
@@ -643,12 +843,7 @@ function playAgain() {
   progressState = {}; remotePaths = {};
   if (isHost) {
     broadcastAll({ type:'play_again' });
-    // Update host entry XP/rank
-    lobbyPlayers[myId] = {
-      name: myName, host: true,
-      xpLevel:  getXpLevel(loadSave().xp || 0),
-      rankName: getRank(loadSave().totalCleared || 0).name
-    };
+    lobbyPlayers[myId] = selfLobbyEntry(true);
     broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
     showLobbyAsHost();
   }
@@ -656,21 +851,26 @@ function playAgain() {
 
 function showLobbyAsHost() {
   show('lobby');
-  document.getElementById('lob-title').innerText            = 'Your Room';
-  document.getElementById('host-code-box').style.display    = '';
-  document.getElementById('room-code-disp').innerText       = roomCode;
-  document.getElementById('host-settings').style.display    = 'flex';
-  document.getElementById('start-btn').style.display        = 'block';
-  document.getElementById('wait-msg').style.display         = 'flex';
+  document.getElementById('lob-title').innerText         = 'Your Room';
+  document.getElementById('host-code-box').style.display = '';
+  document.getElementById('room-code-disp').innerText    = roomCode;
+  document.getElementById('host-settings').style.display = 'flex';
+  document.getElementById('guest-settings').style.display = 'none';
+  document.getElementById('start-btn').style.display     = 'block';
+  document.getElementById('wait-msg').style.display      = 'flex';
+  syncBoostToggle();
   renderLobby();
 }
 
 function showLobbyAsGuest() {
+  if (isQuickMatch) { renderLobby(); return; } // quick-match guests stay on the queue screen
   show('lobby');
-  document.getElementById('lob-title').innerText            = 'Joined Room';
-  document.getElementById('host-code-box').style.display    = 'none';
-  document.getElementById('host-settings').style.display    = 'none';
-  document.getElementById('start-btn').style.display        = 'none';
-  document.getElementById('wait-msg').style.display         = 'flex';
+  document.getElementById('lob-title').innerText          = 'Joined Room';
+  document.getElementById('host-code-box').style.display  = 'none';
+  document.getElementById('host-settings').style.display  = 'none';
+  document.getElementById('guest-settings').style.display = 'flex';
+  document.getElementById('start-btn').style.display      = 'none';
+  document.getElementById('wait-msg').style.display       = 'flex';
+  renderGuestSettings();
   renderLobby();
 }

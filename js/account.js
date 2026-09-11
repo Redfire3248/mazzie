@@ -262,6 +262,7 @@ async function syncAccountToCloud() {
       totalCleared: s.totalCleared || 0,
       level:        s.level || 1,
       diff:         s.diff || 'easy',
+      avatar:       getMyAvatar(),
       lastSeen:     Date.now()
     });
   } catch(e) { /* offline — will sync next time */ }
@@ -459,18 +460,24 @@ function applyAccountLocally(account) {
   currentAccount = account;
   myName = account.name;
   myId   = account.uid;
-  writeSave({
+  adminTargetId = myId;
+  // Offline/local sessions carry placeholder zeros — never let them wipe real progress.
+  // Online: keep whichever side is further ahead (progress made offline survives).
+  if (account.local || account.offline) { writeSave({ name: account.name }); return; }
+  const s = loadSave();
+  const patch = {
     name:         account.name,
-    xp:           account.xp           || 0,
-    totalCleared: account.totalCleared || 0,
-    level:        account.level        || 1,
-    diff:         account.diff         || 'easy'
-  });
+    xp:           Math.max(account.xp || 0, s.xp || 0),
+    totalCleared: Math.max(account.totalCleared || 0, s.totalCleared || 0),
+    level:        account.level || s.level || 1,
+    diff:         account.diff  || s.diff  || 'easy'
+  };
+  if (account.avatar) patch.avatar = sanitizeAvatar(account.avatar);
+  writeSave(patch);
 }
 function _setupContinueBtn() {
   const s = loadSave();
-  if (s.level && s.level > 1 && s.diff) {
-    document.getElementById('continue-btn').classList.remove('hidden');
-    document.getElementById('continue-info').innerText = s.diff.toUpperCase() + ' · LVL ' + s.level;
-  }
+  const show = !!(s.level && s.level > 1 && s.diff);
+  document.getElementById('continue-btn').classList.toggle('hidden', !show);
+  if (show) document.getElementById('continue-info').innerText = s.diff.toUpperCase() + ' · LVL ' + s.level;
 }
