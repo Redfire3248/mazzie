@@ -205,13 +205,13 @@ function reelTarget(reel, i, jitter) {
   const c = reel.children[i], wrapW = reel.parentElement.clientWidth;
   return c.offsetLeft + c.offsetWidth / 2 - wrapW / 2 + (jitter || 0) * c.offsetWidth;
 }
-// After the spin: if layout drifted, glide the last few pixels so the prize is exactly under the marker
+// After the spin: glide the last few pixels so the prize sits exactly centred under the marker
 function settleReel(reel, i, done) {
   const now = new DOMMatrixReadOnly(getComputedStyle(reel).transform).m41;
   const c = reel.children[i], wrapW = reel.parentElement.clientWidth;
   const off = (-now + wrapW / 2) - (c.offsetLeft + c.offsetWidth / 2);
-  if (Math.abs(off) <= c.offsetWidth * .42) return done();
-  const tgt = -(c.offsetLeft + c.offsetWidth / 2 - wrapW / 2 + Math.sign(off) * c.offsetWidth * .25);
+  if (Math.abs(off) < 0.5) return done();
+  const tgt = -(c.offsetLeft + c.offsetWidth / 2 - wrapW / 2);        // exact centre
   const a = reel.animate([{ transform: 'translateX(' + now + 'px)' }, { transform: 'translateX(' + tgt + 'px)' }], { duration: 260, easing: 'cubic-bezier(.3,1.4,.5,1)', fill: 'forwards' });
   a.onfinish = done;
 }
@@ -244,7 +244,7 @@ function showReel(ctx) {
     const wrapW = ov.querySelector('.reel-wrap').clientWidth;
     // Layout sizes (not getBoundingClientRect: the pop-in animation scales the reel while we measure)
     const card = reel.children[1].offsetLeft - reel.children[0].offsetLeft;
-    const x = reelTarget(reel, WIN, (Math.random() - .5) * .6);
+    const x = reelTarget(reel, WIN);
     _reelAnim = reel.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-x}px)` }],
       { duration: 5600, easing: 'cubic-bezier(.08,.6,.12,1)', fill: 'forwards' });
     let last = -1;
@@ -287,7 +287,7 @@ function showStack(ctx) {
     let left = reels.length;
     _reelAnims = reels.map((reel, ri) => {
       const wrap = reel.parentElement, wrapW = wrap.clientWidth;
-      const x = reelTarget(reel, WIN, (Math.random() - .5) * .5);
+      const x = reelTarget(reel, WIN);
       const anim = reel.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-x}px)` }],
         { duration: 2600 + ri * 330, easing: 'cubic-bezier(.1,.65,.15,1)', fill: 'forwards' });
       anim.onfinish = () => settleReel(reel, WIN, () => {
