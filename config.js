@@ -16,11 +16,11 @@ window.MAZZIE_CONFIG = {
   firebaseUrl: "https://mazzzie-7d6bb-default-rtdb.asia-southeast1.firebasedatabase.app",
 
   firebaseConfig: {
-    apiKey:            "",                                   // ← paste from the Firebase console
+    apiKey:            "AIzaSyC6RUpdh8xvmCHvZfD10Tar0AYRO5DAO8M",                                   // ← paste from the Firebase console
     authDomain:        "mazzzie-7d6bb.firebaseapp.com",
     databaseURL:       "https://mazzzie-7d6bb-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId:         "mazzzie-7d6bb",
-    appId:             ""                                    // ← paste from the Firebase console
+    appId:             "1:953193194214:web:93ba2a0f2c7051e9d65127"                                    // ← paste from the Firebase console
   },
 
   adminEmails: ["redjai1981@gmail.com"],
