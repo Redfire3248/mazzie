@@ -18,6 +18,7 @@ async function listenFriends() {
   const me = currentAccount.id;
   loadFriends();
   _frPollT = setInterval(loadFriends, 60000);
+  if (isScreen('friends')) { refreshPresence(); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 20000); }
   _rqES = streamNode(await streamUrl('/friendReq/' + me), v => {
     const prev = _reqIn;
     _reqIn = v && typeof v === 'object' ? v : {};
@@ -88,7 +89,11 @@ function openFriends() {
   refreshPresence();
   clearInterval(_presT); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 20000);
 }
-function closeFriends() { show(inBattleSession() ? 'lobby' : 'menu'); }
+// Back to the room (fully set up: host gets Start + settings) or the menu
+function closeFriends() {
+  if (!inBattleSession()) return show('menu');
+  if (isHost) showLobbyAsHost(); else showLobbyAsGuest();
+}
 
 function renderFriends() {
   const box = document.getElementById('friends-body'); if (!box) return;
@@ -101,8 +106,8 @@ function renderFriends() {
   const list = Object.entries(_friends).map(([id, f]) => ({ id, f, st: friendStatus(id) }))
     .sort((a, b) => b.st.on - a.st.on || String(a.f.name).localeCompare(String(b.f.name)));
   const row = (id, name, av, right, sub, cls) => `<div class="friend-row${cls ? ' ' + cls : ''}">
-      <div class="fr-ava">${renderAvatar(sanitizeAvatar(av || {}), name, 40)}</div>
-      <div class="fr-txt"><b>${escapeHtml(name)}</b><small>${sub}</small></div>
+      <button class="fr-ava" onclick="openProfile('${id}')" title="View profile">${renderAvatar(sanitizeAvatar(av || {}), name, 40)}</button>
+      <button class="fr-txt" onclick="openProfile('${id}')" title="View profile"><b>${escapeHtml(name)}</b><small>${sub}</small></button>
       <div class="fr-btns">${right}</div></div>`;
   let h = '';
   if (invs.length) {
@@ -123,7 +128,7 @@ function renderFriends() {
     const joinBtn = st.room && st.room !== roomCode ? `<button class="icon-btn sm join" onclick="joinFriendRoom('${st.room}')" title="Join their room">${ic('login')}</button>` : '';
     const inviteBtn = `<button class="btn primary sm" onclick="inviteFriend('${id}')" title="Invite to your room">${ic('swords')}Invite</button>`;
     return row(id, name, f.av,
-      joinBtn + inviteBtn + `<button class="icon-btn sm" onclick="giftFriend('${escapeHtml(name)}')" title="Send a gift">${ic('gift')}</button>`
+      joinBtn + inviteBtn + `<button class="icon-btn sm" onclick="openProfile('${id}')" title="View profile">${ic('user')}</button><button class="icon-btn sm" onclick="giftFriend('${escapeHtml(name)}')" title="Send a gift">${ic('gift')}</button>`
         + `<button class="icon-btn sm ghost-x" onclick="removeFriend('${id}','${escapeHtml(name)}')" title="Remove">${ic('x')}</button>`,
       `<i class="dot${st.on ? ' on' : ''}"></i>${st.text}${st.on && st.lvl ? ' · LVL ' + st.lvl : ''}`, st.on ? 'online' : '');
   }).join('')
@@ -198,6 +203,10 @@ async function inviteFriend(id) {
       showConnecting('CREATING ROOM…');
       await hostRoom();
       hideConnecting();
+      // Set the lobby up as host right away (Start button, settings, room code), then stay here
+      const back = isScreen('friends');
+      showLobbyAsHost();
+      if (back) { show('friends'); renderFriends(); }
     }
     await dbPut('/invites/' + id + '/' + currentAccount.id, { name: myName, room: roomCode, at: SERVER_TIME, av: getMyAvatar() });
     sfx('coin'); pushToast('Invite sent to ' + cleanName((_friends[id] || {}).name || 'friend'), 'acc', 'send');
@@ -239,3 +248,62 @@ function showInvite(id, inv) {
   clearTimeout(el._t); el._t = setTimeout(hideInvite, 20000);
 }
 function hideInvite() { const el = document.getElementById('invite-pop'); if (el) el.hidden = true; }
+
+// ══════════════════════════════════════════════════
+// PROFILE VIEWER (friends list + room lobby)
+// ══════════════════════════════════════════════════
+async function openProfile(id, hint) {
+  if (!id) return;
+  hint = hint || {};
+  let p = null;
+  if (friendsReady()) { try { p = await dbGet('/profiles/' + id); } catch (e) {} }
+  const f = _friends[id] || {};
+  const name = cleanName((p && p.name) || hint.name || f.name || 'Player');
+  const av = sanitizeAvatar((p && p.av) || hint.avatar || f.av || {});
+  const lvl = p && typeof p.xp === 'number' ? getXpLevel(p.xp) : (hint.xpLevel || 1);
+  const cleared = p && typeof p.cleared === 'number' ? p.cleared : null;
+  const rank = cleared != null ? getRank(cleared) : { name: hint.rankName || 'Player', icon: 'seed', color: 'var(--txt2)' };
+  const st = _friends[id] ? friendStatus(id) : null;
+  const trail = _find(TRAILS, av.trail) || TRAILS[0];
+  const isMe = currentAccount && id === currentAccount.id;
+  const canAct = friendsReady() && !isMe;
+  const btns = !canAct ? '' : _friends[id]
+    ? `<button class="btn primary" onclick="closeProfile();inviteFriend('${id}')">${ic('swords')}Invite</button>
+       <button class="btn secondary" onclick="closeProfile();giftFriend('${escapeHtml(name)}')">${ic('gift')}Gift</button>`
+    : _reqIn[id] ? `<button class="btn primary" onclick="closeProfile();acceptFriend('${id}')">${ic('check')}Accept request</button>`
+    : (loadSave().friendOut || {})[id] ? `<button class="btn secondary" disabled>${ic('users')}Request sent</button>`
+    : `<button class="btn primary" onclick="addFriendById('${id}','${escapeHtml(name)}')">${ic('plus')}Add friend</button>`;
+  const el = document.getElementById('profile-pop');
+  el.innerHTML = `<div class="profile-card-pop">
+    <button class="icon-btn sheet-x" onclick="closeProfile()">${ic('x')}</button>
+    <div class="pp-ava">${renderAvatar(av, name, 96)}</div>
+    <div class="pp-name">${escapeHtml(name)}</div>
+    ${titleHtml(av) ? `<div class="pp-title fit" data-max="16" data-min="9">${titleHtml(av)}</div>` : ''}
+    ${st ? `<div class="pp-status"><i class="dot${st.on ? ' on' : ''}"></i>${st.text}</div>` : ''}
+    <div class="pp-stats">
+      <div><b>${getLevelBadge(lvl)} ${lvl}</b><small>Level</small></div>
+      <div><b>${rankIcon(rank)} ${escapeHtml(rank.name)}</b><small>Rank</small></div>
+      <div><b>${cleared != null ? cleared.toLocaleString() : '—'}</b><small>Cleared</small></div>
+    </div>
+    <div class="pp-trail">${trailPreviewSvg(trail)}<small>${escapeHtml(trail.name)} trail</small></div>
+    ${btns ? `<div class="pp-btns">${btns}</div>` : ''}
+  </div>`;
+  el.hidden = false;
+  fitText(el);
+  sfx('tap');
+}
+function closeProfile() { const el = document.getElementById('profile-pop'); if (el) el.hidden = true; }
+async function addFriendById(id, name) {
+  try {
+    await loadFriends();
+    if (_friends[id]) { pushToast('You are already friends', 'info', 'users'); return; }
+    await dbPut('/friendReq/' + id + '/' + currentAccount.id, { name: cleanName(myName), at: SERVER_TIME, av: getMyAvatar() });
+    writeSave({ friendOut: { ...(loadSave().friendOut || {}), [id]: cleanName(name) } });
+    sfx('coin'); pushToast('Friend request sent to ' + cleanName(name), 'acc', 'users');
+    closeProfile();
+  } catch (e) { pushToast(e.message === 'DENIED' ? 'Request already sent (or rules need publishing)' : 'Could not reach the server', 'warn'); }
+}
+document.addEventListener('pointerdown', e => {
+  const el = document.getElementById('profile-pop');
+  if (el && !el.hidden && e.target === el) closeProfile();
+});

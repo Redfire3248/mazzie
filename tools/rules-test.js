@@ -202,6 +202,15 @@ const SV = { '.sv': 'timestamp' };
   no('no invites after unfriending',      await req('PUT', '/invites/A/B', { name: 'Bob', room: 'QWER', at: SV }, bob.tok));
   no('no presence after unfriending',     await req('GET', '/online/A', undefined, bob.tok));
 
+  console.log('Public profiles');
+  await req('PATCH', '/accounts/B', { xp: 500, totalCleared: 10 }, admin.tok);
+  ok('bob publishes his profile',         await req('PUT', '/profiles/B', { name: 'Bob', xp: 500, cleared: 10, av: { icon: 'cr-cat' }, at: SV }, bob.tok));
+  no('profile cannot claim more xp',      await req('PUT', '/profiles/B', { name: 'Bob', xp: 999999, cleared: 10, at: SV }, bob.tok));
+  no('profile cannot claim more clears',  await req('PUT', '/profiles/B', { name: 'Bob', xp: 500, cleared: 9999, at: SV }, bob.tok));
+  no('alice cannot write bob profile',    await req('PUT', '/profiles/B', { name: 'Bobby', xp: 1, cleared: 1, at: SV }, aliceNew.tok));
+  ok('any signed-in player can view it',  await req('GET', '/profiles/B', undefined, aliceNew.tok));
+  no('anonymous cannot view profiles',    await req('GET', '/profiles/B'));
+
   console.log('Legacy account migration');
   await req('PUT', '/accounts/mz_legacy', { name: 'Old', nameLower: 'old', pinHash: 'HASH123', xp: 700 }, null, true);
   await req('PUT', '/usernames/old', { uid: 'mz_legacy', createdAt: 1 }, null, true);

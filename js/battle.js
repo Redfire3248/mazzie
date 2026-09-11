@@ -303,6 +303,7 @@ function renderLobby() {
     const isMe = pid === myId;
     const title = titleName(p.avatar);
     const row = document.createElement('div'); row.className = 'p-row'; row.dataset.pid = pid;
+    row.onclick = e => { if (!e.target.closest('.p-kick')) openProfile(pid, p); };
     row.innerHTML = `<div class="p-ava-wrap">${renderAvatar(p.avatar, p.name, 38)}
       <div class="p-lvl-wrap">${getLevelBadge(p.xpLevel || 1)}</div></div>
     <div class="p-info">

@@ -135,6 +135,13 @@
         }
       }
     },
+    "profiles": {
+      "$acc": {
+        ".read": "auth != null",
+        ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (auth != null && root.child('accounts').child($acc).child('owner').val() == auth.uid)",
+        ".validate": "!newData.exists() || (newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('xp').isNumber() && newData.child('xp').val() >= 0 && newData.child('xp').val() <= (root.child('accounts').child($acc).child('xp').isNumber() ? root.child('accounts').child($acc).child('xp').val() : 0) && newData.child('cleared').isNumber() && newData.child('cleared').val() >= 0 && newData.child('cleared').val() <= (root.child('accounts').child($acc).child('totalCleared').isNumber() ? root.child('accounts').child($acc).child('totalCleared').val() : 0) && newData.child('at').val() == now)"
+      }
+    },
     "friendReq": {
       "$to": {
         ".read": "(auth != null && root.child('accounts').child($to).child('owner').val() == auth.uid) || (auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",

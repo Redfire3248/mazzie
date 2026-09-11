@@ -41,22 +41,54 @@ function startLive() {
   if (typeof listenFriends === 'function') listenFriends();
   clearInterval(_hbT); _hbT = setInterval(heartbeat, 45000);
   document.addEventListener('visibilitychange', onVis);
+  // Phones silently kill live connections when the app sleeps → a watchdog + wake-up reconnect
+  clearInterval(_wdT); _wdT = setInterval(watchStreams, 20000);
+  window.addEventListener('online', reconnectLive);
+  window.addEventListener('pageshow', onPageShow);
 }
 function stopLive() {
   _liveOn = false;
   if (_bcES) _bcES.close(); if (_trES) _trES.close(); _bcES = _trES = null; clearInterval(_giftT);
   if (typeof onGiftsChanged === 'function') _gifts = {};
   if (typeof stopFriends === 'function') stopFriends();
-  clearInterval(_hbT);
+  clearInterval(_hbT); clearInterval(_wdT);
   document.removeEventListener('visibilitychange', onVis);
+  window.removeEventListener('online', reconnectLive);
+  window.removeEventListener('pageshow', onPageShow);
 }
-function onVis() { if (document.visibilityState === 'visible') heartbeat(); }
+let _wdT = null, _hiddenAt = 0;
+function onVis() {
+  if (document.visibilityState === 'hidden') { _hiddenAt = Date.now(); return; }
+  heartbeat();
+  // Back from the background: the phone probably cut the streams — reconnect and catch up now
+  if (_hiddenAt && Date.now() - _hiddenAt > 5000) reconnectLive();
+  _hiddenAt = 0;
+}
+function onPageShow(e) { if (e.persisted) reconnectLive(); }
+// Restart every live stream and fetch anything we may have missed while asleep
+function reconnectLive() {
+  if (!_liveOn) return;
+  listenBroadcast(); listenTroll();
+  if (typeof listenFriends === 'function') listenFriends();
+  if (typeof pollGifts === 'function') pollGifts();
+}
+// A stream is dead if it closed, or Firebase's keep-alive (sent about every 30 s) stopped arriving
+function watchStreams() {
+  if (!_liveOn || document.visibilityState === 'hidden') return;
+  const all = [_bcES, _trES, typeof _rqES !== 'undefined' ? _rqES : null, typeof _ivES !== 'undefined' ? _ivES : null];
+  if (all.some(es => !es || es.readyState === 2 || Date.now() - (es._last || 0) > 100000)) reconnectLive();
+}
 
 // ── Streams: apply 'put'/'patch' events to a local copy of the node ──
 function streamNode(url, onChange, onAuthRevoked) {
   const es = new EventSource(url);
+  es._last = Date.now();
+  const touch = () => { es._last = Date.now(); };
+  es.addEventListener('keep-alive', touch);
+  es.addEventListener('open', touch);
   let cur = null;
   const apply = (ev, merge) => {
+    touch();
     let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
     if (!msg) return;
     if (msg.path === '/') cur = merge && cur ? { ...cur, ...msg.data } : msg.data;

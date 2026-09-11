@@ -542,6 +542,8 @@ async function syncAccountToCloud() {
     await dbPatch('/accounts/' + id, secure
       ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: keyMap(s.crateKeys), xpAt: SERVER_TIME }
       : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: keyMap(s.crateKeys) });
+    // Public profile (anyone signed in can view it; the rules cap xp/clears at the real account's values)
+    if (secure) dbPut('/profiles/' + id, { name: myName, xp: s.xp || 0, cleared: s.totalCleared || 0, av: getMyAvatar(), at: SERVER_TIME }).catch(() => {});
   } catch (e) { /* offline or over the speed limit — next sync */ }
 }
 

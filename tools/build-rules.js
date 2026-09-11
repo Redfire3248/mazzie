@@ -184,6 +184,18 @@ const rules = {
       }
     },
 
+    // Public profile card (name, level, clears, look). Any signed-in player can view it; only the
+    // owner writes it, and it can never claim more XP / clears than the real (anti-cheat) account.
+    profiles: {
+      '$acc': {
+        '.read': 'auth != null',
+        '.write': `${ADMIN} || (auth != null && ${acctOwnerOf('$acc')} == auth.uid)`,
+        '.validate': `!newData.exists() || (newData.child('name').isString() && newData.child('name').val().length <= 16
+          && newData.child('xp').isNumber() && newData.child('xp').val() >= 0 && newData.child('xp').val() <= ${num("root.child('accounts').child($acc).child('xp')")}
+          && newData.child('cleared').isNumber() && newData.child('cleared').val() >= 0 && newData.child('cleared').val() <= ${num("root.child('accounts').child($acc).child('totalCleared')")}
+          && newData.child('at').val() == now)`
+      }
+    },
     // Friend requests: <to>/<from>. Only the sender creates one; either side can remove it.
     friendReq: {
       '$to': {
