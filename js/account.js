@@ -534,14 +534,14 @@ async function syncAccountToCloud() {
     const ownedPaths = {};
     Object.entries(mergeOwned(s.owned)).forEach(([set, ids]) => Object.keys(ids).forEach(k => { ownedPaths['owned/' + set + '/' + k] = true; }));
     await dbPatch('/accounts/' + id, { level: s.level || 1, diff: s.diff || 'easy', avatar: getMyAvatar(), daily, ...ownedPaths,
-      ownedV1: !!s.ownedV1, ownedV2: !!s.ownedV2, pity: typeof getPity === 'function' ? getPity() : { e: 0, l: 0 }, lastSeen: secure ? SERVER_TIME : Date.now() });
+      ownedV1: !!s.ownedV1, ownedV2: !!s.ownedV2, pity: typeof pityMap === 'function' ? pityMap(s.pity) : {}, lastSeen: secure ? SERVER_TIME : Date.now() });
   } catch (e) { return; }
   // Progress is stamped with the server clock; the database rejects impossible jumps.
   // A rejected jump simply retries on later syncs, once enough real time has passed.
   try {
     await dbPatch('/accounts/' + id, secure
-      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: s.crateKeys || 0, xpAt: SERVER_TIME }
-      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: s.crateKeys || 0 });
+      ? { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: keyMap(s.crateKeys), xpAt: SERVER_TIME }
+      : { xp: s.xp || 0, totalCleared: s.totalCleared || 0, coins: s.coins || 0, boosts: s.boosts || {}, crateKeys: keyMap(s.crateKeys) });
   } catch (e) { /* offline or over the speed limit — next sync */ }
 }
 
@@ -630,11 +630,11 @@ function applyAccountLocally(account) {
     totalCleared: secure ? (account.totalCleared || 0) : Math.max(account.totalCleared || 0, s.totalCleared || 0),
     coins:        secure ? (account.coins || 0) : Math.max(account.coins || 0, s.coins || 0),
     boosts:       secure ? (account.boosts || {}) : (account.boosts || s.boosts || {}),
-    crateKeys:    secure ? (account.crateKeys || 0) : Math.max(account.crateKeys || 0, s.crateKeys || 0),
+    crateKeys:    secure ? keyMap(account.crateKeys) : keyMap(account.crateKeys || s.crateKeys),
     owned:        mergeOwned(account.owned, s.owned),
     ownedV1:      !!(account.ownedV1 || s.ownedV1),
     ownedV2:      !!(account.ownedV2 || s.ownedV2),
-    pity:         account.pity && typeof account.pity === 'object' ? { e: account.pity.e | 0, l: account.pity.l | 0 } : (s.pity || { e: 0, l: 0 }),
+    pity:         account.pity && typeof account.pity === 'object' ? pityMap(account.pity) : pityMap(s.pity),
     daily:        { ...(account.daily && typeof account.daily === 'object' ? account.daily : {}), ...(s.daily || {}) },
     level:        account.level || s.level || 1,
     diff:         account.diff  || s.diff  || 'easy'

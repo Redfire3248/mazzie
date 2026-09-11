@@ -399,7 +399,18 @@ const CMDS = {
     addChatMsg('Admin: ' + msg, null, true); sfx('world'); showAvatarMessage('Announcement · ' + myName, msg, myName, getMyAvatar()); tOk('announced');
   } },
   crate:    { desc:'Crates', sub:{
-    keys: { args:[NUM('<n>')], desc:'Give yourself crate keys', run(a) { addKeys(needInt(a[0], 'n')); syncAccountToCloud(); tOk('keys = ' + getKeys()); } },
+    keys: { args:[H('<player|me>', () => ['me', ...accountNames()]), H('<crate>', () => Object.keys(CRATES)), NUM('<n>')], desc:'Give crate keys (any crate, admin too)', async run(a) {
+      const kind = (a[1] || '').toLowerCase(); if (!CRATES[kind]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
+      const n = needInt(a[2], 'n');
+      if (!a[0] || a[0].toLowerCase() === 'me') { addKeys(kind, n); syncAccountToCloud(); return tOk('you have ' + getKeys(kind) + ' ' + CRATES[kind].name + ' keys'); }
+      needSecure(); const x = await findAccount(a[0]);
+      const acc = await dbGet('/accounts/' + x.id);
+      const cur = keyMap(acc && acc.crateKeys);
+      cur[kind] = Math.max(0, (cur[kind] || 0) + n);
+      await dbPatch('/accounts/' + x.id, { crateKeys: cur });
+      if (n > 0) await adminTroll(x.id, 'keys', { text: kind + ':' + n }).catch(() => {});
+      tOk(x.name + ' now has ' + cur[kind] + ' ' + CRATES[kind].name + ' keys');
+    } },
     open: { args:[H('<crate>', () => Object.keys(CRATES))], desc:'Open a crate for free', run(a) {
       const id = (a[0] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
       adminClose(); if (!isScreen('store')) openStore(); openCrates(id, 1, { free: true }); } },

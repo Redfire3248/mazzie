@@ -28,10 +28,36 @@ const DUPE_REFUND = { common: 10, rare: 20, epic: 35, legendary: 55, mythic: 75,
 const PITY = { epic: 10, legendary: 50 };      // guaranteed at this many crates without one
 const MULTI = { 1: 1, 5: 5, 10: 9 };           // open count → how many crates you pay for
 
-function getKeys() { return Math.max(0, loadSave().crateKeys | 0); }
-function addKeys(n) { writeSave({ crateKeys: Math.max(0, getKeys() + n) }); }
-function getPity() { const p = loadSave().pity || {}; return { e: p.e | 0, l: p.l | 0 }; }
-const crateVisible = id => !CRATES[id].adminOnly || isAdminUser();
+// Keys and pity are tracked PER CRATE: { basic: 3, icon: 0, … } / { basic: { e, l }, … }
+// (older saves stored one number / one {e,l} — those count as Basic)
+function keyMap(v) {
+  if (typeof v === 'number') return { basic: Math.max(0, v | 0) };
+  const out = {}; if (v && typeof v === 'object') Object.keys(CRATES).forEach(k => { if (v[k] > 0) out[k] = v[k] | 0; });
+  return out;
+}
+function pityMap(v) {
+  if (v && typeof v === 'object' && typeof v.e === 'number') return { basic: { e: v.e | 0, l: v.l | 0 } };
+  const out = {}; if (v && typeof v === 'object') Object.keys(CRATES).forEach(k => { if (v[k] && typeof v[k] === 'object') out[k] = { e: v[k].e | 0, l: v[k].l | 0 }; });
+  return out;
+}
+function getKeys(id) { return keyMap(loadSave().crateKeys)[id || 'basic'] || 0; }
+function addKeys(id, n) {
+  if (typeof id === 'number') { n = id; id = 'basic'; }
+  const k = keyMap(loadSave().crateKeys); k[id] = Math.max(0, (k[id] || 0) + n);
+  writeSave({ crateKeys: k });
+}
+function getPity(id) { const p = pityMap(loadSave().pity)[id || 'basic'] || {}; return { e: p.e | 0, l: p.l | 0 }; }
+function setPity(id, v) { const p = pityMap(loadSave().pity); p[id] = v; writeSave({ pity: p }); }
+// Admin crate: admins open it for free; anyone else only with an admin crate key
+const crateVisible = id => !CRATES[id].adminOnly || isAdminUser() || getKeys(id) > 0;
+// What opening n crates costs: keys first, coins for the rest (a full coin ×10 still gets 1 free)
+function crateCost(id, n) {
+  const c = CRATES[id], keys = Math.min(getKeys(id), n);
+  if (c.adminOnly && isAdminUser()) return { keys: 0, coins: 0, ok: true, free: true };
+  if (c.adminOnly) return { keys, coins: 0, ok: keys >= n };
+  const coins = (keys ? n - keys : MULTI[n]) * c.price;
+  return { keys, coins, ok: getCoins() >= coins };
+}
 const quickOpen = () => { try { return localStorage.getItem('mz_quick_open') === '1'; } catch (e) { return false; } };
 function toggleQuickOpen(el) { try { localStorage.setItem('mz_quick_open', el.checked ? '1' : ''); } catch (e) {} }
 
@@ -55,13 +81,13 @@ function rollRarity(odds, pool, minIdx) {
 }
 const pickFrom = list => list[Math.floor(Math.random() * list.length)];
 // One real roll, with pity applied
-function rollWithPity(crate, pool) {
+function rollWithPity(crate, pool, id) {
   if (crate.adminOnly) return pickFrom(pool.admin);
-  const p = getPity();
+  const p = getPity(id);
   const min = p.l + 1 >= PITY.legendary ? 3 : p.e + 1 >= PITY.epic ? 2 : 0;
   const r = rollRarity(crate.odds, pool, min);
   const idx = RAR_ORDER.indexOf(r);
-  writeSave({ pity: { e: idx >= 2 ? 0 : p.e + 1, l: idx >= 3 ? 0 : p.l + 1 } });
+  setPity(id, { e: idx >= 2 ? 0 : p.e + 1, l: idx >= 3 ? 0 : p.l + 1 });
   return { ...pickFrom(pool[r]), pity: min > 0 && idx >= min };
 }
 // Filler for the reel (no pity side effects)
@@ -91,46 +117,55 @@ function crateArt(tone) {
 // ══════════════════════════════════════════════════
 function renderCrates() {
   const el = document.getElementById('store-crates'); if (!el) return;
-  const keys = getKeys(), p = getPity(), gifts = giftList();
+  const gifts = giftList();
   el.innerHTML =
       (gifts.length ? `<button class="key-banner gift" onclick="openGift()">${ic('gift')}<span><b>${gifts.length} gift${gifts.length > 1 ? 's' : ''} waiting</b><small>From ${escapeHtml(gifts[0].fromName)}${gifts.length > 1 ? ' and others' : ''} · tap to open</small></span>${ic('chevR')}</button>` : '')
-    + (keys ? `<button class="key-banner" onclick="openCrateSheet('basic', true)">${ic('key')}<span><b>${keys} free crate key${keys > 1 ? 's' : ''}</b><small>From leveling up · opens a Basic Crate</small></span>${ic('chevR')}</button>` : '')
-    + `<div class="pity-box">
-        <div class="pity-row"><span>Epic or better in</span><b>${PITY.epic - p.e}</b><i style="--p:${p.e / PITY.epic * 100}%;--c:var(--xp-rgb)"></i></div>
-        <div class="pity-row"><span>Legendary or better in</span><b>${PITY.legendary - p.l}</b><i style="--p:${p.l / PITY.legendary * 100}%;--c:var(--gold-rgb)"></i></div>
-      </div>`
-    + Object.entries(CRATES).filter(([id]) => crateVisible(id)).map(([id, c]) => `
+    + Object.entries(CRATES).filter(([id]) => crateVisible(id)).map(([id, c]) => { const k = getKeys(id), cost = crateCost(id, 1); return `
       <button class="crate-card t-${c.tone}" onclick="openCrateSheet('${id}')">
+        ${k ? `<span class="crate-keys">${ic('key')}${k}</span>` : ''}
         <div class="crate-art">${crateArt(c.tone)}</div>
         <b class="crate-name">${c.name}</b>
         <small class="crate-desc">${c.desc}</small>
         <div class="crate-odds">${RAR_ORDER.filter(r => c.odds[r]).map(r => `<span class="odd r-${r}">${c.odds[r]}%</span>`).join('')}</div>
-        <span class="shop-buy${c.adminOnly || getCoins() >= c.price ? '' : ' poor'}">${c.adminOnly ? 'Free' : coinHtml(c.price)}</span>
-      </button>`).join('');
+        ${c.adminOnly ? '' : pityBars(id)}
+        <span class="shop-buy${cost.ok ? '' : ' poor'}">${costHtml(cost)}</span>
+      </button>`; }).join('');
 }
 
 // ── Crate sheet: pick ×1 / ×5 / ×10, or gift it ──
-function openCrateSheet(id, useKey) {
+// Cost label: keys used and/or coins ("7 keys + 300")
+function costHtml(cost) {
+  if (cost.free) return 'Free';
+  const parts = [];
+  if (cost.keys) parts.push(`<span class="key-inline">${ic('key')}${cost.keys}</span>`);
+  if (cost.coins || !cost.keys) parts.push(coinHtml(cost.coins));
+  return parts.join('<i class="cost-plus">+</i>');
+}
+function pityBars(id) {
+  const p = getPity(id);
+  return `<div class="card-pity" title="Epic+ in ${PITY.epic - p.e} · Legendary+ in ${PITY.legendary - p.l}">
+    <i style="--p:${p.e / PITY.epic * 100}%;--c:var(--xp-rgb)"></i><i style="--p:${p.l / PITY.legendary * 100}%;--c:var(--gold-rgb)"></i></div>`;
+}
+function openCrateSheet(id) {
   const c = CRATES[id]; if (!c || !crateVisible(id)) return;
-  const coins = getCoins(), keys = getKeys();
+  const keys = getKeys(id);
   const ov = document.getElementById('crate-open');
   ov.className = 'crate-overlay t-' + c.tone;
   const btn = n => {
-    if (useKey) return keys >= n ? `<button class="btn ${n === 1 ? 'primary' : 'secondary'}" onclick="openCrates('${id}',${n},{key:true})">${ic('key')}Open ${n}</button>` : '';
-    if (c.adminOnly) return `<button class="btn ${n === 1 ? 'primary' : 'secondary'}" onclick="openCrates('${id}',${n})">Open ${n}</button>`;
-    const cost = c.price * MULTI[n];
-    return `<button class="btn ${n === 1 ? 'primary' : 'secondary'}${coins >= cost ? '' : ' poor'}" onclick="openCrates('${id}',${n})">Open ${n}<span class="sheet-cost">${coinHtml(cost)}</span>${n === 10 ? '<em>1 free</em>' : ''}</button>`;
+    const cost = crateCost(id, n);
+    if (c.adminOnly && !cost.free && cost.keys < n) return '';
+    return `<button class="btn ${n === 1 ? 'primary' : 'secondary'}${cost.ok ? '' : ' poor'}" onclick="openCrates('${id}',${n})">Open ${n}<span class="sheet-cost">${costHtml(cost)}</span>${n === 10 && !cost.keys && !cost.free ? '<em>1 free</em>' : ''}</button>`;
   };
   ov.innerHTML = `
     <div class="crate-sheet">
       <button class="icon-btn sheet-x" onclick="closeCrate()">${ic('x')}</button>
       <div class="crate-art big">${crateArt(c.tone)}</div>
-      <div class="crate-top"><b>${c.name}</b><span class="crate-kicker">${c.desc}${useKey ? ` · ${keys} key${keys > 1 ? 's' : ''}` : ''}</span></div>
+      <div class="crate-top"><b>${c.name}</b><span class="crate-kicker">${c.desc}${keys ? ` · you have ${keys} key${keys > 1 ? 's' : ''}` : ''}</span></div>
       <div class="sheet-odds">${RAR_ORDER.filter(r => c.odds[r]).map(r => `<span class="odd r-${r}">${r} ${c.odds[r]}%</span>`).join('')}</div>
-      ${c.adminOnly ? '' : `<small class="sheet-pity">Pity: Epic+ guaranteed within ${PITY.epic - getPity().e}, Legendary+ within ${PITY.legendary - getPity().l}</small>`}
+      ${c.adminOnly ? '' : `<small class="sheet-pity">This crate's pity: Epic+ guaranteed within ${PITY.epic - getPity(id).e}, Legendary+ within ${PITY.legendary - getPity(id).l}</small>`}
       <div class="sheet-btns">${btn(1)}${btn(5)}${btn(10)}</div>
       <label class="quick-open"><input type="checkbox" ${quickOpen() ? 'checked' : ''} onchange="toggleQuickOpen(this)"><span></span>Quick open <small>skip the rolling</small></label>
-      ${!useKey && !c.adminOnly && authMode() === 'secure' ? `<button class="link-btn" onclick="openGiftForm('${id}')">${ic('gift')} Gift this crate to a friend</button>` : ''}
+      ${!c.adminOnly && authMode() === 'secure' ? `<button class="link-btn" onclick="openGiftForm('${id}')">${ic('gift')} Gift this crate to a friend</button>` : ''}
     </div>`;
   sfx('tap');
 }
@@ -146,7 +181,7 @@ async function openCrates(id, n, opts) {
   if (_crateBusy) return;
   const crate = CRATES[id]; if (!crate) return;
   n = MULTI[n] ? n : 1;
-  if (crate.adminOnly && !isAdminUser() && !opts.gift) return;
+  if (crate.adminOnly && !isAdminUser() && !opts.gift && getKeys(id) < n) return;
   let payNote = '';
   if (opts.free) {
     if (!isAdminUser()) return;
@@ -156,18 +191,18 @@ async function openCrates(id, n, opts) {
     catch (e) { pushToast('Could not open the gift — check your internet', 'warn'); return; }
     delete _gifts[opts.gift.id];
     payNote = 'Gift from ' + opts.gift.fromName;
-  } else if (opts.key) {
-    if (getKeys() < n) return;
-    writeSave({ crateKeys: getKeys() - n }); payNote = n + ' key' + (n > 1 ? 's' : '');
-  } else if (!crate.adminOnly) {
-    const cost = crate.price * MULTI[n];
-    if (getCoins() < cost) {
+  } else {
+    // Keys first, coins for the rest
+    const cost = crateCost(id, n);
+    if (!cost.ok) {
       sfx('err'); buzz(20);
-      pushToast(`Need ${cost - getCoins()} more coins — win levels to earn them`, 'warn', 'coin');
+      pushToast(crate.adminOnly ? 'You need an Admin Crate key' : `Need ${cost.coins - getCoins()} more coins — win levels to earn them`, 'warn', crate.adminOnly ? 'key' : 'coin');
       return;
     }
-    writeSave({ coins: getCoins() - cost }); payNote = '-' + cost;
-  } else payNote = 'Admin';
+    if (cost.keys) addKeys(id, -cost.keys);
+    if (cost.coins) writeSave({ coins: getCoins() - cost.coins });
+    payNote = cost.free ? 'Admin' : [cost.keys ? cost.keys + ' key' + (cost.keys > 1 ? 's' : '') : '', cost.coins ? cost.coins + ' coins' : ''].filter(Boolean).join(' + ');
+  }
 
   // Roll + save everything first
   const pool = cratePool(crate), drops = [];
@@ -176,7 +211,7 @@ async function openCrates(id, n, opts) {
     const pre = opts.gift && opts.gift.item ? String(opts.gift.item).split(':') : null;
     const preItem = pre && COSMETIC_SETS[pre[0]] && _find(COSMETIC_SETS[pre[0]], pre[1]);
     if (preItem) { grantItem(pre[0], preItem.id); drops.push({ set: pre[0], item: preItem, rar: rarityOf(preItem).id, dupe: false, refund: 0 }); continue; }
-    const d = rollWithPity(crate, pool);
+    const d = rollWithPity(crate, pool, id);
     const rar = rarityOf(d.item).id;
     const dupe = isUnlocked(d.item, d.set);
     const refund = dupe ? DUPE_REFUND[rar] : 0;
@@ -188,13 +223,13 @@ async function openCrates(id, n, opts) {
   syncAccountToCloud().catch(() => {});
 
   _crateBusy = true;
-  const again = () => opts.gift || opts.free ? false : opts.key ? getKeys() >= n : crate.adminOnly || getCoins() >= crate.price * MULTI[n];
+  const again = () => opts.gift || opts.free ? false : crateCost(id, n).ok;
   const ctx = window._crateCtx = { id, n, opts, crate, pool, drops, payNote, again };
   if (quickOpen()) showGrid(ctx, true); else if (n === 1) showReel(ctx); else showStack(ctx);
 }
 
 function stageHtml(ctx, body) {
-  const note = ctx.payNote.startsWith('-') ? coinHtml(-(+ctx.payNote.slice(1))) : escapeHtml(ctx.payNote);
+  const note = escapeHtml(ctx.payNote);
   return `<div class="crate-stage">
     <div class="crate-top"><span class="crate-kicker">${note}</span><b>${ctx.n > 1 ? ctx.n + ' × ' : ''}${ctx.crate.name}</b></div>
     ${body}
@@ -389,7 +424,7 @@ function finishReveal(ctx) {
   document.getElementById('crate-actions').innerHTML =
     `<button class="btn secondary" onclick="closeCrate()">Close</button>`
     + (n === 1 && !best.dupe ? `<button class="btn secondary" onclick="equipDrop('${best.set}','${best.item.id}')">${ic('check')}Equip</button>` : '')
-    + (ctx.again() ? `<button class="btn primary" onclick="openCrates('${id}',${n},${opts.key ? '{key:true}' : '{}'})">${ic('refresh')}Again</button>` : '')
+    + (ctx.again() ? `<button class="btn primary" onclick="openCrates('${id}',${n},{})">${ic('refresh')}Again</button>` : '')
     + (opts.gift && giftList().length ? `<button class="btn primary" onclick="openGift()">${ic('gift')}Next gift</button>` : '');
   _crateBusy = false;
 }

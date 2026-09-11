@@ -25,8 +25,12 @@ const BOOST_COST = Object.entries(BOOST_PRICES).map(([k, p]) => `(${BNEW(k)} > $
 const EARNED = `(${num("newData.child('coins')")} + ${BOOST_COST} - ${num("data.child('coins')")})`;
 // Crate keys come only from level-ups: every level needs ≥ 90 more XP, and XP itself is speed-limited,
 // so new keys must arrive in the same write as an XP gain and fit it.
-const XP_OLD = num("data.parent().child('xp')"), XP_NEW = num("newData.parent().child('xp')");
-const KEYS_OK = `(newData.val() <= ${num('data')} || (${XP_NEW} > ${XP_OLD} && newData.val() - ${num('data')} <= 1 + (${XP_NEW} - ${XP_OLD}) / 90))`;
+// Keys are stored per crate (crateKeys/<crate>); older accounts stored one number (= Basic keys).
+const XP_OLD = num("data.parent().parent().child('xp')"), XP_NEW = num("newData.parent().parent().child('xp')");
+const KEY_OLD = "(data.isNumber() ? data.val() : ($kind == 'basic' && data.parent().isNumber() ? data.parent().val() : 0))";
+const KEYS_OK = `(newData.val() <= ${KEY_OLD} || ($kind != 'admin' && ${XP_NEW} > ${XP_OLD} && newData.val() - ${KEY_OLD} <= 1 + (${XP_NEW} - ${XP_OLD}) / 90))`;
+// Spending an Admin Crate key in the same write may unlock admin cosmetics
+const ADMIN_KEY_SPENT = "(newData.parent().parent().parent().child('crateKeys').child('admin').isNumber() && data.parent().parent().parent().child('crateKeys').child('admin').isNumber() && newData.parent().parent().parent().child('crateKeys').child('admin').val() < data.parent().parent().parent().child('crateKeys').child('admin').val())";
 const ACC_XPAT = "(data.child('xpAt').isNumber() ? data.child('xpAt').val() : now)";
 const ECONOMY = `(${ADMIN} || ${EARNED} <= 0 || (newData.child('xpAt').val() == now && ${EARNED} <= ${COIN_BURST} + (now - ${ACC_XPAT}) / 1000 * ${COIN_PER_SEC}))`;
 const NOT_PIN_LOCKED =`(!data.child('nameLower').isString() || !root.child('locks').child(data.child('nameLower').val()).exists() || root.child('locks').child(data.child('nameLower').val()).child('lockedAt').val() + ${LOCK_MS} < now)`;
@@ -64,17 +68,19 @@ const rules = {
          || (root.child('recovery').child($acc).child('code').isString() && newData.child('recoveryProof').val() == root.child('recovery').child($acc).child('code').val())))`,
         '.validate': `newData.child('name').isString() && newData.child('nameLower').isString() && ${ECONOMY}`,
         coins: { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000' },
-        crateKeys: { '.validate': `newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999 && (${ADMIN} || ${KEYS_OK})` },
+        crateKeys: {
+          '$kind': { '.validate': `$kind.matches(/^(basic|icon|style|elite|admin)$/) && newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999 && (${ADMIN} || ${KEYS_OK})` }
+        },
         // Owned cosmetics: { icon|color|frame|trail|title: { id: true } }
         owned: {
           '$set': {
             '.validate': "$set.matches(/^(icon|color|frame|trail|title)$/)",
             // "a-" ids are admin cosmetics: only an admin can grant one (keeping one you were given is fine)
-            '$id': { '.validate': `newData.val() == true && $id.length <= 32 && (!$id.beginsWith('a-') || data.val() == true || ${ADMIN})` }
+            '$id': { '.validate': `newData.val() == true && $id.length <= 32 && (!$id.beginsWith('a-') || data.val() == true || ${ADMIN} || ${ADMIN_KEY_SPENT})` }
           }
         },
         ownedV1: { '.validate': 'newData.isBoolean()' },
-        pity: { '.validate': "newData.child('e').isNumber() && newData.child('l').isNumber()" },
+        pity: { '$crate': { '.validate': "$crate.matches(/^(basic|icon|style|elite|admin)$/) && newData.child('e').isNumber() && newData.child('l').isNumber()" } },
         lastGift: { '.validate': 'newData.isString() && newData.val().length <= 64' },
         boosts: {
           ...Object.fromEntries(Object.keys(BOOST_PRICES).map(k => [k, { '.validate': 'newData.isNumber() && newData.val() >= 0 && newData.val() <= 999' }])),

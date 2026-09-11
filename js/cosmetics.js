@@ -204,8 +204,8 @@ function sanitizeAvatar(av) {
   return out;
 }
 // Admin "reset": everything back to a brand-new player (name and settings are kept)
-const RESET_FIELDS = () => ({ xp: 0, totalCleared: 0, level: 1, diff: 'easy', soloSeed: null, coins: 0, boosts: {}, crateKeys: 0,
-  owned: {}, ownedV1: true, ownedV2: true, pity: { e: 0, l: 0 }, avatar: { ...DEFAULT_AVATAR }, daily: {}, best: {},
+const RESET_FIELDS = () => ({ xp: 0, totalCleared: 0, level: 1, diff: 'easy', soloSeed: null, coins: 0, boosts: {}, crateKeys: {},
+  owned: {}, ownedV1: true, ownedV2: true, pity: {}, avatar: { ...DEFAULT_AVATAR }, daily: {}, best: {},
   unlockAll: false, chestDay: null, cratesOpened: 0 });
 function resetLocalProgress(at) {
   writeSave({ ...RESET_FIELDS(), resetAt: at || Date.now() });

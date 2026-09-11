@@ -76,10 +76,10 @@ function addXp(amount) {
     if (typeof addCoins === 'function') addCoins(bonus);
     // Every level up = a free crate key
     const keys = after - before;
-    if (typeof addKeys === 'function') addKeys(keys);
-    const chips = [{ html: coinHtml(bonus), label: 'bonus' }, { html: `<span class="coin-inline key-inline">${ic('key')}+${keys}</span>`, label: 'crate key' + (keys > 1 ? 's' : '') }];
+    if (typeof addKeys === 'function') addKeys('basic', keys);
+    const chips = [{ html: coinHtml(bonus), label: 'bonus' }, { html: `<span class="coin-inline key-inline">${ic('key')}+${keys}</span>`, label: 'Basic crate key' + (keys > 1 ? 's' : '') }];
     showReward({ iconHtml: getLevelBadge(after), tone: 'xp', kicker: 'Level up', title: 'Level ' + after,
-      sub: 'Open your free crate in the Store', chips });
+      sub: 'Your Basic Crate key is waiting in the Store', chips });
   }
   return { gained: amount, newXp, newLvl: after };
 }

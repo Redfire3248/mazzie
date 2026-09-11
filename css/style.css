@@ -1260,3 +1260,16 @@ body[data-screen="spectate"] .emote-float{bottom:calc(max(env(safe-area-inset-bo
   50%{transform:translate(var(--sway),-70px);}
   80%{opacity:1;}
   100%{transform:translate(0,-150px) scale(.9);opacity:0;}}
+/* Per-crate keys + pity on each card */
+.crate-card{position:relative;}
+.crate-keys{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:10px;background:rgba(var(--xp-rgb),.16);border:1px solid rgba(var(--xp-rgb),.5);color:var(--xp);font-family:var(--mono);font-size:11px;font-weight:700;}
+.crate-keys .ic{width:12px;height:12px;}
+.card-pity{display:flex;flex-direction:column;gap:3px;width:100%;margin:2px 0 1px;}
+.card-pity i{height:3px;border-radius:3px;background:linear-gradient(90deg,rgb(var(--c)) var(--p),var(--cb) var(--p));}
+.key-inline{display:inline-flex;align-items:center;gap:3px;font-family:var(--mono);font-weight:700;}
+.key-inline .ic{width:1em;height:1em;}
+.cost-plus{font-style:normal;margin:0 4px;opacity:.6;}
+.shop-buy .key-inline{color:#07070e;}
+.sheet-cost{display:inline-flex;align-items:center;}
+.btn.primary .sheet-cost .key-inline{color:#07070e;}
+.btn.secondary .sheet-cost .key-inline{color:var(--xp);}

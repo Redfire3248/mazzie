@@ -26,7 +26,8 @@ const TROLLS = {
   skip:      { desc: 'Sends them to the next level' },
   level:     { desc: 'Moves them to level N', value: true },
   gift:      { desc: 'Gift coins (already added by the admin)', value: true },
-  cosmetic:  { desc: 'Tell them about a cosmetic you granted', text: true }
+  cosmetic:  { desc: 'Tell them about a cosmetic you granted', text: true },
+  keys:      { desc: 'Tell them about crate keys you gave', text: true }
 };
 
 async function streamUrl(path) {
@@ -162,6 +163,12 @@ function applyTroll(t) {
       if (inGame() && !battleActive) goMenu();
       showAvatarMessage('Account reset by ' + by, 'Your progress was reset to a fresh start', by, t.av, 6000);
       break;
+    case 'keys': refreshFromCloud().then(() => {
+      const [kind, n] = String(t.text || '').split(':');
+      if (!CRATES[kind]) return;
+      sfx('reward'); spawnParticles();
+      showReward({ icon: 'key', tone: 'gold', kicker: 'Gift from ' + by, title: '+' + (parseInt(n) || 1) + ' ' + CRATES[kind].name + ' key' + ((parseInt(n) || 1) > 1 ? 's' : ''), sub: 'Open it in the Store', ms: 5000 });
+    }); break;
     case 'cosmetic': refreshFromCloud().then(() => {
       const [set, id] = String(t.text || '').split(':');
       const item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], id);
@@ -188,7 +195,7 @@ function fakeBan(by) {
 }
 // Re-read coins/boosts after an admin changed them server-side
 async function refreshFromCloud() {
-  try { const a = await dbGet('/accounts/' + currentAccount.id); if (a) { writeSave({ coins: a.coins || 0, boosts: a.boosts || {}, xp: a.xp || 0, level: a.level || loadSave().level, crateKeys: a.crateKeys || 0, owned: mergeOwned(a.owned, loadSave().owned) }); updateMenuProfile(); updateCoinUI(); } } catch (e) {}
+  try { const a = await dbGet('/accounts/' + currentAccount.id); if (a) { writeSave({ coins: a.coins || 0, boosts: a.boosts || {}, xp: a.xp || 0, level: a.level || loadSave().level, crateKeys: keyMap(a.crateKeys), owned: mergeOwned(a.owned, loadSave().owned) }); updateMenuProfile(); updateCoinUI(); } } catch (e) {}
 }
 
 // ── Admin side ──

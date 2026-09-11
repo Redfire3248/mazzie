@@ -124,13 +124,18 @@ const SV = { '.sv': 'timestamp' };
   no('negative coins',                    await req('PATCH', '/accounts/B', { coins: -5 }, bob.tok));
   ok('admin gifts coins',                 await req('PATCH', '/accounts/B', { coins: 5000 }, admin.tok));
   
-  no('console cheat: 500 crate keys',     await req('PATCH', '/accounts/B', { crateKeys: 500, xpAt: SV }, bob.tok));
+  no('console cheat: 500 crate keys',     await req('PATCH', '/accounts/B', { crateKeys: { basic: 500 }, xpAt: SV }, bob.tok));
   await req('PATCH', '/accounts/B', { xp: 0 }, admin.tok);
-  no('keys without xp gain',              await req('PATCH', '/accounts/B', { crateKeys: 1, xpAt: SV }, bob.tok));
-  no('too many keys for the xp gained',   await req('PATCH', '/accounts/B', { xp: 100, crateKeys: 5, xpAt: SV }, bob.tok));
-  ok('level-up key with its xp',          await req('PATCH', '/accounts/B', { xp: 100, crateKeys: 1, xpAt: SV }, bob.tok));
+  no('keys without xp gain',              await req('PATCH', '/accounts/B', { crateKeys: { basic: 1 }, xpAt: SV }, bob.tok));
+  no('too many keys for the xp gained',   await req('PATCH', '/accounts/B', { xp: 100, crateKeys: { basic: 5 }, xpAt: SV }, bob.tok));
+  no('players cannot make admin keys',    await req('PATCH', '/accounts/B', { xp: 200, crateKeys: { admin: 1 }, xpAt: SV }, bob.tok));
+  no('unknown crate key kind',            await req('PATCH', '/accounts/B', { xp: 200, crateKeys: { mega: 1 }, xpAt: SV }, bob.tok));
+  ok('level-up key with its xp',          await req('PATCH', '/accounts/B', { xp: 100, crateKeys: { basic: 1 }, xpAt: SV }, bob.tok));
   ok('open a crate: spend coins, own item', await req('PATCH', '/accounts/B', { coins: 4900, owned: { frame: { 'f-nova': true } } }, bob.tok));
-  ok('use a key',                         await req('PATCH', '/accounts/B', { crateKeys: 0 }, bob.tok));
+  ok('use a key',                         await req('PATCH', '/accounts/B', { crateKeys: { basic: 0 } }, bob.tok));
+  await req('PATCH', '/accounts/B', { crateKeys: 3 }, admin.tok);            // an account from before keys were per crate
+  ok('old key count converts (spend 1)',  await req('PATCH', '/accounts/B', { crateKeys: { basic: 2 } }, bob.tok));
+  no('old count cannot be inflated',      await req('PATCH', '/accounts/B', { crateKeys: { basic: 9 } }, bob.tok));
   no('owned: unknown set',                await req('PATCH', '/accounts/B', { owned: { hacks: { x: true } } }, bob.tok));
   no('owned: non-true value',             await req('PATCH', '/accounts/B', { owned: { icon: { 'cr-fox': 'yes' } } }, bob.tok));
 
@@ -151,7 +156,11 @@ const SV = { '.sv': 'timestamp' };
   ok('admin gifts an admin crate',        await req('PUT', '/gifts/A/adm_2', { from: 'admin', fromName: 'Admin', crate: 'admin', item: 'frame:a-admin', at: SV }, admin.tok));
   no('bob grants himself an admin frame', await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true }, bob.tok));
   ok('admin grants bob the admin frame',  await req('PATCH', '/accounts/B/owned/frame', { 'a-admin': true }, admin.tok));
-  ok('bob keeps it when he syncs',        await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true, 'owned/frame/f-nova': true, pity: { e: 3, l: 12 } }, bob.tok));
+  ok('bob keeps it when he syncs',        await req('PATCH', '/accounts/B', { 'owned/frame/a-admin': true, 'owned/frame/f-nova': true, pity: { basic: { e: 3, l: 12 } } }, bob.tok));
+  no('admin item without an admin key',   await req('PATCH', '/accounts/B', { 'owned/trail/a-matrix': true }, bob.tok));
+  ok('admin gives bob an Admin Crate key', await req('PATCH', '/accounts/B', { 'crateKeys/admin': 1 }, admin.tok));
+  ok('bob spends it on an admin trail',   await req('PATCH', '/accounts/B', { 'crateKeys/admin': 0, 'owned/trail/a-matrix': true }, bob.tok));
+  no('no key left for another',           await req('PATCH', '/accounts/B', { 'owned/title/a-owner': true }, bob.tok));
 
   console.log('Live: broadcast / troll / online');
   ok('signed-in player reads broadcast',  await req('GET', '/broadcast', undefined, bob.tok));
