@@ -1187,3 +1187,11 @@ html.troll-party .screen:not(.hidden){animation:trollHue 1s linear infinite;}
 .fr-txt small .dot{display:inline-block;margin-right:5px;vertical-align:1px;}
 .icon-btn.sm.join{color:var(--cyan);border-color:rgba(var(--cyan-rgb),.4);}
 .spec-mini-grid .mini-cell.active .mini-node,.spec-mini-grid .mini-cell.path-head .mini-node{background:rgb(var(--trail-rgb));color:#07070e;}
+/* Spectate board: no tinted squares under the trail — just the neon line like the real board */
+.spec-mini-grid .mini-cell.active,.spec-mini-grid .mini-cell.path-head{background:var(--cell);box-shadow:none;}
+.spec-mini-grid .mini-cell.active .mini-node,.spec-mini-grid .mini-cell.path-head .mini-node{background:rgb(var(--trail-rgb));color:#07070e;box-shadow:0 0 8px rgba(var(--trail-rgb),.8);}
+.spec-trail .st-glow{stroke-width:calc(var(--cs) * .5);opacity:.3;}
+.spec-trail .st-body{stroke-width:calc(var(--cs) * .26);}
+.spec-trail .st-core{stroke-width:calc(var(--cs) * .08);}
+.spec-trail .st-flow{stroke-width:calc(var(--cs) * .09);stroke-dasharray:0 calc(var(--cs) * .7);opacity:.8;}
+.spec-trail .st-head{stroke:#fff;stroke-width:1.5;}
