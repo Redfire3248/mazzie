@@ -358,6 +358,23 @@ const CMDS = {
   } },
   battle: { desc:'Battle control', sub:{
     start:      { desc:'Start the match (host, lobby)', run() { needHost(); if (battleActive) throw new Error('already running'); hostStart(); adminClose(); } },
+    board:      { args:[H('[difficulty|same]', () => ['same', ...DIFFS]), NUM('[level]')], desc:'New board for EVERY player right now (host)', run(a) {
+      needHost(); needBattle();
+      const d = (a[0] || 'same').toLowerCase();
+      if (d !== 'same' && !DIFFS.includes(d)) throw new Error('difficulty: same|' + DIFFS.join('|'));
+      if (d !== 'same') battleDiff = d;
+      const lv = a[1] != null ? Math.max(1, needInt(a[1], 'level')) : 1;
+      const seed = randSeed(); battleSeed = seed; roundEnded = false;
+      finishOrder = []; progressState = {}; remotePaths = {};
+      broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level:lv, abilities:abilitiesEnabled, mods:battleMods });
+      level = lv; initialSeed = seed; startGame(battleDiff, seed); startChaos();
+      adminClose(); tOk('new ' + battleDiff + ' board (level ' + lv + ') for everyone');
+    } },
+    mods:       { args:[H('[modifier…|clear]', () => ['clear', ...Object.keys(MODIFIERS)], true)], desc:'Set room modifiers (host)', run(a) {
+      needHost();
+      setMods(a[0] === 'clear' ? [] : a.map(x => x.toLowerCase())); renderModRow(); broadcastLobbySettings();
+      tOk('modifiers: ' + (battleMods.map(k => MODIFIERS[k].name).join(', ') || 'none') + (battleActive ? '  (apply from the next board)' : ''));
+    } },
     skip:       { desc:'End the round now (host)', run() { needHost(); needBattle(); broadcastRoundResults(); tOk('round ended'); } },
     end:        { desc:'Jump to final standings (host)', run() { needHost(); needBattle(); hostShowFinal(); tOk('final standings'); } },
     win:        { desc:'Finish your board instantly', run() { if (!inGame()) throw new Error('not in a game'); onWin(); tOk('force win'); } },

@@ -26,11 +26,19 @@ function updateCoinUI() {
   const c = getCoins();
   document.querySelectorAll('.coin-count').forEach(el => {
     const old = parseInt(el.dataset.v || '0');
-    el.dataset.v = c; el.textContent = c.toLocaleString();
+    el.dataset.v = c; el.textContent = fmtCoins(c);
     if (c > old && el.offsetParent) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   });
 }
-const coinHtml = n => `<span class="coin-inline">${ic('coin')}${typeof n === 'string' ? escapeHtml(n) : Number(n).toLocaleString()}</span>`;
+// 100,000 and up → short form (123K, 1.25M, 3B); below that, normal digits with separators
+function fmtCoins(n) {
+  n = Number(n) || 0;
+  if (Math.abs(n) < 100000) return n.toLocaleString();
+  const u = [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']].find(([v]) => Math.abs(n) >= v);
+  const x = n / u[0];
+  return (Math.abs(x) >= 100 ? Math.floor(x) : Math.floor(x * 100) / 100).toString() + u[1];
+}
+const coinHtml = n => `<span class="coin-inline">${ic('coin')}${typeof n === 'string' ? escapeHtml(n) : fmtCoins(n)}</span>`;
 
 // ══════════════════════════════════════════════════
 // STORE SCREEN

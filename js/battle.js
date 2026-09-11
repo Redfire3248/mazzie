@@ -222,12 +222,43 @@ function syncBoostToggle() {
 }
 function broadcastLobbySettings() {
   if (!isHost) return;
-  broadcastAll({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, party:partyMode });
+  broadcastAll({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, mods:battleMods });
 }
-function toggleParty() { partyMode = !partyMode; syncPartyToggle(); broadcastLobbySettings(); sfx(partyMode ? 'reward' : 'tap'); }
-function syncPartyToggle() {
-  const b = document.getElementById('party-toggle');
-  if (b) { b.classList.toggle('on', partyMode); b.innerText = partyMode ? 'ON' : 'OFF'; }
+
+// ══════════════════════════════════════════════════
+// MODIFIERS — the host picks any mix; they apply to everyone's board for the whole match
+// ══════════════════════════════════════════════════
+const MODIFIERS = {
+  events: { name: 'Random Events', icon: 'sparkle', desc: 'Random trolls hit random players' },
+  flip:   { name: 'Upside Down',   icon: 'flipv',   desc: 'The whole board is flipped' },
+  mirror: { name: 'Mirror',        icon: 'mirror',  desc: 'Left and right are swapped' },
+  spin:   { name: 'Spinning',      icon: 'spinner', desc: 'The board slowly turns' },
+  ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible' },
+  fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is shown' }
+};
+const cleanMods = m => (Array.isArray(m) ? m : []).filter(k => MODIFIERS[k]).slice(0, 6);
+function setMods(list) { battleMods = cleanMods(list); partyMode = battleMods.includes('events'); }
+function toggleMod(k) {
+  if (!isHost || !MODIFIERS[k]) return;
+  setMods(battleMods.includes(k) ? battleMods.filter(x => x !== k) : [...battleMods, k]);
+  renderModRow(); broadcastLobbySettings(); sfx('tap');
+}
+function renderModRow() {
+  const row = document.getElementById('mod-row'); if (!row) return;
+  row.innerHTML = Object.entries(MODIFIERS).map(([k, m]) =>
+    `<button class="mod-chip${battleMods.includes(k) ? ' on' : ''}" onclick="toggleMod('${k}')" title="${m.desc}">${ic(m.icon)}<span>${m.name}</span></button>`).join('');
+}
+// Apply the active modifiers to the board (solo play always clears them)
+function applyMods(list) {
+  const on = k => list.includes(k);
+  const turn = on('flip') || on('mirror') || on('spin');
+  ['grid', 'grid-svg'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.classList.toggle('modded', turn);
+    el.classList.toggle('mod-flip', on('flip')); el.classList.toggle('mod-mirror', on('mirror')); el.classList.toggle('mod-spin', on('spin'));
+  });
+  const game = document.getElementById('game');
+  game.classList.toggle('mod-ghost', on('ghost')); game.classList.toggle('mod-fog', on('fog'));
 }
 
 // ══════════════════════════════════════════════════
@@ -285,7 +316,7 @@ function hostStart() {
   const seed = randSeed(); battleSeed = seed;
   finishOrder = []; progressState = {}; roundScores = {}; remotePaths = {}; quitPlayers.clear();
   totalExpected = Object.keys(lobbyPlayers).length;
-  broadcastAll({ type:'start_round', round:1, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled });
+  broadcastAll({ type:'start_round', round:1, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled, mods:battleMods });
   initialSeed = seed;
   startGame(battleDiff, seed);
   startChaos();
@@ -371,7 +402,7 @@ function handleGuestMsg(conn, d) {
       avatar: sanitizeAvatar(d.avatar)
     };
     broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
-    conn.send({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, party:partyMode });
+    conn.send({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, mods:battleMods });
     renderLobby();
     sfx('node');
     adminLog('ok', name + ' joined');
@@ -468,7 +499,7 @@ function handleHostMsg(d) {
       battleDiffSetting = DIFFS.includes(d.diff) || d.diff === 'random' || d.diff === 'mm' ? d.diff : 'easy';
       maxRounds = Math.max(1, Math.min(10, parseInt(d.rounds) || 3));
       abilitiesEnabled = d.abilities !== false;
-      partyMode = !!d.party;
+      setMods(d.mods);
       renderGuestSettings();
       break;
     case 'play_again':
@@ -494,6 +525,7 @@ function handleHostMsg(d) {
       battleActive = true; battleRound = d.round | 0; maxRounds = d.maxRounds | 0 || 3;
       battleSeed = d.seed >>> 0; battleDiff = DIFFS.includes(d.diff) ? d.diff : 'easy';
       abilitiesEnabled = d.abilities !== false;
+      setMods(d.mods);
       level = d.level || 1; dailyMode = false; roundEnded = false;
       finishOrder = []; progressState = {}; remotePaths = {}; quitPlayers.clear();
       amSpectating = false;
@@ -589,7 +621,7 @@ function handleHostMsg(d) {
 function renderGuestSettings() {
   const el = document.getElementById('guest-settings'); if (!el) return;
   const diff = battleDiffSetting === 'random' ? 'Random' : battleDiffSetting === 'mm' ? 'Level-based' : battleDiffSetting.toUpperCase();
-  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>${partyMode ? '<span class="chaos-chip">Chaos ON</span>' : ''}`;
+  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>${battleMods.map(k => `<span class="chaos-chip">${MODIFIERS[k].name}</span>`).join('')}`;
 }
 
 // ── Host game management ──
@@ -643,7 +675,7 @@ function hostNextRound() {
   if (totalExpected < 2) { pushToast('Everyone else left — match over', 'warn'); hostShowFinal(); return; }
   amSpectating = false;
   const seed = randSeed(); battleSeed = seed;
-  broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled });
+  broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled, mods:battleMods });
   startGame(battleDiff, seed);
   startChaos();
 }
@@ -848,7 +880,7 @@ function showRoundResults(order) {
     const last = battleRound >= maxRounds;
     nextBtn.style.display  = last ? 'none' : 'block';
     finalBtn.style.display = last ? 'block' : 'none';
-    autoNextSec = last ? 5 : 6; countdownNum.innerText = autoNextSec; countdownDiv.style.display = 'block';
+    autoNextSec = last ? 5 : 6; countdownNum.innerText = autoNextSec; countdownDiv.style.display = 'flex';
     document.getElementById('rr-countdown-lbl').innerText = last ? 'Final standings in' : 'Next round in';
     autoNextTimer = setInterval(() => {
       autoNextSec--;
@@ -936,7 +968,7 @@ function showLobbyAsHost() {
   document.getElementById('guest-settings').style.display = 'none';
   document.getElementById('start-btn').style.display     = 'block';
   document.getElementById('wait-msg').style.display      = 'flex';
-  syncBoostToggle(); syncPartyToggle();
+  syncBoostToggle(); renderModRow();
   renderLobby();
 }
 

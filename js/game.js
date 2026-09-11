@@ -68,6 +68,7 @@ function startGame(diff, seed) {
   document.getElementById('win').classList.add('hidden');
   updateInGameLevelBadge();
   abilityInv = []; renderAbilityBar();
+  applyMods(inBattle ? battleMods : []);
   if (inBattle) {
     document.getElementById('grid').innerHTML = ''; clearSvg();
     showCountdown(3, () => { show('game'); calcSize(); generate(); startTimer(); });
@@ -171,7 +172,7 @@ function generate() {
   if (boostsActive()) placePickups(rng, path, new Set(nodeCells));
 
   isDrawing = false; amSpectating = false;
-  updateFillBar();
+  updateFillBar(); markNextNode();
   requestAnimationFrame(cachePos);
 }
 
@@ -208,10 +209,19 @@ function nbrs(i) {
 function unTroll(x, y) {
   const wrap = document.querySelector('.board-wrap');
   const tf = wrap && getComputedStyle(wrap).transform;
-  if (!tf || tf === 'none') return [x, y];
+  if (!tf || tf === 'none') return unMod(x, y);
   const r = wrap.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
   const p = new DOMMatrix(tf).inverse().transformPoint(new DOMPoint(x - cx, y - cy));
-  return [cx + p.x, cy + p.y];
+  return unMod(cx + p.x, cy + p.y);
+}
+// Modifiers turn the board itself (#grid) around its own centre — undo that too
+function unMod(x, y) {
+  const grid = document.getElementById('grid');
+  const tf = grid && getComputedStyle(grid).transform;
+  if (!tf || tf === 'none') return [x, y];
+  const gx = gLeft - GPAD + grid.offsetWidth / 2, gy = gTop - GPAD + grid.offsetHeight / 2;
+  const p = new DOMMatrix(tf).inverse().transformPoint(new DOMPoint(x - gx, y - gy));
+  return [gx + p.x, gy + p.y];
 }
 function cellAt(x, y) {
   [x, y] = unTroll(x, y);
@@ -341,7 +351,13 @@ function pop(batch) {
 }
 function undoStep() { if (!canPlay() || pathIndices.length === 0) return; pop(); sfx('back'); }
 
-function afterPathChange() { updateHead(); redrawPath(); updateFillBar(); queueProgress(); }
+function afterPathChange() { updateHead(); redrawPath(); updateFillBar(); queueProgress(); markNextNode(); }
+// Fog modifier: only the next number stays readable
+function markNextNode() {
+  document.querySelectorAll('#grid .cell.next-node').forEach(c => c.classList.remove('next-node'));
+  const nx = cells.find(c => parseInt(c.dataset.num) === curHigh + 1);
+  if (nx) nx.classList.add('next-node');
+}
 function checkWin() {
   if (pathIndices.length === solvableCount && cellNum(headIdx()) === totalNodes) { afterPathChange(); onWin(); return true; }
   return false;
