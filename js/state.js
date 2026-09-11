@@ -33,6 +33,7 @@ let abilityInv = [];           // up to 3 ability kinds
 let inputLockedUntil = 0;      // Frost (hit by rival)
 let shieldUntil = 0;
 let abilitiesEnabled = true;   // battle lobby toggle
+let partyMode = false;         // "Chaos": random trolls hit random players during the match
 
 // ── Battle / networking state ──
 let peer = null, codePeer = null;

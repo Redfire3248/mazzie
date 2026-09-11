@@ -178,12 +178,53 @@ const rules = {
       }
     },
 
+    // Friend requests: <to>/<from>. Only the sender creates one; either side can remove it.
+    friendReq: {
+      '$to': {
+        '.read': `(auth != null && ${acctOwnerOf('$to')} == auth.uid) || ${ADMIN}`,
+        '$from': {
+          '.read': `auth != null && ${acctOwnerOf('$from')} == auth.uid`,
+          '.write': `${ADMIN} || (auth != null && (
+              (newData.exists() && !data.exists() && $from != $to && ${acctOwnerOf('$from')} == auth.uid && !root.child('friends').child($to).child($from).exists())
+           || (!newData.exists() && (${acctOwnerOf('$to')} == auth.uid || ${acctOwnerOf('$from')} == auth.uid))))`,
+          '.validate': "newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('at').val() == now"
+        }
+      }
+    },
+    // Friends: <me>/<them>. Written in pairs when a request is accepted (the request must exist);
+    // either friend can remove the friendship.
+    friends: {
+      '$acc': {
+        '.read': `(auth != null && ${acctOwnerOf('$acc')} == auth.uid) || ${ADMIN}`,
+        '$other': {
+          '.write': `${ADMIN} || (auth != null && (
+              (${acctOwnerOf('$acc')} == auth.uid && (!newData.exists() || root.child('friendReq').child($acc).child($other).exists()))
+           || (${acctOwnerOf('$other')} == auth.uid && (!newData.exists() || root.child('friendReq').child($other).child($acc).exists()))))`,
+          '.validate': "newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('at').val() == now"
+        }
+      }
+    },
+    // Room invites: only a friend can invite you; you (or they) can clear it
+    invites: {
+      '$to': {
+        '.read': `(auth != null && ${acctOwnerOf('$to')} == auth.uid) || ${ADMIN}`,
+        '$from': {
+          '.write': `${ADMIN} || (auth != null && (
+              (newData.exists() && ${acctOwnerOf('$from')} == auth.uid && root.child('friends').child($to).child($from).exists())
+           || (!newData.exists() && (${acctOwnerOf('$to')} == auth.uid || ${acctOwnerOf('$from')} == auth.uid))))`,
+          '.validate': "newData.child('room').isString() && newData.child('room').val().matches(/^[A-Z]{4}$/) && newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('at').val() == now"
+        }
+      }
+    },
+
     // Presence heartbeat (admins see who is online)
     online: {
       '.read': ADMIN,
       '$acc': {
+        // Your friends can see when you're online (and which room you're in)
+        '.read': "auth != null && root.child('owners').child(auth.uid).isString() && root.child('friends').child($acc).child(root.child('owners').child(auth.uid).val()).exists()",
         '.write': `auth != null && ${acctOwnerOf('$acc')} == auth.uid`,
-        '.validate': "newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('at').val() == now"
+        '.validate': "newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('at').val() == now && (!newData.child('room').exists() || newData.child('room').isString())"
       }
     }
   }

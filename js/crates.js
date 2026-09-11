@@ -437,7 +437,7 @@ function openGift() {
   openCrates(g.crate, 1, { gift: g });
 }
 
-function openGiftForm(crateId) {
+function openGiftForm(crateId, toName) {
   const c = CRATES[crateId];
   const ov = document.getElementById('crate-open');
   ov.innerHTML = `
@@ -452,7 +452,8 @@ function openGiftForm(crateId) {
         <button class="btn primary" id="gift-send" onclick="sendGift('${crateId}')">${ic('gift')}Send gift</button></div>
     </div>`;
   hydrateIcons(ov);
-  setTimeout(() => document.getElementById('gift-to').focus(), 50);
+  if (toName) document.getElementById('gift-to').value = toName;
+  setTimeout(() => document.getElementById(toName ? 'gift-msg' : 'gift-to').focus(), 50);
 }
 async function sendGift(crateId, toNameArg, msgArg, free) {
   const c = CRATES[crateId];

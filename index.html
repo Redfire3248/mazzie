@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Righteous&family=Russo+One&family=Pacifico&family=Orbitron:wght@700;900&family=Bungee&family=Press+Start+2P&family=Cinzel+Decorative:wght@700;900&family=Permanent+Marker&family=Creepster&family=Monoton&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="css/style.css?v=20260912i">
+<link rel="stylesheet" href="css/style.css?v=20260912k">
 </head>
 <body>
 
@@ -22,6 +22,7 @@
 <div id="particles-layer" style="position:fixed;inset:0;pointer-events:none;z-index:50;"></div>
 <div id="reward-layer" aria-live="polite"></div>
 <div id="crate-open" class="crate-overlay hidden"></div>
+<div id="invite-pop" class="invite-pop" hidden></div>
 
 <!-- CONNECTING -->
 <div id="connecting">
@@ -130,6 +131,7 @@
   <div class="menu-top">
     <button class="icon-btn admin" id="menu-admin-btn" hidden onclick="adminOpen()" title="Admin terminal"><i data-ic="terminal"></i></button>
     <span class="flex"></span>
+    <button class="icon-btn friends-btn" onclick="openFriends()" title="Friends"><i data-ic="users"></i><b class="badge" id="friends-badge" hidden>0</b></button>
     <button class="coin-chip" onclick="openStore()" title="Coins — open the Store"><i data-ic="coin"></i><span class="coin-count">0</span><i data-ic="plus" class="cc-plus"></i></button>
     <button class="icon-btn" id="sound-btn" onclick="toggleSound()" title="Sound"><i data-ic="sound"></i></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings"><i data-ic="gear"></i></button>
@@ -178,6 +180,22 @@
   </div>
 </div>
 
+<!-- FRIENDS -->
+<div id="friends" class="screen hidden">
+  <div class="panel-card friends-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="closeFriends()" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Friends</div><span class="icon-btn ghost"></span>
+    </div>
+    <div class="search-row">
+      <label class="search-box"><i data-ic="user"></i><input class="txt" id="friend-add" maxlength="16" placeholder="Add by username…" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')sendFriendRequest()"></label>
+      <button class="search-chip on" onclick="sendFriendRequest()"><i data-ic="plus"></i>Add</button>
+    </div>
+    <div class="form-err" id="friend-add-err"></div>
+    <div id="friends-body"></div>
+  </div>
+</div>
+
 <!-- STORE -->
 <div id="store" class="screen hidden">
   <div class="panel-card store-card">
@@ -211,8 +229,7 @@
         <button class="btn sm secondary" id="set-google-btn" onclick="settingsGoogle()">Link</button></div>
       <div class="set-row" id="set-pin"><span class="set-ic"><i data-ic="key"></i></span><div class="set-txt"><b>PIN</b><span class="set-val">Used to sign in with your name</span></div>
         <button class="btn sm secondary" id="set-pin-btn" onclick="openPinModal(false)">Change</button></div>
-      <div class="set-row" id="set-recovery"><span class="set-ic"><i data-ic="shieldOk"></i></span><div class="set-txt"><b>Recovery code</b><span class="set-val">Resets your PIN without Google</span></div>
-        <button class="btn sm secondary" onclick="settingsNewCode()"><i data-ic="refresh"></i>New</button></div>
+      <div id="set-recovery" hidden></div>
     </div>
 
     <div class="set-group-lbl">Game</div>
@@ -310,6 +327,7 @@
       <div class="panel-title">Battle</div><span class="icon-btn ghost"></span>
     </div>
     <div class="panel-sub">Race friends or strangers on the same board</div>
+    <button class="big-opt cyan" onclick="openFriends()"><i data-ic="users"></i><span><b>Play with friends</b><small>Invite in one tap · join their rooms</small></span><i data-ic="chevR"></i></button>
     <button class="big-opt gold" onclick="startQuickMatch()"><i data-ic="target"></i><span><b>Quick Match</b><small>Random players near your level</small></span><i data-ic="chevR"></i></button>
     <button class="big-opt" onclick="openHostLobby()"><i data-ic="home"></i><span><b>Host a room</b><small>Get a code to share</small></span><i data-ic="chevR"></i></button>
     <button class="big-opt red" onclick="show('join-screen')"><i data-ic="login"></i><span><b>Join a room</b><small>Enter a friend's code</small></span><i data-ic="chevR"></i></button>
@@ -364,12 +382,17 @@
         <div class="rounds-label">Boosts &amp; abilities</div>
         <button class="toggle-btn on" id="boost-toggle" onclick="toggleBoosts()">ON</button>
       </div>
+      <div class="rounds-row">
+        <div class="rounds-label">Party mode <small class="rl-sub">random trolls hit random players</small></div>
+        <button class="toggle-btn" id="party-toggle" onclick="toggleParty()">OFF</button>
+      </div>
     </div>
     <div class="guest-settings" id="guest-settings" style="display:none;"></div>
     <div class="lbl">Players — <span id="p-count">1</span></div>
     <div class="players-box" id="players-box"></div>
     <div class="wait-msg" id="wait-msg">Waiting for players <span class="dots"><i></i><i></i><i></i></span></div>
     <div class="status-line" id="lob-status"></div>
+    <button class="b-btn secondary invite-friends-btn" onclick="openFriends()"><i data-ic="users"></i>Invite friends</button>
     <div class="b-actions">
       <button class="b-btn secondary" onclick="leaveLobby()"><i data-ic="logout"></i>Leave</button>
       <button class="b-btn primary" id="start-btn" style="display:none;" onclick="hostStart()" disabled><i data-ic="play"></i>Start</button>
@@ -558,22 +581,23 @@
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js?v=secure1"></script>
-<script src="js/icons.js?v=20260912i"></script>
-<script src="js/state.js?v=20260912i"></script>
-<script src="js/save.js?v=20260912i"></script>
-<script src="js/cosmetics.js?v=20260912i"></script>
-<script src="js/account.js?v=20260912i"></script>
-<script src="js/auth-ui.js?v=20260912i"></script>
-<script src="js/puzzle.js?v=20260912i"></script>
-<script src="js/game.js?v=20260912i"></script>
-<script src="js/abilities.js?v=20260912i"></script>
-<script src="js/store.js?v=20260912i"></script>
-<script src="js/crates.js?v=20260912i"></script>
-<script src="js/live.js?v=20260912i"></script>
-<script src="js/battle.js?v=20260912i"></script>
-<script src="js/matchmaking.js?v=20260912i"></script>
-<script src="js/ui.js?v=20260912i"></script>
-<script src="js/terminal.js?v=20260912i"></script>
+<script src="js/icons.js?v=20260912k"></script>
+<script src="js/state.js?v=20260912k"></script>
+<script src="js/save.js?v=20260912k"></script>
+<script src="js/cosmetics.js?v=20260912k"></script>
+<script src="js/account.js?v=20260912k"></script>
+<script src="js/auth-ui.js?v=20260912k"></script>
+<script src="js/puzzle.js?v=20260912k"></script>
+<script src="js/game.js?v=20260912k"></script>
+<script src="js/abilities.js?v=20260912k"></script>
+<script src="js/store.js?v=20260912k"></script>
+<script src="js/crates.js?v=20260912k"></script>
+<script src="js/friends.js?v=20260912k"></script>
+<script src="js/live.js?v=20260912k"></script>
+<script src="js/battle.js?v=20260912k"></script>
+<script src="js/matchmaking.js?v=20260912k"></script>
+<script src="js/ui.js?v=20260912k"></script>
+<script src="js/terminal.js?v=20260912k"></script>
 
 </body>
 </html>

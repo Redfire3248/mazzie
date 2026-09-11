@@ -7,7 +7,7 @@
 // /broadcast and /troll — the database rules enforce it.
 // ══════════════════════════════════════════════════
 
-let _bcES = null, _trES = null, _gfES = null, _hbT = null, _liveOn = false;
+let _bcES = null, _trES = null, _hbT = null, _liveOn = false;
 const TROLLS = {
   flip:      { desc: 'Turns their board upside down (10s)' },
   spin:      { desc: 'Spins their board (6s)' },
@@ -37,13 +37,15 @@ function startLive() {
   if (_liveOn || authMode() !== 'secure' || !currentAccount || currentAccount.offline || typeof EventSource === 'undefined') return;
   _liveOn = true;
   listenBroadcast(); listenTroll(); listenGifts(); heartbeat();
+  if (typeof listenFriends === 'function') listenFriends();
   clearInterval(_hbT); _hbT = setInterval(heartbeat, 45000);
   document.addEventListener('visibilitychange', onVis);
 }
 function stopLive() {
   _liveOn = false;
-  if (_bcES) _bcES.close(); if (_trES) _trES.close(); if (_gfES) _gfES.close(); _bcES = _trES = _gfES = null;
+  if (_bcES) _bcES.close(); if (_trES) _trES.close(); _bcES = _trES = null; clearInterval(_giftT);
   if (typeof onGiftsChanged === 'function') _gifts = {};
+  if (typeof stopFriends === 'function') stopFriends();
   clearInterval(_hbT);
   document.removeEventListener('visibilitychange', onVis);
 }
@@ -91,18 +93,20 @@ async function listenTroll() {
     applyTroll(t);
   }, () => { if (_liveOn) listenTroll(); });              // token expired → reconnect with a fresh one
 }
-// Gift crates from friends: /gifts/<me>/<giftId>
-async function listenGifts() {
-  if (_gfES) _gfES.close();
-  if (!currentAccount || !currentAccount.id || typeof onGiftsChanged !== 'function') return;
-  _gfES = streamNode(await streamUrl('/gifts/' + currentAccount.id), g => onGiftsChanged(g),
-    () => { if (_liveOn) listenGifts(); });
+// Gift crates: checked every 30 s and whenever the Store opens (not streamed — browsers only
+// allow ~6 open connections per server, and the live streams above already use 4)
+let _giftT = null;
+async function pollGifts() {
+  if (!_liveOn || !currentAccount || !currentAccount.id || typeof onGiftsChanged !== 'function') return;
+  try { onGiftsChanged(await dbGet('/gifts/' + currentAccount.id)); } catch (e) {}
 }
+function listenGifts() { clearInterval(_giftT); pollGifts(); _giftT = setInterval(pollGifts, 30000); }
 async function heartbeat() {
   if (!_liveOn || document.visibilityState === 'hidden' || !currentAccount) return;
   dbPut('/online/' + currentAccount.id, {
     name: myName, lvl: myXpLevel(), at: SERVER_TIME,
-    where: battleActive ? 'battle' : (document.body.dataset.screen || 'menu')
+    where: battleActive ? 'battle' : (document.body.dataset.screen || 'menu'),
+    room: inBattleSession() && !battleActive && !isQuickMatch ? roomCode : ''
   }).catch(() => {});
 }
 
@@ -122,16 +126,16 @@ function applyTroll(t) {
   const board = document.querySelector('.board-wrap'), root = document.documentElement, grid = document.getElementById('grid');
   const by = cleanName(t.by || 'Admin');
   switch (t.kind) {
-    case 'flip':   tempClass(board, 'troll-flip', 10000); sfx('hit'); break;
-    case 'spin':   tempClass(board, 'troll-spin', 6000); break;
-    case 'mirror': tempClass(board, 'troll-mirror', 10000); break;
-    case 'shake':  tempClass(document.body, 'troll-shake', 4000); buzz([80, 40, 80, 40, 120]); break;
-    case 'tiny':   tempClass(board, 'troll-tiny', 8000); break;
-    case 'invert': tempClass(root, 'troll-invert', 8000); break;
-    case 'party':  tempClass(root, 'troll-party', 6000); for (let i = 0; i < 6; i++) setTimeout(spawnParticles, i * 500); sfx('win'); break;
+    case 'flip':   tempClass(board, 'troll-flip', t.ms || 10000); sfx('hit'); break;
+    case 'spin':   tempClass(board, 'troll-spin', t.ms || 6000); break;
+    case 'mirror': tempClass(board, 'troll-mirror', t.ms || 10000); break;
+    case 'shake':  tempClass(document.body, 'troll-shake', Math.min(t.ms || 4000, 4000)); buzz([80, 40, 80, 40, 120]); break;
+    case 'tiny':   tempClass(board, 'troll-tiny', t.ms || 8000); break;
+    case 'invert': tempClass(root, 'troll-invert', t.ms || 8000); break;
+    case 'party':  tempClass(root, 'troll-party', t.ms || 6000); for (let i = 0; i < 6; i++) setTimeout(spawnParticles, i * 500); sfx('win'); break;
     case 'honk':   sfx('honk'); setTimeout(() => sfx('honk'), 700); break;
-    case 'frost':  if (inGame() && !amSpectating) { inputLockedUntil = performance.now() + 4000; isDrawing = false; grid.classList.add('frosted'); sfx('hit'); } break;
-    case 'fog':    grid.classList.add('fogged'); clearTimeout(window._fogT); window._fogT = setTimeout(() => grid.classList.remove('fogged'), 6000); break;
+    case 'frost':  if (inGame() && !amSpectating) { const ms = t.ms ? 2000 : 4000; inputLockedUntil = performance.now() + ms; isDrawing = false; grid.classList.add('frosted'); setTimeout(() => grid.classList.remove('frosted'), ms); sfx('hit'); } break;
+    case 'fog':    grid.classList.add('fogged'); clearTimeout(window._fogT); window._fogT = setTimeout(() => grid.classList.remove('fogged'), t.ms || 6000); break;
     case 'fakeban': fakeBan(by); break;
     case 'fakecoins':
       sfx('reward'); spawnParticles();
@@ -153,6 +157,11 @@ function applyTroll(t) {
       pushToast(by + ' moved you to level ' + n, 'info', 'arrowR');
       break;
     }
+    case 'reset':
+      resetLocalProgress(parseInt(t.value) || Date.now());
+      if (inGame() && !battleActive) goMenu();
+      showAvatarMessage('Account reset by ' + by, 'Your progress was reset to a fresh start', by, t.av, 6000);
+      break;
     case 'cosmetic': refreshFromCloud().then(() => {
       const [set, id] = String(t.text || '').split(':');
       const item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], id);

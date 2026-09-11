@@ -132,7 +132,7 @@ function audioBus() {
     tone.connect(comp); comp.connect(A.destination);
     _bus = A.createGain(); _bus.gain.value = 0.9;
     _dry = A.createGain(); _dry.gain.value = 1;
-    _wet = A.createGain(); _wet.gain.value = 0.28;
+    _wet = A.createGain(); _wet.gain.value = 0.16;
     // Small, warm room: 1.4 s of decaying stereo noise
     const len = Math.floor(A.sampleRate * 1.4), ir = A.createBuffer(2, len, A.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
@@ -153,16 +153,21 @@ function _out(pan) {
   const p = _actx.createStereoPanner(); p.pan.value = pan; p.connect(bus); return p;
 }
 // One voice. fm = { ratio, index } turns a sine into a bell / glass tone.
-function tone({ f, to, d = 0.2, v = 0.06, type = 'sine', at = 0, attack = 0.005, pan = 0, fm = null }) {
+function tone({ f, to, glide, d = 0.2, v = 0.06, type = 'sine', at = 0, attack = 0.005, pan = 0, fm = null, lp = 0, lpTo = 0 }) {
   const A = _actx || (audioBus(), _actx), t = A.currentTime + 0.005 + at;
   const o = A.createOscillator(), g = A.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + Math.min(d * 0.6, 0.18));
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + (glide || Math.min(d * 0.6, 0.18)));
   g.gain.setValueAtTime(0.0001, t);
   g.gain.linearRampToValueAtTime(v, t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-  o.connect(g); g.connect(_out(pan));
+  if (lp) {
+    const fl = A.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = 0.8;
+    fl.frequency.setValueAtTime(lp, t); if (lpTo) fl.frequency.exponentialRampToValueAtTime(lpTo, t + d);
+    o.connect(fl); fl.connect(g);
+  } else o.connect(g);
+  g.connect(_out(pan));
   if (fm) {
     const m = A.createOscillator(), mg = A.createGain();
     m.frequency.value = f * fm.ratio;
@@ -182,6 +187,16 @@ function tap({ f = 2000, q = 1.5, d = 0.025, v = 0.03, at = 0, pan = 0 }) {
   src.connect(bp); bp.connect(g); g.connect(_out(pan));
   src.start(t, Math.random() * 0.3); src.stop(t + d + 0.02);
 }
+function whoosh({ from = 400, to = 3000, d = 0.3, v = 0.05, at = 0 }) {
+  const A = _actx || (audioBus(), _actx), t = A.currentTime + 0.005 + at;
+  const src = A.createBufferSource(); src.buffer = _noise; src.loop = true;
+  const bp = A.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(from, t); bp.frequency.exponentialRampToValueAtTime(to, t + d);
+  const g = A.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + d * 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  src.connect(bp); bp.connect(g); g.connect(_out(0));
+  src.start(t); src.stop(t + d + 0.05);
+}
 // Instruments
 function marimba(f, v = 0.07, at = 0, pan = 0) {
   tone({ f, d: 0.5, v, at, pan, attack: 0.003 });                       // round body
@@ -197,30 +212,40 @@ function ding(f, v = 0.045, at = 0) { tone({ f, d: 0.6, v, at, attack: 0.002, fm
 // Major pentatonic from G4 — every step sounds "right", in any order
 const PENTA = [0, 2, 4, 7, 9];
 function scaleFreq(n) { const o = Math.floor(n / 5), s = PENTA[((n % 5) + 5) % 5]; return 392 * Math.pow(2, (12 * o + s) / 12); }
-// Path step / reel tick: marimba note with a touch of human variation
+// Path step: a round bubbly "pop" that climbs the scale as your path grows
 let _panFlip = 1;
-function pluck(f, v = 0.065) { _panFlip = -_panFlip; marimba(f * (1 + (Math.random() - 0.5) * 0.004), v * (0.88 + Math.random() * 0.24), 0, 0.12 * _panFlip); }
-// Crate reel: crisp wooden click that climbs a little as the reel slows
-function reelTick(step) { tap({ f: 1500 + Math.min(step, 12) * 70, q: 5, d: 0.02, v: 0.06 }); tone({ f: 1200 + Math.min(step, 12) * 60, d: 0.035, v: 0.01 }); }
+function pluck(f, v = 0.07) {
+  _panFlip = -_panFlip;
+  const p = 0.1 * _panFlip, vv = v * (0.9 + Math.random() * 0.2);
+  tone({ f: f * 0.55, to: f, glide: 0.035, d: 0.16, v: vv, pan: p, attack: 0.002 });   // pop
+  tone({ f: f * 2, d: 0.05, v: vv * 0.12, pan: p });                                    // sparkle on top
+}
 const N = n => 440 * Math.pow(2, (n - 69) / 12);        // MIDI note → Hz
+// Crate reel: crisp click that climbs a little as the reel slows
+function reelTick(step) { tap({ f: 1500 + Math.min(step, 12) * 70, q: 5, d: 0.02, v: 0.06 }); }
+const wood = (f, v = 0.05, at = 0) => { tap({ f: f * 2.4, q: 6, d: 0.03, v: v * 0.9, at }); tone({ f, d: 0.06, v: v * 0.5, at, attack: 0.001 }); };
+const brass = (n, at, d, v) => tone({ f: N(n), d, v, at, type: 'sawtooth', attack: 0.03, lp: 2400, lpTo: 700 });
+// Each sound has its own instrument so nothing blends together:
+//   steps = bubble pop · numbers = bell · buttons = wood · coins = ding · wins = brass fanfare
+//   boosts = whoosh · errors = low buzz · messages = soft pad
 const SFX = {
-  node:   () => { bell(N(79), 0.05); bell(N(86), 0.022, 0.03, 1.0); },            // G5 + D6 "ting"
-  tap:    () => marimba(N(81), 0.035),
-  back:   () => { marimba(N(72), 0.03); marimba(N(67), 0.025, 0.06); },
-  pickup: () => [72, 76, 79, 84].forEach((n, i) => marimba(N(n), 0.045, i * 0.055)),
-  coin:   () => { ding(N(83), 0.04); ding(N(88), 0.045, 0.075); },                 // B5 → E6
-  buy:    () => { SFX.coin(); [72, 76, 79].forEach((n, i) => marimba(N(n), 0.035, 0.2 + i * 0.06)); },
-  reward: () => [72, 76, 79, 84, 88].forEach((n, i) => bell(N(n), 0.04, i * 0.075, 1.4)),
-  ability:() => { tone({ f: N(67), to: N(79), d: 0.35, v: 0.04, fm: { ratio: 2, index: 0.6 } }); bell(N(91), 0.02, 0.12, 0.8); },
-  hit:    () => { tone({ f: 150, to: 60, d: 0.35, v: 0.12 }); tap({ f: 400, q: 0.7, d: 0.12, v: 0.08 }); },
-  win:    () => { [67, 69, 72, 74, 76, 79].forEach((n, i) => marimba(N(n), 0.05, i * 0.06)); [72, 76, 79, 84].forEach(n => bell(N(n), 0.03, 0.4, 1.8)); },
-  level:  () => { [60, 67, 72, 76, 79].forEach((n, i) => bell(N(n), 0.04, i * 0.1, 1.8)); bell(N(91), 0.02, 0.55, 2.2); },
-  tick:   () => marimba(N(76), 0.05),
-  go:     () => { bell(N(84), 0.05, 0, 1.2); bell(N(88), 0.035, 0.02, 1.2); marimba(N(72), 0.05); },
-  err:    () => { tone({ f: N(55), to: N(50), d: 0.22, v: 0.07 }); tap({ f: 600, q: 1, d: 0.04, v: 0.03 }); },
-  honk:   () => { tone({ f: 330, d: 0.25, v: 0.08, type: 'sawtooth' }); tone({ f: 277, d: 0.35, v: 0.08, type: 'sawtooth', at: 0.28 }); },
-  world:  () => [67, 72, 76].forEach((n, i) => bell(N(n), 0.04, i * 0.13, 1.6)),
-  clack:  () => marimba(N(72), 0.04)
+  node:   () => { bell(N(84), 0.05, 0, 1.1); bell(N(91), 0.02, 0.04, 0.8); },                 // bright "ting!"
+  tap:    () => wood(900, 0.045),                                                                 // light wooden click
+  back:   () => tone({ f: N(72), to: N(62), glide: 0.09, d: 0.13, v: 0.05 }),                  // soft "bloop" down
+  pickup: () => [79, 84, 88, 91].forEach((n, i) => ding(N(n), 0.03, i * 0.045)),               // sparkle up
+  coin:   () => { ding(N(83), 0.04); ding(N(88), 0.05, 0.07); },                                // "bling"
+  buy:    () => { tap({ f: 3200, q: 2, d: 0.05, v: 0.05 }); ding(N(88), 0.045, 0.05); ding(N(95), 0.03, 0.12); }, // "ka-ching"
+  reward: () => [72, 76, 79, 84, 88, 91].forEach((n, i) => ding(N(n), 0.035, i * 0.055)),      // glittery run
+  ability:() => { whoosh({ from: 300, to: 4000, d: 0.32, v: 0.07 }); ding(N(91), 0.025, 0.22); }, // whoosh + sparkle
+  hit:    () => { tone({ f: 140, to: 50, glide: 0.2, d: 0.35, v: 0.13 }); whoosh({ from: 1800, to: 200, d: 0.25, v: 0.05 }); }, // thud
+  win:    () => { brass(67, 0, 0.18, 0.04); brass(72, 0.13, 0.18, 0.04); [72, 76, 79].forEach(n => brass(n, 0.28, 0.7, 0.028)); bell(N(84), 0.03, 0.28, 1.6); }, // ta-da!
+  level:  () => { whoosh({ from: 200, to: 5000, d: 0.5, v: 0.05 }); [60, 67, 72, 76, 79, 84].forEach((n, i) => bell(N(n), 0.035, 0.15 + i * 0.07, 1.8)); }, // rising sparkle
+  tick:   () => wood(1100, 0.06),                                                                 // countdown block
+  go:     () => { tone({ f: N(79), to: N(91), glide: 0.12, d: 0.35, v: 0.06, type: 'triangle' }); bell(N(91), 0.03, 0.08, 1); }, // up-whistle
+  err:    () => { tone({ f: 150, d: 0.09, v: 0.06, type: 'square', lp: 900 }); tone({ f: 120, d: 0.14, v: 0.06, type: 'square', lp: 700, at: 0.11 }); }, // "nuh-uh"
+  honk:   () => { tone({ f: 330, d: 0.25, v: 0.08, type: 'sawtooth', lp: 1500 }); tone({ f: 277, d: 0.35, v: 0.08, type: 'sawtooth', lp: 1500, at: 0.28 }); },
+  world:  () => [67, 71, 74].forEach((n, i) => tone({ f: N(n), d: 0.9, v: 0.035, type: 'triangle', attack: 0.06, at: i * 0.12 })), // soft pad chime
+  clack:  () => wood(700, 0.05)
 };
 function soundOn() { return getSetting('sound', true); }
 function sfx(name) {

@@ -36,7 +36,7 @@ const coinHtml = n => `<span class="coin-inline">${ic('coin')}${typeof n === 'st
 // STORE SCREEN
 // ══════════════════════════════════════════════════
 let _storeQuery = '';
-function openStore() { _storeQuery = ''; document.getElementById('store-search').value = ''; show('store'); renderStore(); }
+function openStore() { if (typeof pollGifts === 'function') pollGifts(); _storeQuery = ''; document.getElementById('store-search').value = ''; show('store'); renderStore(); }
 function storeSearch(v) { _storeQuery = String(v || '').trim().toLowerCase(); renderStore(); }
 
 function renderStore() {

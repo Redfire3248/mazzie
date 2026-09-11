@@ -80,7 +80,43 @@ matter, because the slicer fixes them.
 for (const [name, p] of Object.entries(packs)) {
   const [cols, rows] = p.grid.split('x').map(Number);
   const list = p.items.map((it, i) => `${String(i + 1).padStart(2)}. ${it.name} — ${it.look}`).join('\n');
-  if (p.type === 'icons') {
+  if (p.type === 'emotes') {
+    md += `
+## Emotes · ${name} pack (battle reactions)
+
+\`\`\`
+Create a sprite sheet of ${cols * rows} chat emotes for a game: the SAME little mascot in ${cols * rows} different reactions.
+
+${layout(cols, rows)}
+
+${background(p.key)}
+
+THE MASCOT (identical in every emote — same body, same size, same proportions):
+- "Mazzie": a small, round, soft blob creature, slightly wider than tall, with two stubby arms,
+  a short antenna on top ending in a glowing-blue ball, and huge expressive white eyes.
+- Show the whole mascot (head, body and arms) facing the viewer, so gestures read clearly.
+
+STYLE:
+- Cute, chunky flat vector sticker, like chat emotes. Big expressive faces and gestures.
+- Use ONLY these 4 colours, in every emote:
+    black #0B0B14      the mascot's body
+    white #F6F6FB      eyes, teeth, highlights, props outlines
+    grey  #6B6B80      shading and secondary shapes
+    neon blue #33CCFF  the antenna ball plus the emote's key accent (tears, hearts, flames, crown, confetti…)
+- Simple cel shading, same light direction everywhere. Must read clearly at 40 px: no thin lines, no tiny details.
+- Hard clean edges: no gradients, no glow, no 3D, no drop shadows, no texture, no other colours.
+
+TEXT: none anywhere, EXCEPT the letters "GG" on the sign in emote 23, the "Z" in emote 9 and the "?" in emote 24.
+
+EMOTES, in order:
+${list}
+\`\`\`
+
+Slice with: \`node slice-sheet.js sheets/${name}.png --pack ${name}\`
+
+---
+`;
+  } else if (p.type === 'icons') {
     md += `
 ## Icons · ${name} pack
 

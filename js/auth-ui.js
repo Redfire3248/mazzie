@@ -262,13 +262,13 @@ function renderSettings() {
     const linked = accountHasGoogle();
     const g = _authUser && _authUser.providerData.find(p => p.providerId === 'google.com');
     gRow.querySelector('.set-val').innerText = linked ? (g && g.email) || 'Linked' : 'Not linked';
-    $('set-google-btn').hidden = false;
-    $('set-google-btn').innerHTML = linked ? ic('unlink') + 'Unlink' : ic('link') + 'Link';
-    $('set-google-btn').classList.toggle('danger', linked);
+    // Once linked it stays linked (no Unlink button)
+    $('set-google-btn').hidden = linked;
+    $('set-google-btn').innerHTML = ic('link') + 'Link';
   }
   // PIN + recovery rows (secure only)
   $('set-pin').hidden = !secure;
-  $('set-recovery').hidden = !secure;
+  $('set-recovery').hidden = true;          // the recovery-code row was removed from Settings
   if (secure) $('set-pin-btn').innerHTML = ic('key') + (accountHasPin() ? 'Change' : 'Set PIN');
   // Toggles
   setToggle('set-sound', getSetting('sound', true));
@@ -285,7 +285,8 @@ function settingToggle(key, def) {
 async function settingsGoogle() {
   const btn = $('set-google-btn');
   setBusy(btn, true);
-  const r = accountHasGoogle() ? await unlinkGoogle() : await linkGoogle();
+  if (accountHasGoogle()) { setBusy(btn, false); return; }
+  const r = await linkGoogle();
   setBusy(btn, false);
   if (r && r.error) { pushToast(r.error, 'warn'); return; }
   if (r && r.ok) pushToast(r.email ? 'Google linked: ' + r.email : 'Google unlinked', 'acc');

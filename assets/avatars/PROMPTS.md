@@ -500,6 +500,75 @@ Slice with: `node slice-sheet.js sheets/royal.png --pack royal`
 
 ---
 
+## Emotes · emotes pack (battle reactions)
+
+```
+Create a sprite sheet of 24 chat emotes for a game: the SAME little mascot in 24 different reactions.
+
+LAYOUT (most important — follow exactly):
+- One single image, 1536 × 1024 pixels, landscape 3:2.
+- An invisible grid of exactly 6 columns × 4 rows = 24 equal square cells, each 256 × 256 px.
+- Do NOT draw the grid: no lines, borders, boxes, tiles, cards or panels behind the items.
+- Exactly ONE item per cell, centred horizontally and vertically in its cell.
+- Every item fills about 65% of its cell and never touches or crosses the cell edge.
+  Keep an empty gap of at least 40 px between neighbouring items.
+- All 24 items are the same size and sit on the same baseline.
+- Fill the cells left→right, top→bottom in exactly the order listed below. Do not skip, repeat or add items.
+
+BACKGROUND (critical):
+- Transparent background: export as a PNG with a real alpha channel. Nothing behind the items.
+- If you cannot make it transparent, use ONE perfectly flat solid pure magenta #FF00FF instead,
+  and never use magenta, hot pink or purple-pink inside the items.
+- No gradient, texture, vignette, floor, shadow, reflection, glow or haze around the items.
+
+THE MASCOT (identical in every emote — same body, same size, same proportions):
+- "Mazzie": a small, round, soft blob creature, slightly wider than tall, with two stubby arms,
+  a short antenna on top ending in a glowing-blue ball, and huge expressive white eyes.
+- Show the whole mascot (head, body and arms) facing the viewer, so gestures read clearly.
+
+STYLE:
+- Cute, chunky flat vector sticker, like chat emotes. Big expressive faces and gestures.
+- Use ONLY these 4 colours, in every emote:
+    black #0B0B14      the mascot's body
+    white #F6F6FB      eyes, teeth, highlights, props outlines
+    grey  #6B6B80      shading and secondary shapes
+    neon blue #33CCFF  the antenna ball plus the emote's key accent (tears, hearts, flames, crown, confetti…)
+- Simple cel shading, same light direction everywhere. Must read clearly at 40 px: no thin lines, no tiny details.
+- Hard clean edges: no gradients, no glow, no 3D, no drop shadows, no texture, no other colours.
+
+TEXT: none anywhere, EXCEPT the letters "GG" on the sign in emote 23, the "Z" in emote 9 and the "?" in emote 24.
+
+EMOTES, in order:
+ 1. Hi — waving one hand hello with a big happy smile
+ 2. LOL — laughing hard with eyes squeezed shut and two big tears of joy
+ 3. Cry — crying, two waterfall streams of neon blue tears, wobbly mouth
+ 4. Angry — furious frown with two puffs of steam from the head
+ 5. Shock — jaw dropped, huge round white eyes, tiny pupils
+ 6. Cool — smug grin wearing black sunglasses with a neon blue shine
+ 7. Love — dreamy smile with two neon blue heart-shaped eyes
+ 8. Think — one hand on chin, eyes looking up, one eyebrow raised
+ 9. Sleepy — eyes closed, drool bubble, a big "Z" floating above
+10. Thumbs Up — confident wink giving a big thumbs up
+11. Clap — clapping both hands with small motion lines, excited open smile
+12. Facepalm — one hand covering its face, embarrassed
+13. Party — wearing a party hat, blowing a party horn, confetti around
+14. King — smug half-closed eyes, wearing a small neon blue crown
+15. On Fire — determined grin with neon blue flames around the head
+16. Dead — X-shaped eyes and tongue out, a tiny ghost floating up
+17. Nervous — awkward grin with a big sweat drop on the forehead
+18. Silly — winking with its tongue sticking out
+19. Rage — shaking a fist, angry vein mark, teeth clenched
+20. Please — hands pressed together begging, sparkly puppy eyes
+21. Heart — hugging a big neon blue heart, blushing
+22. Winner — holding a trophy above its head, cheering
+23. GG — holding a sign that says "GG" in big bold letters
+24. What — confused, head tilted, a big "?" floating above
+```
+
+Slice with: `node slice-sheet.js sheets/emotes.png --pack emotes`
+
+---
+
 ## Make your own pack
 
 Add a block to `tools/avatar-packs.json` (copy an existing one): a unique `prefix`, the key colour, and

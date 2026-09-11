@@ -18,7 +18,7 @@
 //
 // Options
 //   --pack <name>      use names / levels / grid / prefix from tools/avatar-packs.json
-//   --type icons|frames   --grid 6x4   --names "A,B"   --lvl 3-60   --prefix cr-
+//   --type icons|frames|emotes   --grid 6x4   --names "A,B"   --lvl 3-60   --prefix cr-
 //   --bg #FF00FF       force the key colour (default: detected from the border)
 //   --tol 40,110       keying softness: below 40 = background, above 110 = solid
 //   --size 256         output size in px
@@ -171,7 +171,7 @@ async function main() {
       if (!set.has(labels[p])) continue;
       px.copy(crop, (y * bw + x) * 4, p * 4, p * 4 + 4);
     }
-    if (ids.length > 1 && TYPE === 'icons') log(`  ${name}: joined ${ids.length} pieces`);
+    if (ids.length > 1 && TYPE !== 'frames') log(`  ${name}: joined ${ids.length} pieces`);
     if ((x0 < (c % COLS) * cellW - cellW * 0.15) || (x1 > (c % COLS + 1) * cellW + cellW * 0.15))
       warn(`${name} spills far outside its cell — check the preview`);
 
@@ -208,8 +208,8 @@ async function main() {
   if (!args.dry && !args['no-manifest']) {
     const mf = path.join(OUT, 'manifest.json');
     const m = fs.existsSync(mf) ? JSON.parse(fs.readFileSync(mf, 'utf8')) : {};
-    const key = TYPE === 'frames' ? 'frames' : 'icons';
-    m.icons = m.icons || []; m.frames = m.frames || [];
+    const key = TYPE === 'frames' ? 'frames' : TYPE === 'emotes' ? 'emotes' : 'icons';
+    m.icons = m.icons || []; m.frames = m.frames || []; m.emotes = m.emotes || [];
     let added = 0;
     made.forEach(e => { if (!m[key].some(x => x.id === e.id)) { m[key].push(e); added++; } });
     fs.writeFileSync(mf, JSON.stringify(m, null, 2) + '\n');

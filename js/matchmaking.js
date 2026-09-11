@@ -168,7 +168,7 @@ function mmStartMatch() {
   if (Object.keys(lobbyPlayers).length < 2) { my.startAt = 0; return; }
   my.phase = 'playing';
   mmStop(true);
-  battleDiffSetting = 'mm'; maxRounds = 3; abilitiesEnabled = true;
+  battleDiffSetting = 'mm'; maxRounds = 3; abilitiesEnabled = true; partyMode = false;
   hostStart();
 }
 

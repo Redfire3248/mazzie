@@ -21,6 +21,7 @@ function show(id) {
   // Any real screen means loading is over (safety net for every sign-in path)
   document.getElementById('connecting').classList.add('hidden');
   if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); }
+  if ((id === 'lobby' || id === 'menu') && typeof heartbeat === 'function') heartbeat();   // friends see your room right away
   if (el && typeof fitText === 'function') { requestAnimationFrame(() => fitText(el)); setTimeout(() => fitText(el), 350); }   // shrink long titles to fit
 }
 function isScreen(id) { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }

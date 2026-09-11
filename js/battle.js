@@ -185,6 +185,7 @@ function _destroyBattleSession() {
   guestConns = []; hostConn = null; connMap.clear();
   if (codePeer) { const cp = codePeer; setTimeout(() => { try { cp.destroy(); } catch (e) {} }, 200); codePeer = null; }
   if (typeof mmStop === 'function') mmStop();
+  clearTimeout(_chaosT);
   resetBattleState();
 }
 function inBattleSession() { return isHost || !!hostConn; }
@@ -221,7 +222,43 @@ function syncBoostToggle() {
 }
 function broadcastLobbySettings() {
   if (!isHost) return;
-  broadcastAll({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled });
+  broadcastAll({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, party:partyMode });
+}
+function toggleParty() { partyMode = !partyMode; syncPartyToggle(); broadcastLobbySettings(); sfx(partyMode ? 'reward' : 'tap'); }
+function syncPartyToggle() {
+  const b = document.getElementById('party-toggle');
+  if (b) { b.classList.toggle('on', partyMode); b.innerText = partyMode ? 'ON' : 'OFF'; }
+}
+
+// ══════════════════════════════════════════════════
+// PARTY MODE ("Chaos") — the host throws a random troll at a random racer every 10–16 s
+// ══════════════════════════════════════════════════
+const PARTY_TROLLS = { flip: 'flipped upside down', spin: 'sent spinning', mirror: 'mirrored', shake: 'an earthquake',
+  tiny: 'shrunk', invert: 'colour-flipped', fog: 'fogged', frost: 'frozen', party: 'a disco', honk: 'honked' };
+let _chaosT = null;
+function startChaos() {
+  clearTimeout(_chaosT);
+  if (!isHost || !partyMode) return;
+  _chaosT = setTimeout(chaosTick, 7000 + Math.random() * 5000);
+}
+function chaosTick() {
+  if (!isHost || !partyMode || !battleActive || roundEnded) return;
+  const done = new Set(finishOrder.map(f => f.id));
+  const alive = Object.keys(lobbyPlayers).filter(pid => !quitPlayers.has(pid) && !done.has(pid));
+  if (alive.length) {
+    const id = alive[Math.floor(Math.random() * alive.length)];
+    const kinds = Object.keys(PARTY_TROLLS), kind = kinds[Math.floor(Math.random() * kinds.length)];
+    const msg = { type:'party_troll', id, kind, name: (lobbyPlayers[id] || {}).name || 'Someone' };
+    broadcastAll(msg); onPartyTroll(msg);
+  }
+  _chaosT = setTimeout(chaosTick, 10000 + Math.random() * 6000);
+}
+function onPartyTroll(d) {
+  if (!PARTY_TROLLS[d.kind]) return;
+  const name = cleanName(d.name), me = d.id === myId;
+  if (me && battleActive && !amSpectating) applyTroll({ kind: d.kind, by: 'Chaos', ms: 5000 });
+  pushToast((me ? 'You got ' : name + ' got ') + PARTY_TROLLS[d.kind] + '!', me ? 'warn' : 'info', 'sparkle');
+  addChatMsg('Chaos: ' + name + ' got ' + PARTY_TROLLS[d.kind], null, true);
 }
 function pickRoundDiff() {
   if (battleDiffSetting === 'mm') return mmRoundDiff();
@@ -251,6 +288,7 @@ function hostStart() {
   broadcastAll({ type:'start_round', round:1, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled });
   initialSeed = seed;
   startGame(battleDiff, seed);
+  startChaos();
 }
 
 // ── Render lobby ──
@@ -332,7 +370,7 @@ function handleGuestMsg(conn, d) {
       avatar: sanitizeAvatar(d.avatar)
     };
     broadcastAll({ type:'lobby_update', players:sanitizePlayers(lobbyPlayers) });
-    conn.send({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled });
+    conn.send({ type:'lobby_settings', diff:battleDiffSetting, rounds:maxRounds, abilities:abilitiesEnabled, party:partyMode });
     renderLobby();
     sfx('node');
     adminLog('ok', name + ' joined');
@@ -426,6 +464,7 @@ function handleHostMsg(d) {
       battleDiffSetting = DIFFS.includes(d.diff) || d.diff === 'random' || d.diff === 'mm' ? d.diff : 'easy';
       maxRounds = Math.max(1, Math.min(10, parseInt(d.rounds) || 3));
       abilitiesEnabled = d.abilities !== false;
+      partyMode = !!d.party;
       renderGuestSettings();
       break;
     case 'play_again':
@@ -531,6 +570,9 @@ function handleHostMsg(d) {
     case 'ability_hit':
       receiveAttack({ ...d, fromName:cleanName(d.fromName) });
       break;
+    case 'party_troll':
+      onPartyTroll(d);
+      break;
     case 'chat':
       receiveChatMsg({ id:d.id, name:cleanName(d.name), msg:String(d.msg || '').slice(0, 80) });
       break;
@@ -540,7 +582,7 @@ function handleHostMsg(d) {
 function renderGuestSettings() {
   const el = document.getElementById('guest-settings'); if (!el) return;
   const diff = battleDiffSetting === 'random' ? 'Random' : battleDiffSetting === 'mm' ? 'Level-based' : battleDiffSetting.toUpperCase();
-  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>`;
+  el.innerHTML = `<span>${diff}</span><span>${maxRounds} round${maxRounds !== 1 ? 's' : ''}</span><span>Boosts ${abilitiesEnabled ? 'ON' : 'OFF'}</span>${partyMode ? '<span class="chaos-chip">Chaos ON</span>' : ''}`;
 }
 
 // ── Host game management ──
@@ -596,6 +638,7 @@ function hostNextRound() {
   const seed = randSeed(); battleSeed = seed;
   broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level:1, abilities:abilitiesEnabled });
   startGame(battleDiff, seed);
+  startChaos();
 }
 
 function hostShowFinal() {
@@ -749,6 +792,22 @@ function renderMiniBoardForPlayer(pid) {
     frag.appendChild(el);
   }
   wrap.innerHTML = ''; wrap.appendChild(frag);
+  // Draw the player's OWN trail (colours + effects) on top of their mini board
+  const av = sanitizeAvatar((lobbyPlayers[pid] || playerCache[pid] || {}).avatar || {});
+  const t = _find(TRAILS, av.trail) || TRAILS[0];
+  wrap.style.setProperty('--trail-rgb', t.rgb);
+  if (path.length > 1) {
+    const step = mini + 2, pad = 6, c = i => [pad + (i % cols) * step + mini / 2, pad + Math.floor(i / cols) * step + mini / 2];
+    const d = path.map((i, k) => (k ? 'L' : 'M') + c(i).join(' ')).join(' ');
+    const W = pad * 2 + cols * step - 2, Hh = pad * 2 + rows * step - 2, gid = 'spg' + pid.replace(/[^a-z0-9]/gi, '');
+    const spin = t.spin ? `<animateTransform attributeName="gradientTransform" type="rotate" from="0 ${W / 2} ${Hh / 2}" to="360 ${W / 2} ${Hh / 2}" dur="3s" repeatCount="indefinite"/>` : '';
+    const svg = `<svg class="spec-trail${t.flow ? ' flow' : ''}${t.pulse ? ' pulse' : ''}${t.zap ? ' zap' : ''}${t.dash ? ' dash' : ''}" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" style="--trail-rgb:${t.rgb};--trail-core:${t.core || '#fff'};--cs:${mini}px">
+      <defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${W}" y2="${Hh}">${trailStops(t)}${spin}</linearGradient></defs>
+      <path class="st-glow" d="${d}" stroke="url(#${gid})"/><path class="st-body" d="${d}" stroke="url(#${gid})"/>
+      <path class="st-core" d="${d}"/>${t.flow ? `<path class="st-flow" d="${d}"/>` : ''}
+      <circle class="st-head" cx="${c(path[path.length - 1])[0]}" cy="${c(path[path.length - 1])[1]}" r="${mini * 0.22}" fill="url(#${gid})"/></svg>`;
+    wrap.insertAdjacentHTML('beforeend', svg);
+  }
 }
 
 // ── Round / Final results ──
@@ -874,7 +933,7 @@ function showLobbyAsHost() {
   document.getElementById('guest-settings').style.display = 'none';
   document.getElementById('start-btn').style.display     = 'block';
   document.getElementById('wait-msg').style.display      = 'flex';
-  syncBoostToggle();
+  syncBoostToggle(); syncPartyToggle();
   renderLobby();
 }
 

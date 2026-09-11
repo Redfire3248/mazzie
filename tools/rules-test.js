@@ -170,6 +170,29 @@ const SV = { '.sv': 'timestamp' };
   no('players cannot list who is online', await req('GET', '/online', undefined, bob.tok));
   ok('admin sees who is online',          await req('GET', '/online', undefined, admin.tok));
 
+  console.log('Friends + invites');
+  // owners/<uid> → account (needed for the friend presence rule)
+  await req('PUT', '/owners/' + bob.uid, 'B', null, true);
+  await req('PUT', '/owners/' + aliceNew.uid, 'A', null, true);
+  ok('bob sends alice a friend request',  await req('PUT', '/friendReq/A/B', { name: 'Bob', at: SV }, bob.tok));
+  no('bob cannot fake a request from alice', await req('PUT', '/friendReq/B/A', { name: 'Alice', at: SV }, bob.tok));
+  no('no request to yourself',            await req('PUT', '/friendReq/B/B', { name: 'Bob', at: SV }, bob.tok));
+  no('bob cannot make himself a friend of alice', await req('PATCH', '/', { 'friends/A/B': { name: 'Bob', at: SV } }, bob.tok));
+  no('bob cannot invite a non-friend',    await req('PUT', '/invites/A/B', { name: 'Bob', room: 'ABCD', at: SV }, bob.tok));
+  no('bob cannot see alice online yet',   await req('GET', '/online/A', undefined, bob.tok));
+  ok('alice accepts (both lists + request cleared)', await req('PATCH', '/', { 'friends/A/B': { name: 'Bob', at: SV }, 'friends/B/A': { name: 'Alice', at: SV }, 'friendReq/A/B': null }, aliceNew.tok));
+  ok('alice reads her friends',           await req('GET', '/friends/A', undefined, aliceNew.tok));
+  no('bob cannot read the friends of alice', await req('GET', '/friends/A', undefined, bob.tok));
+  await req('PUT', '/online/A', { name: 'Alice', at: SV, where: 'menu' }, aliceNew.tok);
+  ok('friend sees alice online',          await req('GET', '/online/A', undefined, bob.tok));
+  ok('bob invites his friend alice',      await req('PUT', '/invites/A/B', { name: 'Bob', room: 'QWER', at: SV }, bob.tok));
+  no('invite with a bad room code',       await req('PUT', '/invites/A/B', { name: 'Bob', room: 'x<script>', at: SV }, bob.tok));
+  ok('alice reads her invites',           await req('GET', '/invites/A', undefined, aliceNew.tok));
+  ok('alice clears the invite',           await req('DELETE', '/invites/A/B', undefined, aliceNew.tok));
+  ok('bob removes the friendship',        await req('PATCH', '/', { 'friends/A/B': null, 'friends/B/A': null }, bob.tok));
+  no('no invites after unfriending',      await req('PUT', '/invites/A/B', { name: 'Bob', room: 'QWER', at: SV }, bob.tok));
+  no('no presence after unfriending',     await req('GET', '/online/A', undefined, bob.tok));
+
   console.log('Legacy account migration');
   await req('PUT', '/accounts/mz_legacy', { name: 'Old', nameLower: 'old', pinHash: 'HASH123', xp: 700 }, null, true);
   await req('PUT', '/usernames/old', { uid: 'mz_legacy', createdAt: 1 }, null, true);

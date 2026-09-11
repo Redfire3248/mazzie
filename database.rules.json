@@ -131,11 +131,40 @@
         }
       }
     },
+    "friendReq": {
+      "$to": {
+        ".read": "(auth != null && root.child('accounts').child($to).child('owner').val() == auth.uid) || (auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
+        "$from": {
+          ".read": "auth != null && root.child('accounts').child($from).child('owner').val() == auth.uid",
+          ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (auth != null && ( (newData.exists() && !data.exists() && $from != $to && root.child('accounts').child($from).child('owner').val() == auth.uid && !root.child('friends').child($to).child($from).exists()) || (!newData.exists() && (root.child('accounts').child($to).child('owner').val() == auth.uid || root.child('accounts').child($from).child('owner').val() == auth.uid))))",
+          ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('at').val() == now"
+        }
+      }
+    },
+    "friends": {
+      "$acc": {
+        ".read": "(auth != null && root.child('accounts').child($acc).child('owner').val() == auth.uid) || (auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
+        "$other": {
+          ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (auth != null && ( (root.child('accounts').child($acc).child('owner').val() == auth.uid && (!newData.exists() || root.child('friendReq').child($acc).child($other).exists())) || (root.child('accounts').child($other).child('owner').val() == auth.uid && (!newData.exists() || root.child('friendReq').child($other).child($acc).exists()))))",
+          ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('at').val() == now"
+        }
+      }
+    },
+    "invites": {
+      "$to": {
+        ".read": "(auth != null && root.child('accounts').child($to).child('owner').val() == auth.uid) || (auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
+        "$from": {
+          ".write": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true) || (auth != null && ( (newData.exists() && root.child('accounts').child($from).child('owner').val() == auth.uid && root.child('friends').child($to).child($from).exists()) || (!newData.exists() && (root.child('accounts').child($to).child('owner').val() == auth.uid || root.child('accounts').child($from).child('owner').val() == auth.uid))))",
+          ".validate": "newData.child('room').isString() && newData.child('room').val().matches(/^[A-Z]{4}$/) && newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('at').val() == now"
+        }
+      }
+    },
     "online": {
       ".read": "(auth != null && auth.token.email_verified == true && root.child('admins').child(auth.token.email.replace('.', ',')).val() == true)",
       "$acc": {
+        ".read": "auth != null && root.child('owners').child(auth.uid).isString() && root.child('friends').child($acc).child(root.child('owners').child(auth.uid).val()).exists()",
         ".write": "auth != null && root.child('accounts').child($acc).child('owner').val() == auth.uid",
-        ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('at').val() == now"
+        ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('at').val() == now && (!newData.child('room').exists() || newData.child('room').isString())"
       }
     }
   }

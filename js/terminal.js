@@ -162,6 +162,25 @@ const CMDS = {
       termPrint('  fix: Firebase console → Realtime Database → Rules → paste database.rules.json from GitHub → Publish', 'dim');
     } else tOk('all good — trolls, broadcasts and gifts should work');
   } },
+  reset: { desc:'Reset a player (or yourself) to a brand-new account', args:[H('<player|me>', () => ['me', ...accountNames()]), H('[confirm]', ['confirm'])], async run(a) {
+    const self = !a[0] || a[0].toLowerCase() === 'me' || (currentAccount && a[0].toLowerCase() === String(currentAccount.name).toLowerCase());
+    const who = self ? 'yourself' : a[0];
+    if ((a[1] || '').toLowerCase() !== 'confirm') {
+      tWarn('this wipes levels, XP, coins, boosts, crate keys and ALL cosmetics (admin ones too) for ' + who);
+      return termPrint('  type:  reset ' + (self ? 'me' : quoteIfNeeded(a[0])) + ' confirm', 'dim');
+    }
+    const at = Date.now();
+    if (self && authMode() !== 'secure') { resetLocalProgress(at); return tOk('you are reset (this device)'); }
+    needSecure();
+    const x = self ? { id: currentAccount.id, name: myName } : await findAccount(a[0]);
+    const f = RESET_FIELDS();
+    await dbPatch('/accounts/' + x.id, { xp: 0, totalCleared: 0, level: 1, diff: 'easy', coins: 0, boosts: null, crateKeys: 0,
+      owned: null, ownedV1: true, ownedV2: true, pity: f.pity, avatar: f.avatar, daily: null, resetAt: at });
+    if (self) resetLocalProgress(at);
+    else await adminTroll(x.id, 'reset', { value: at }).catch(() => {});
+    tOk(x.name + ' was reset to a brand-new account' + (self ? '' : ' (applies instantly if online, otherwise on next sign-in)'));
+    refreshAccountCache(true);
+  } },
   broadcast: { desc:'Message EVERY online player', args:[H('<message…>', null, true)], async run(a) {
     needSecure(); const msg = a.join(' ').trim(); if (!msg) throw new Error('what should everyone see?');
     await adminBroadcast(msg); tOk('sent to everyone: ' + msg);

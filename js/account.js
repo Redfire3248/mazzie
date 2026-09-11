@@ -614,6 +614,7 @@ function mergeOwned(a, b) {
   return out;
 }
 function applyAccountLocally(account) {
+  if (account && typeof account.resetAt === 'number' && account.resetAt > (loadSave().resetAt || 0) && typeof resetLocalProgress === 'function') resetLocalProgress(account.resetAt);
   currentAccount = account;
   myName = account.name;
   myId   = account.id;
