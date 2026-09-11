@@ -120,68 +120,118 @@ function getLevelBadge(lvl) {
 // ══════════════════════════════════════════════════
 // SOUND + HAPTICS — tiny synthesized blips, no assets
 // ══════════════════════════════════════════════════
-let _actx = null, _bus = null;
+let _actx = null, _bus = null, _dry = null, _wet = null, _noise = null;
+// Signal chain:  voices → bus ─┬─ dry ──────────────┬→ tone filter → compressor → speakers
+//                               └─ send → room reverb ┘
 function audioBus() {
   if (!_actx) {
-    _actx = new (window.AudioContext || window.webkitAudioContext)();
-    // Warm chain: gain → low-pass (takes the sharp edge off every sound) → gentle compressor → speakers
-    const lp = _actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.4;
-    const comp = _actx.createDynamicsCompressor();
-    comp.threshold.value = -20; comp.knee.value = 18; comp.ratio.value = 3; comp.release.value = 0.2;
-    _bus = _actx.createGain(); _bus.gain.value = 0.75;
-    _bus.connect(lp); lp.connect(comp); comp.connect(_actx.destination);
+    const A = _actx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = A.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 20; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.25;
+    const tone = A.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 6500; tone.Q.value = 0.3;
+    tone.connect(comp); comp.connect(A.destination);
+    _bus = A.createGain(); _bus.gain.value = 0.9;
+    _dry = A.createGain(); _dry.gain.value = 1;
+    _wet = A.createGain(); _wet.gain.value = 0.28;
+    // Small, warm room: 1.4 s of decaying stereo noise
+    const len = Math.floor(A.sampleRate * 1.4), ir = A.createBuffer(2, len, A.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    const verb = A.createConvolver(); verb.buffer = ir;
+    const verbTone = A.createBiquadFilter(); verbTone.type = 'lowpass'; verbTone.frequency.value = 3200;
+    _bus.connect(_dry); _dry.connect(tone);
+    _bus.connect(_wet); _wet.connect(verb); verb.connect(verbTone); verbTone.connect(tone);
+    // Shared noise for mallet taps
+    _noise = A.createBuffer(1, A.sampleRate * 0.5, A.sampleRate);
+    const nd = _noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
   }
   if (_actx.state === 'suspended') _actx.resume();
   return _bus;
 }
-// One soft voice: f = start freq, to = end freq (glide), d = decay seconds. Sine/triangle only.
-function tone({ f, to, d = 0.14, v = 0.06, type = 'sine', at = 0, attack = 0.008 }) {
-  const bus = audioBus(), t = _actx.currentTime + at;
-  const o = _actx.createOscillator(), g = _actx.createGain();
+function _out(pan) {
+  const bus = audioBus();
+  if (!pan || !_actx.createStereoPanner) return bus;
+  const p = _actx.createStereoPanner(); p.pan.value = pan; p.connect(bus); return p;
+}
+// One voice. fm = { ratio, index } turns a sine into a bell / glass tone.
+function tone({ f, to, d = 0.2, v = 0.06, type = 'sine', at = 0, attack = 0.005, pan = 0, fm = null }) {
+  const A = _actx || (audioBus(), _actx), t = A.currentTime + 0.005 + at;
+  const o = A.createOscillator(), g = A.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + Math.min(d, 0.1));
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + Math.min(d * 0.6, 0.18));
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(v, t + attack);
+  g.gain.linearRampToValueAtTime(v, t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-  o.connect(g); g.connect(bus);
+  o.connect(g); g.connect(_out(pan));
+  if (fm) {
+    const m = A.createOscillator(), mg = A.createGain();
+    m.frequency.value = f * fm.ratio;
+    mg.gain.setValueAtTime(f * fm.index, t);
+    mg.gain.exponentialRampToValueAtTime(Math.max(0.01, f * fm.index * 0.02), t + d * 0.55);
+    m.connect(mg); mg.connect(o.frequency); m.start(t); m.stop(t + d + 0.05);
+  }
   o.start(t); o.stop(t + d + 0.05);
 }
-// Major pentatonic from G4 — mellow range, every step sounds "right" in any order
+// Soft filtered noise burst (mallet / wood tap)
+function tap({ f = 2000, q = 1.5, d = 0.025, v = 0.03, at = 0, pan = 0 }) {
+  const A = _actx || (audioBus(), _actx), t = A.currentTime + 0.005 + at;
+  const src = A.createBufferSource(); src.buffer = _noise;
+  const bp = A.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+  const g = A.createGain();
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  src.connect(bp); bp.connect(g); g.connect(_out(pan));
+  src.start(t, Math.random() * 0.3); src.stop(t + d + 0.02);
+}
+// Instruments
+function marimba(f, v = 0.07, at = 0, pan = 0) {
+  tone({ f, d: 0.5, v, at, pan, attack: 0.003 });                       // round body
+  tone({ f: f * 3.94, d: 0.07, v: v * 0.11, at, pan, attack: 0.002 });  // woody overtone
+  tap({ f: Math.min(5000, f * 2.2), q: 2.5, d: 0.018, v: v * 0.35, at, pan }); // mallet
+}
+function bell(f, v = 0.05, at = 0, d = 1.3, pan = 0) {
+  tone({ f, d, v, at, pan, attack: 0.002, fm: { ratio: 3.5, index: 1.6 } });  // glassy bell
+  tone({ f: f * 2, d: d * 0.5, v: v * 0.25, at, pan });                        // shimmer
+}
+function ding(f, v = 0.045, at = 0) { tone({ f, d: 0.6, v, at, attack: 0.002, fm: { ratio: 2, index: 0.9 } }); }
+
+// Major pentatonic from G4 — every step sounds "right", in any order
 const PENTA = [0, 2, 4, 7, 9];
 function scaleFreq(n) { const o = Math.floor(n / 5), s = PENTA[((n % 5) + 5) % 5]; return 392 * Math.pow(2, (12 * o + s) / 12); }
-// Soft wooden "bloop" (marimba-like: round body + a whisper of the 4th partial)
-function pluck(f, v = 0.07) {
-  tone({ f: f * 1.015, to: f, d: 0.26, v, type: 'sine', attack: 0.006 });
-  tone({ f: f * 3.98, d: 0.045, v: v * 0.07, type: 'sine', attack: 0.003 });
-}
-const chord = (root, steps, gap, d, v, type) => steps.forEach((st, i) => tone({ f: root * Math.pow(2, st / 12), d, v, type: type || 'sine', at: i * gap }));
+// Path step / reel tick: marimba note with a touch of human variation
+let _panFlip = 1;
+function pluck(f, v = 0.065) { _panFlip = -_panFlip; marimba(f * (1 + (Math.random() - 0.5) * 0.004), v * (0.88 + Math.random() * 0.24), 0, 0.12 * _panFlip); }
+// Crate reel: crisp wooden click that climbs a little as the reel slows
+function reelTick(step) { tap({ f: 1500 + Math.min(step, 12) * 70, q: 5, d: 0.02, v: 0.06 }); tone({ f: 1200 + Math.min(step, 12) * 60, d: 0.035, v: 0.01 }); }
+const N = n => 440 * Math.pow(2, (n - 69) / 12);        // MIDI note → Hz
 const SFX = {
-  node:   () => { tone({ f: 659.25, d: 0.6, v: 0.06 }); tone({ f: 987.77, d: 0.45, v: 0.025, at: 0.02 }); tone({ f: 329.63, d: 0.5, v: 0.03, type: 'triangle' }); },
-  tap:    () => pluck(587.33, 0.045),
-  back:   () => tone({ f: 392, to: 330, d: 0.12, v: 0.045, type: 'triangle' }),
-  pickup: () => chord(523.25, [0, 4, 7, 12], 0.05, 0.26, 0.045),
-  coin:   () => { tone({ f: 987.77, d: 0.1, v: 0.045, type: 'triangle' }); tone({ f: 1318.5, d: 0.35, v: 0.04, type: 'triangle', at: 0.07 }); },
-  buy:    () => { SFX.coin(); chord(523.25, [0, 4, 7, 12], 0.06, 0.25, 0.04, 'triangle'); },
-  reward: () => chord(523.25, [0, 4, 7, 11, 14], 0.07, 0.45, 0.045),
-  ability:() => { tone({ f: 392, to: 784, d: 0.25, v: 0.05, type: 'triangle' }); tone({ f: 1174.7, d: 0.3, v: 0.025, at: 0.1 }); },
-  hit:    () => { tone({ f: 196, to: 98, d: 0.35, v: 0.09, type: 'triangle' }); tone({ f: 130.8, d: 0.3, v: 0.05, at: 0.04 }); },
-  win:    () => chord(523.25, [0, 4, 7, 12, 16], 0.08, 0.55, 0.05, 'triangle'),
-  level:  () => chord(392, [0, 7, 12, 16, 19], 0.09, 0.7, 0.045),
-  tick:   () => tone({ f: 784, d: 0.1, v: 0.05, type: 'triangle' }),
-  go:     () => { tone({ f: 1046.5, d: 0.4, v: 0.055, type: 'triangle' }); tone({ f: 523.25, d: 0.45, v: 0.04, at: 0.02 }); },
-  err:    () => tone({ f: 220, to: 175, d: 0.16, v: 0.06, type: 'triangle' }),
-  honk:   () => { tone({ f: 330, d: 0.25, v: 0.1, type: 'sawtooth' }); tone({ f: 277, d: 0.35, v: 0.1, type: 'sawtooth', at: 0.28 }); },
-  world:  () => chord(392, [0, 5, 9, 12], 0.11, 0.5, 0.045, 'triangle'),
-  clack:  () => { tone({ f: 523.25, to: 440, d: 0.08, v: 0.04, type: 'triangle' }); }
+  node:   () => { bell(N(79), 0.05); bell(N(86), 0.022, 0.03, 1.0); },            // G5 + D6 "ting"
+  tap:    () => marimba(N(81), 0.035),
+  back:   () => { marimba(N(72), 0.03); marimba(N(67), 0.025, 0.06); },
+  pickup: () => [72, 76, 79, 84].forEach((n, i) => marimba(N(n), 0.045, i * 0.055)),
+  coin:   () => { ding(N(83), 0.04); ding(N(88), 0.045, 0.075); },                 // B5 → E6
+  buy:    () => { SFX.coin(); [72, 76, 79].forEach((n, i) => marimba(N(n), 0.035, 0.2 + i * 0.06)); },
+  reward: () => [72, 76, 79, 84, 88].forEach((n, i) => bell(N(n), 0.04, i * 0.075, 1.4)),
+  ability:() => { tone({ f: N(67), to: N(79), d: 0.35, v: 0.04, fm: { ratio: 2, index: 0.6 } }); bell(N(91), 0.02, 0.12, 0.8); },
+  hit:    () => { tone({ f: 150, to: 60, d: 0.35, v: 0.12 }); tap({ f: 400, q: 0.7, d: 0.12, v: 0.08 }); },
+  win:    () => { [67, 69, 72, 74, 76, 79].forEach((n, i) => marimba(N(n), 0.05, i * 0.06)); [72, 76, 79, 84].forEach(n => bell(N(n), 0.03, 0.4, 1.8)); },
+  level:  () => { [60, 67, 72, 76, 79].forEach((n, i) => bell(N(n), 0.04, i * 0.1, 1.8)); bell(N(91), 0.02, 0.55, 2.2); },
+  tick:   () => marimba(N(76), 0.05),
+  go:     () => { bell(N(84), 0.05, 0, 1.2); bell(N(88), 0.035, 0.02, 1.2); marimba(N(72), 0.05); },
+  err:    () => { tone({ f: N(55), to: N(50), d: 0.22, v: 0.07 }); tap({ f: 600, q: 1, d: 0.04, v: 0.03 }); },
+  honk:   () => { tone({ f: 330, d: 0.25, v: 0.08, type: 'sawtooth' }); tone({ f: 277, d: 0.35, v: 0.08, type: 'sawtooth', at: 0.28 }); },
+  world:  () => [67, 72, 76].forEach((n, i) => bell(N(n), 0.04, i * 0.13, 1.6)),
+  clack:  () => marimba(N(72), 0.04)
 };
+function soundOn() { return getSetting('sound', true); }
 function sfx(name) {
-  if (!getSetting('sound', true) || !SFX[name]) return;
+  if (!SFX[name] || !soundOn()) return;
   try { SFX[name](); } catch (e) {}
 }
+// Play a custom sound only when sound is on
+function sfxCat(cat, fn) { if (soundOn()) { try { fn(); } catch (e) {} } }
 // Each new box in your path plays the next note up the scale (wraps after two octaves)
 function sfxStep(n) {
-  if (!getSetting('sound', true)) return;
+  if (!soundOn()) return;
   try { pluck(scaleFreq((n - 1) % 10)); } catch (e) {}
 }
 function buzz(ms) {

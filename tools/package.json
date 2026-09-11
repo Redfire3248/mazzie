@@ -4,7 +4,9 @@
   "description": "Dev tools: avatar sheet slicer and database rules builder/tests (not part of the website)",
   "scripts": {
     "slice": "node slice-sheet.js",
-    "rules": "node build-rules.js"
+    "rules": "node build-rules.js",
+    "test:levels": "node level-test.js",
+    "test:rules": "node rules-test.js"
   },
   "dependencies": {
     "sharp": "^0.33.5"

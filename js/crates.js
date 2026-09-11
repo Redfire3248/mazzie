@@ -32,6 +32,8 @@ function getKeys() { return Math.max(0, loadSave().crateKeys | 0); }
 function addKeys(n) { writeSave({ crateKeys: Math.max(0, getKeys() + n) }); }
 function getPity() { const p = loadSave().pity || {}; return { e: p.e | 0, l: p.l | 0 }; }
 const crateVisible = id => !CRATES[id].adminOnly || isAdminUser();
+const quickOpen = () => { try { return localStorage.getItem('mz_quick_open') === '1'; } catch (e) { return false; } };
+function toggleQuickOpen(el) { try { localStorage.setItem('mz_quick_open', el.checked ? '1' : ''); } catch (e) {} }
 
 // Everything a crate can drop, grouped by rarity
 function cratePool(crate) {
@@ -127,6 +129,7 @@ function openCrateSheet(id, useKey) {
       <div class="sheet-odds">${RAR_ORDER.filter(r => c.odds[r]).map(r => `<span class="odd r-${r}">${r} ${c.odds[r]}%</span>`).join('')}</div>
       ${c.adminOnly ? '' : `<small class="sheet-pity">Pity: Epic+ guaranteed within ${PITY.epic - getPity().e}, Legendary+ within ${PITY.legendary - getPity().l}</small>`}
       <div class="sheet-btns">${btn(1)}${btn(5)}${btn(10)}</div>
+      <label class="quick-open"><input type="checkbox" ${quickOpen() ? 'checked' : ''} onchange="toggleQuickOpen(this)"><span></span>Quick open <small>skip the rolling</small></label>
       ${!useKey && !c.adminOnly && authMode() === 'secure' ? `<button class="link-btn" onclick="openGiftForm('${id}')">${ic('gift')} Gift this crate to a friend</button>` : ''}
     </div>`;
   sfx('tap');
@@ -187,7 +190,7 @@ async function openCrates(id, n, opts) {
   _crateBusy = true;
   const again = () => opts.gift || opts.free ? false : opts.key ? getKeys() >= n : crate.adminOnly || getCoins() >= crate.price * MULTI[n];
   const ctx = window._crateCtx = { id, n, opts, crate, pool, drops, payNote, again };
-  if (n === 1) showReel(ctx); else showStack(ctx);
+  if (quickOpen()) showGrid(ctx, true); else if (n === 1) showReel(ctx); else showStack(ctx);
 }
 
 function stageHtml(ctx, body) {
@@ -208,13 +211,19 @@ function reelTarget(reel, i, jitter) {
 // After the spin: glide the last few pixels so the prize sits exactly centred under the marker
 function settleReel(reel, i, done) {
   const now = new DOMMatrixReadOnly(getComputedStyle(reel).transform).m41;
+  const pin = () => { reel.getAnimations().forEach(an => an.cancel()); reel.dataset.win = i; centerReel(reel); done(); };
   const c = reel.children[i], wrapW = reel.parentElement.clientWidth;
-  const off = (-now + wrapW / 2) - (c.offsetLeft + c.offsetWidth / 2);
-  if (Math.abs(off) < 0.5) return done();
   const tgt = -(c.offsetLeft + c.offsetWidth / 2 - wrapW / 2);        // exact centre
+  if (Math.abs(now - tgt) < 0.5) return pin();
   const a = reel.animate([{ transform: 'translateX(' + now + 'px)' }, { transform: 'translateX(' + tgt + 'px)' }], { duration: 260, easing: 'cubic-bezier(.3,1.4,.5,1)', fill: 'forwards' });
-  a.onfinish = done;
+  a.onfinish = pin;
 }
+function centerReel(reel) {
+  const c = reel.children[+reel.dataset.win]; if (!c) return;
+  reel.style.transform = 'translateX(' + -(c.offsetLeft + c.offsetWidth / 2 - reel.parentElement.clientWidth / 2) + 'px)';
+}
+// Page resized / phone rotated: keep every finished reel centred on its prize
+window.addEventListener('resize', () => document.querySelectorAll('#crate-open .reel[data-win]').forEach(centerReel));
 
 // ── ×1: the rolling reel ──
 function showReel(ctx) {
@@ -251,7 +260,7 @@ function showReel(ctx) {
     const tick = () => {
       const tx = new DOMMatrixReadOnly(getComputedStyle(reel).transform).m41;
       const idx = Math.floor((-tx + wrapW / 2) / card);
-      if (idx !== last) { last = idx; pluck(scaleFreq(Math.min(12, Math.floor(idx / 4))), .05); buzz(4); }
+      if (idx !== last) { last = idx; sfxCat('crates', () => reelTick(Math.floor(idx / 4))); buzz(4); }
       _reelRaf = requestAnimationFrame(tick);
     };
     _reelRaf = requestAnimationFrame(tick);
@@ -295,8 +304,8 @@ function showStack(ctx) {
         reel.classList.add('done'); reel.children[WIN].classList.add('won');
         wrap.classList.add('landed', 'r-' + d.rar); wrap.style.setProperty('--rar', rarityOf(d.item).rgb);
         wrap.querySelector('.reel-tag').innerHTML = d.dupe ? coinHtml('+' + d.refund) : 'NEW';
-        if (rk >= 3) { sfx('reward'); buzz([20, 30, 20]); spawnParticles(); } else { pluck(scaleFreq(3 + rk * 2), .05); buzz(8); }
-        if (--left === 0) setTimeout(() => finishReveal(ctx), 350);
+        if (rk >= 3) { sfx('reward'); buzz([20, 30, 20]); spawnParticles(); } else { sfxCat('crates', () => pluck(scaleFreq(3 + rk * 2), .05)); buzz(8); }
+        if (--left === 0) setTimeout(() => { if (ctx === window._crateCtx) showGrid(ctx); }, 650);
       });
       return anim;
     });
@@ -307,7 +316,7 @@ function showStack(ctx) {
     const tick = () => {
       const tx = new DOMMatrixReadOnly(getComputedStyle(last).transform).m41;
       const idx = Math.floor((-tx + lw / 2) / lc);
-      if (idx !== li) { li = idx; tone({ f: 660, d: 0.05, v: 0.022, type: 'triangle' }); }
+      if (idx !== li) { li = idx; sfxCat('crates', () => reelTick(Math.floor(idx / 3))); }
       if (left > 0) _reelRaf = requestAnimationFrame(tick);
     };
     _reelRaf = requestAnimationFrame(tick);
@@ -315,7 +324,38 @@ function showStack(ctx) {
 }
 function skipCrate() {
   if (_reelAnim && _reelAnim.playState === 'running') { _reelAnim.finish(); return; }
-  _reelAnims.forEach(an => { if (an.playState === 'running') an.finish(); });
+  const ctx = window._crateCtx;
+  if (ctx && ctx.n > 1 && !ctx.done) { cancelAnimationFrame(_reelRaf); _flipTimers.forEach(clearTimeout); _flipTimers = []; showGrid(ctx); }
+}
+
+// Results as a clean card grid (after the stacked reels, or straight away with Quick open)
+function showGrid(ctx, quick) {
+  if (ctx.gridShown) return; ctx.gridShown = true;
+  _reelAnims.forEach(an => { try { an.cancel(); } catch (e) {} }); _reelAnims = [];
+  cancelAnimationFrame(_reelRaf);
+  const ov = document.getElementById('crate-open');
+  if (quick) { ov.className = 'crate-overlay t-' + ctx.crate.tone; ov.innerHTML = stageHtml(ctx, ''); }
+  const stage = ov.querySelector('.crate-stage');
+  const old = stage.querySelector('.reel-stack, .crate-intro, .reel-wrap');
+  const grid = document.createElement('div');
+  grid.className = 'drop-grid n' + ctx.n;
+  grid.innerHTML = ctx.drops.map((d, i) => {
+    const r = rarityOf(d.item);
+    return `<div class="drop-card r-${r.id}" style="--rar:${r.rgb};--i:${i}">
+      <div class="rc-pv">${itemPreview(d, ctx.n === 1 ? 84 : 46)}</div>
+      <b>${escapeHtml(d.item.name)}</b>
+      <span class="dc-rar">${r.name}</span>
+      ${d.dupe ? `<span class="fc-tag">${coinHtml('+' + d.refund)}</span>` : `<span class="fc-tag new">New</span>`}
+      ${d.pity ? '<span class="fc-pity">Pity</span>' : ''}</div>`;
+  }).join('');
+  if (old) { old.classList.add('fold'); setTimeout(() => { old.replaceWith(grid); fitText(grid); }, 280); }
+  else { stage.querySelector('.crate-top').after(grid); fitText(grid); }
+  // A little sound per card as they pop in; rare ones get the big one
+  ctx.drops.forEach((d, i) => _flipTimers.push(setTimeout(() => {
+    const rk = RAR_ORDER.indexOf(d.rar);
+    if (rk >= 3) { sfx('reward'); spawnParticles(); } else sfxCat('crates', () => pluck(scaleFreq(3 + rk * 2), .04));
+  }, (old ? 300 : 0) + i * 70)));
+  _flipTimers.push(setTimeout(() => finishReveal(ctx), (old ? 300 : 0) + ctx.drops.length * 70 + 150));
 }
 
 // ── Result panel + buttons ──
@@ -329,7 +369,7 @@ function finishReveal(ctx) {
   const el = document.getElementById('crate-result');
   el.style.setProperty('--rar', r.rgb);
   el.className = 'crate-result show r-' + r.id;
-  if (n === 1) {
+  if (n === 1 && !ctx.gridShown) {
     sfx(high ? 'level' : 'reward'); buzz(high ? [30, 50, 30, 50, 80] : [20, 40, 20]);
     spawnParticles(); if (high) setTimeout(spawnParticles, 350);
     el.innerHTML = `
@@ -337,6 +377,8 @@ function finishReveal(ctx) {
       <div class="cres-rar">${r.name} ${SET_LABEL[best.set]}${best.pity ? ' · pity' : ''}</div>
       <div class="cres-name">${escapeHtml(best.item.name)}</div>
       <div class="cres-tag">${best.dupe ? `Duplicate · ${coinHtml('+' + best.refund)}` : `${ic('sparkle')}New! Added to your Locker`}</div>`;
+  } else if (n === 1) {
+    el.innerHTML = ''; el.className = 'crate-result';        // quick open: the grid card already shows it
   } else {
     const fresh = drops.filter(d => !d.dupe).length, refund = drops.reduce((t, d) => t + d.refund, 0);
     sfx(high ? 'level' : 'win'); spawnParticles();

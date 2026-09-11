@@ -121,16 +121,7 @@ function calcSize() {
   ));
 }
 
-// ── Seeded PRNG (32-bit Mulberry32) ──
-function makeRng(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6D2B79F5) >>> 0;
-    let t = Math.imul(s ^ s >>> 15, s | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
+// (Seeded PRNG + the puzzle generator itself live in js/puzzle.js)
 
 // ══════════════════════════════════════════════════
 // PUZZLE GENERATOR  (seeded random walk)
@@ -153,68 +144,21 @@ function generate() {
   }
   g.appendChild(frag);
 
-  totalNodes = Math.min(baseNodes + Math.floor(level / 3), 10);
-
   // Seed: battle uses synced seed; solo uses crypto seed per level
   const seed = battleActive
     ? (battleSeed ^ Math.imul(battleRound, 0x9e3779b9)) >>> 0
     : (initialSeed ^ Math.imul(level, 0x6c62272e)) >>> 0;
-
-  const rng    = makeRng(seed);
-  const total  = rows * cols;
-  const minLen = Math.max(totalNodes * 3, Math.floor(total * 0.50));
-  const maxLen = Math.floor(total * 0.82);
-
-  const walk = (start, steps) => {
-    const p = [start], v = new Set([start]); let c = start;
-    for (let s = 0; s < steps && p.length < maxLen; s++) {
-      const adj = nbrs(c).filter(n => !v.has(n));
-      if (!adj.length) break;
-      // Prefer the neighbour with the fewest free exits (Warnsdorff-ish) 60% of the time → longer walks
-      let next;
-      if (rng() < 0.6) {
-        let best = Infinity, pool = [];
-        adj.forEach(n => { const deg = nbrs(n).filter(m => !v.has(m)).length; if (deg < best) { best = deg; pool = [n]; } else if (deg === best) pool.push(n); });
-        next = pool[Math.floor(rng() * pool.length)];
-      } else next = adj[Math.floor(rng() * adj.length)];
-      c = next; p.push(c); v.add(c);
-    }
-    return p;
-  };
-  let path = walk(Math.floor(rng() * total), 4000);
-  for (let tries = 0; path.length < minLen && tries < 6; tries++) {
-    const corner = [0, cols - 1, (rows - 1) * cols, rows * cols - 1][Math.floor(rng() * 4)];
-    const p2 = walk(corner, 8000);
-    if (p2.length > path.length) path = p2;
-  }
-
+  const pz = buildPuzzle({ rows, cols, baseNodes, level, diff: currentDiff, seed });   // js/puzzle.js
+  const path = pz.path, nodeCells = pz.nodeCells, rng = pz.rng;
+  totalNodes    = pz.totalNodes;
   solvableCount = path.length;
   solutionPath  = [...path];
   const onPath = new Set(path);
-
   cells.forEach((c, i) => { if (!onPath.has(i)) { c.classList.add('hidden-cell'); hiddenSet.add(i); } });
-
-  // ── Node positions ──
-  const nodeCells = [];
-  for (let i = 1; i <= totalNodes; i++) nodeCells.push(path[Math.floor(((i - 1) / (totalNodes - 1)) * (path.length - 1))]);
-
-  // ── Obstacles (diff-scaled) ──
-  const diffObs = { baby: 0, easy: 1, medium: 2, hard: 3, expert: 5 };
-  const maxObs  = Math.min((diffObs[currentDiff] || 0) + Math.floor(level / 6), 7);
-  if (maxObs > 0) {
-    const nearNode = new Set();
-    nodeCells.forEach(n => { nearNode.add(n); nbrs(n).forEach(m => nearNode.add(m)); });
-    const cands = [];
-    for (let i = 0; i < total; i++) {
-      if (onPath.has(i) || nearNode.has(i)) continue;
-      if (nbrs(i).some(n => onPath.has(n))) cands.push(i);
-    }
-    for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
-    cands.slice(0, maxObs).forEach(idx => {
-      obstacleSet.add(idx); hiddenSet.delete(idx);
-      cells[idx].classList.remove('hidden-cell'); cells[idx].classList.add('obstacle');
-    });
-  }
+  pz.obstacles.forEach(idx => {
+    obstacleSet.add(idx); hiddenSet.delete(idx);
+    cells[idx].classList.remove('hidden-cell'); cells[idx].classList.add('obstacle');
+  });
 
   // ── Numbered nodes ──
   nodeCells.forEach((ci, k) => {

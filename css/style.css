@@ -1090,3 +1090,38 @@ html.troll-party .screen:not(.hidden){animation:trollHue 1s linear infinite;}
 /* Fixed reel card widths (content must never stretch a card, or the reel lands off-target) */
 .reel-card{min-width:0;overflow:hidden;box-sizing:border-box;}
 .rc-pv{overflow:hidden;}
+
+/* ══════════ RESULTS GRID (after the stacked reels, or Quick open) ══════════ */
+.reel-stack.fold,.crate-intro.fold{animation:foldAway .28s ease-in forwards;}
+@keyframes foldAway{to{transform:scaleY(.2);opacity:0;}}
+.drop-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(520px,calc(100% - 24px));}
+.drop-grid.n1{grid-template-columns:1fr;width:min(200px,60%);}
+.drop-grid.n5{width:min(480px,calc(100% - 24px));}
+.drop-card{--rar:var(--txt-rgb);position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px 6px;border-radius:14px;min-width:0;
+  background:linear-gradient(180deg,var(--cell),rgba(var(--rar),.18));border:1.5px solid rgba(var(--rar),.55);border-bottom-width:4px;
+  animation:dropIn .42s calc(var(--i) * 70ms) cubic-bezier(.3,1.5,.5,1) backwards;}
+@keyframes dropIn{from{transform:translateY(16px) scale(.6);opacity:0;}}
+.drop-card .rc-pv{width:100%;height:52px;}
+.drop-grid.n1 .drop-card .rc-pv{height:100px;}
+.drop-card .rc-pv .trail-pv{max-width:90%;}
+.drop-card b{font-size:10px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.drop-grid.n1 .drop-card b{font-size:16px;}
+.dc-rar{font-family:var(--mono);font-size:7.5px;letter-spacing:1px;text-transform:uppercase;color:rgb(var(--rar));}
+.drop-grid.n1 .dc-rar{font-size:10px;}
+.drop-card.r-legendary,.drop-card.r-mythic,.drop-card.r-admin{box-shadow:0 0 18px rgba(var(--rar),.5);}
+.drop-card.r-admin{--rar:var(--gold-rgb);}
+@media (max-width:380px){.drop-grid{gap:5px;}.drop-card{padding:6px 2px 5px;}.drop-card .rc-pv{height:44px;}}
+
+/* Quick open switch in the crate sheet */
+.quick-open{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt2);cursor:pointer;align-self:flex-start;}
+.quick-open small{color:var(--dim);font-size:10.5px;}
+.quick-open input{display:none;}
+.quick-open span{width:34px;height:20px;border-radius:12px;background:var(--cb2);position:relative;transition:background var(--trans);}
+.quick-open span::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform var(--trans);}
+.quick-open input:checked + span{background:var(--acc);}
+.quick-open input:checked + span::after{transform:translateX(14px);}
+/* Calmer stacked reels (smaller, narrower) */
+.reel-stack{width:min(460px,100%);gap:4px;}
+.reel-stack.n10 .reel-wrap.mini{height:46px;}
+.reel-stack.n10 .reel-wrap.mini .reel-card{flex-basis:40px;height:36px;}
+.reel-stack.n10 .reel-wrap.mini .rc-pv{width:36px;height:30px;}
