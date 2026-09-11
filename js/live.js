@@ -10,11 +10,11 @@
 let _bcES = null, _trES = null, _hbT = null, _liveOn = false;
 const TROLLS = {
   flip:      { desc: 'Turns their board upside down (10s)' },
-  spin:      { desc: 'Spins their board (6s)' },
+  spin:      { desc: 'Slowly spins their board (6s)' },
   mirror:    { desc: 'Mirrors the board left↔right (10s)' },
   shake:     { desc: 'Earthquake (4s)' },
   tiny:      { desc: 'Shrinks the board (8s)' },
-  invert:    { desc: 'Inverts all colours (8s)' },
+  invert:    { desc: 'Negative colours + their path fades out (8s)' },
   party:     { desc: 'Disco lights + confetti (6s)' },
   honk:      { desc: 'Plays a silly honk' },
   frost:     { desc: 'Freezes their board (4s)' },
@@ -158,10 +158,9 @@ function applyTroll(t) {
       pushToast(by + ' moved you to level ' + n, 'info', 'arrowR');
       break;
     }
-    case 'reset':
+    case 'reset':                                   // silent: no message, no admin name
       resetLocalProgress(parseInt(t.value) || Date.now());
       if (inGame() && !battleActive) goMenu();
-      showAvatarMessage('Account reset by ' + by, 'Your progress was reset to a fresh start', by, t.av, 6000);
       break;
     case 'keys': refreshFromCloud().then(() => {
       const [kind, n] = String(t.text || '').split(':');

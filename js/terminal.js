@@ -177,7 +177,7 @@ const CMDS = {
     await dbPatch('/accounts/' + x.id, { xp: 0, totalCleared: 0, level: 1, diff: 'easy', coins: 0, boosts: null, crateKeys: 0,
       owned: null, ownedV1: true, ownedV2: true, pity: f.pity, avatar: f.avatar, daily: null, resetAt: at });
     if (self) resetLocalProgress(at);
-    else await adminTroll(x.id, 'reset', { value: at }).catch(() => {});
+    else await dbPut('/troll/' + x.id, { kind: 'reset', at: SERVER_TIME, value: at }).catch(() => {});
     tOk(x.name + ' was reset to a brand-new account' + (self ? '' : ' (applies instantly if online, otherwise on next sign-in)'));
     refreshAccountCache(true);
   } },

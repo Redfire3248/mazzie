@@ -179,14 +179,18 @@ function cachePos() {
   const grid = document.getElementById('grid');
   const wrap = document.querySelector('.board-wrap');
   const gr = grid.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
-  gLeft = gr.left + GPAD; gTop = gr.top + GPAD;
-  boardOffX = gr.left - wr.left + GPAD; boardOffY = gr.top - wr.top + GPAD;
+  // Use layout positions (not the on-screen box) — a troll may be rotating or shrinking the board.
+  // The board-wrap transforms around its centre, which stays put, so its layout box is centred there.
+  const cx = wr.left + wr.width / 2, cy = wr.top + wr.height / 2;
+  gLeft = cx - wrap.offsetWidth / 2 + grid.offsetLeft + GPAD;
+  gTop  = cy - wrap.offsetHeight / 2 + grid.offsetTop + GPAD;
+  boardOffX = grid.offsetLeft + GPAD; boardOffY = grid.offsetTop + GPAD;
   const svg = document.getElementById('grid-svg');
-  svg.setAttribute('width', wr.width); svg.setAttribute('height', wr.height);
-  svg.setAttribute('viewBox', `0 0 ${wr.width} ${wr.height}`);
+  svg.setAttribute('width', wrap.offsetWidth); svg.setAttribute('height', wrap.offsetHeight);
+  svg.setAttribute('viewBox', `0 0 ${wrap.offsetWidth} ${wrap.offsetHeight}`);
   svg.style.setProperty('--cs', cellSize + 'px');   // trail thickness follows the cell size
   const g = document.getElementById('trail-grad');
-  if (g) { g.setAttribute('x1', boardOffX); g.setAttribute('y1', boardOffY); g.setAttribute('x2', boardOffX + gr.width); g.setAttribute('y2', boardOffY + gr.height); paintTrailGradient(); }
+  if (g) { g.setAttribute('x1', boardOffX); g.setAttribute('y1', boardOffY); g.setAttribute('x2', boardOffX + grid.offsetWidth); g.setAttribute('y2', boardOffY + grid.offsetHeight); paintTrailGradient(); }
 }
 
 function nbrs(i) {
@@ -201,7 +205,16 @@ function nbrs(i) {
 // ══════════════════════════════════════════════════
 // INPUT — pointer events, tap-to-extend, swipe interpolation
 // ══════════════════════════════════════════════════
+function unTroll(x, y) {
+  const wrap = document.querySelector('.board-wrap');
+  const tf = wrap && getComputedStyle(wrap).transform;
+  if (!tf || tf === 'none') return [x, y];
+  const r = wrap.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const p = new DOMMatrix(tf).inverse().transformPoint(new DOMPoint(x - cx, y - cy));
+  return [cx + p.x, cy + p.y];
+}
 function cellAt(x, y) {
+  [x, y] = unTroll(x, y);
   const rx = x - gLeft, ry = y - gTop;
   if (rx < -GAP || ry < -GAP) return -1;
   const step = cellSize + GAP;
