@@ -2,7 +2,8 @@
 // js/store.js — Coins, the Store, your boost bag and the free daily chest
 //
 // Coins are earned by playing (solo wins, dailies, battle placements, level-ups).
-// Boosts bought here go into your bag; tap an empty boost slot mid-game to use one.
+// Boosts are no longer sold: Power-ups matches hand them out on the board.
+// Boosts bought before that stay in your bag; tap an empty boost slot mid-game to use one.
 // The database rules check every purchase costs the right amount and that coins
 // can only grow at a humanly possible speed (see tools/build-rules.js).
 // ══════════════════════════════════════════════════
@@ -43,9 +44,7 @@ const coinHtml = n => `<span class="coin-inline">${ic('coin')}${typeof n === 'st
 // ══════════════════════════════════════════════════
 // STORE SCREEN
 // ══════════════════════════════════════════════════
-let _storeQuery = '';
-function openStore() { if (typeof pollGifts === 'function') pollGifts(); _storeQuery = ''; document.getElementById('store-search').value = ''; show('store'); renderStore(); }
-function storeSearch(v) { _storeQuery = String(v || '').trim().toLowerCase(); renderStore(); }
+function openStore() { if (typeof pollGifts === 'function') pollGifts(); show('store'); renderStore(); }
 
 function renderStore() {
   updateCoinUI();
@@ -58,53 +57,11 @@ function renderStore() {
     <div class="chest-txt"><b>${ready ? 'Daily chest is ready!' : 'Chest opened today'}</b>
     <small>${ready ? `Free ${CHEST_MIN}–${CHEST_MAX} coins, once a day` : 'Next chest in ' + untilTomorrow()}</small></div>
     ${ready ? `<button class="btn primary sm" onclick="claimChest()">${ic('gift')}Open</button>` : ''}`;
-
-  // Boost cards
-  const bag = getBag(), coins = getCoins();
-  const grid = document.getElementById('store-grid'); grid.innerHTML = '';
-  const q = _storeQuery.split(/\s+/).filter(Boolean);
-  let shown = 0;
-  Object.entries(BOOST_PRICES).forEach(([kind, price]) => {
-    const a = ABILITIES[kind];
-    const hay = (a.name + ' ' + kind + ' ' + a.desc + ' ' + (a.battle ? 'battle attack' : 'solo battle') + (bag[kind] ? ' owned' : '')).toLowerCase();
-    if (!q.every(w => /^\d+$/.test(w) ? price <= +w : hay.includes(w))) return;
-    shown++;
-    const can = coins >= price;
-    const card = document.createElement('div');
-    card.className = 'shop-card' + (a.attack ? ' attack' : '') + (a.battle ? ' battle' : '');
-    card.innerHTML = `
-      <div class="shop-top"><span class="shop-ic">${ic(a.icon)}</span><span class="shop-owned${bag[kind] ? ' has' : ''}">${ic('bag')}${bag[kind]}</span></div>
-      <b class="shop-name">${a.name}</b>
-      <small class="shop-desc">${a.desc}</small>
-      <span class="shop-tag">Power-ups matches</span>
-      <button class="shop-buy${can ? '' : ' poor'}" ${can ? '' : 'aria-disabled="true"'}>${coinHtml(price)}</button>`;
-    card.querySelector('.shop-buy').onclick = e => buyBoost(kind, card);
-    grid.appendChild(card);
-  });
-  if (!shown) grid.innerHTML = `<div class="search-empty">${ic('search')}No boosts match "${escapeHtml(_storeQuery)}"</div>`;
 }
 function untilTomorrow() {
   const now = new Date(), next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
   const m = Math.ceil((next - now) / 60000);
   return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm';
-}
-
-function buyBoost(kind, card) {
-  const price = BOOST_PRICES[kind], a = ABILITIES[kind];
-  if (getCoins() < price) {
-    sfx('err'); buzz(20);
-    if (card) { card.classList.remove('nope'); void card.offsetWidth; card.classList.add('nope'); }
-    pushToast(`Need ${price - getCoins()} more coins — win levels to earn them`, 'warn', 'coin');
-    return;
-  }
-  const bag = getBag(); bag[kind] = (bag[kind] || 0) + 1;
-  writeSave({ coins: getCoins() - price, boosts: bag });
-  sfx('buy'); buzz([10, 30, 10]);
-  if (card) { card.classList.remove('bought'); void card.offsetWidth; card.classList.add('bought'); }
-  showReward({ icon: a.icon, tone: a.attack ? 'cyan' : 'gold', title: a.name + ' bought', sub: `You now have ${bag[kind]} in your bag`,
-    chips: [{ html: coinHtml(-price), label: 'spent' }], quick: true });
-  syncAccountToCloud().catch(() => {});
-  renderStore();
 }
 
 function claimChest() {
@@ -133,7 +90,7 @@ function openBag() {
     + (owned.length
       ? `<div class="bag-list">${owned.map(k => `<button class="bag-item${ABILITIES[k].attack ? ' attack' : ''}" onclick="useFromBag('${k}')">
           <span class="bag-ic">${ic(ABILITIES[k].icon)}</span><span class="bag-name">${ABILITIES[k].name}</span><span class="bag-n">×${bag[k]}</span></button>`).join('')}</div>`
-      : `<div class="bag-empty">No boosts yet.${battleActive ? '' : ` <button class="link-btn" onclick="closeBag();gameMenuBtn();setTimeout(openStore,50)">Visit the Store</button>`}</div>`);
+      : `<div class="bag-empty">No boosts in your bag. Grab the glowing orbs on the board.</div>`);
   el.classList.remove('hidden');
   sfx('tap');
 }

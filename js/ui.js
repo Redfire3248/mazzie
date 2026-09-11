@@ -68,7 +68,7 @@ function updateMenuProfile() {
     updateCoinUI();
     const si = document.getElementById('store-info');
     const chestReady = s.chestDay !== todayKey();
-    si.innerText = chestReady ? 'Free chest!' : 'Boosts';
+    si.innerText = chestReady ? 'Free chest!' : 'Crates';
     si.classList.toggle('done', chestReady);
   }
 }

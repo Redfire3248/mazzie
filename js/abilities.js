@@ -19,12 +19,11 @@ const MAX_SLOTS = 3;
 function boostsActive() { return battleActive && abilitiesEnabled; }
 
 // ── Place pickups on the solution path (deterministic from the board rng) ──
-// Boosts no longer appear on the board — they only come from the Store (your bag).
-const BOARD_PICKUPS = false;
+// Only in Power-ups matches: glowing orbs on the path, same spots for every racer,
+// plus one free boost in your first slot when the round starts.
 function placePickups(rng, path, nodeCells) {
-  if (!BOARD_PICKUPS) return;
   const pool = battleActive ? BATTLE_POOL : SOLO_POOL;
-  const count = Math.max(1, Math.min(battleActive ? 3 : 2, Math.floor(path.length / 11)));
+  const count = Math.max(2, Math.min(4, Math.floor(path.length / 9)));
   // Skip the first few cells so nobody gets a boost for free
   const cands = path.slice(4, -2).filter(c => !nodeCells.has(c));
   for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
@@ -35,6 +34,9 @@ function placePickups(rng, path, nodeCells) {
     orb.className = 'pickup pk-' + kind; orb.innerHTML = ic(ABILITIES[kind].icon);
     cells[ci].appendChild(orb);
   });
+  // Everyone starts the round with the same free boost
+  abilityInv = [pool[Math.floor(rng() * pool.length)]];
+  renderAbilityBar(0);
 }
 
 function collectPickup(ci) {
@@ -68,8 +70,8 @@ function renderAbilityBar(flashSlot) {
       : inBag
         ? `<span class="ab-empty">${ic('bag')}<b class="ab-count">${inBag}</b></span>`
         : `<span class="ab-empty">${ic('plus')}</span>`;
-    b.title = kind ? ABILITIES[kind].desc : 'Tap to use a boost from your bag (buy them in the Store)';
-    b.onclick = () => kind ? useAbilitySlot(i) : openBag();
+    b.title = kind ? ABILITIES[kind].desc : inBag ? 'Tap to use a boost from your bag' : 'Grab the glowing orbs on the board';
+    b.onclick = () => kind ? useAbilitySlot(i) : inBag ? openBag() : null;
     bar.appendChild(b);
   }
 }
