@@ -41,16 +41,21 @@ function clearDenyCache() { Object.keys(_denyUntil).forEach(k => delete _denyUnt
 function warnStaleRules(path) {
   if (_rulesWarned) return;
   _rulesWarned = true;
-  console.warn('MAZZIE: the database refused ' + path + ' even though you are signed in. '
+  dbLog('warn', 'the database refused ' + path + ' even though you are signed in. '
     + 'Your published rules are older than this version of the game. '
     + 'Fix: Firebase console -> Realtime Database -> Rules -> paste database.rules.json from the repo -> Publish.');
-  pushToast('Friend profiles are blocked by your database rules — see the console', 'warn', 'alert');
 }
 const isMyPath = p => !!(currentAccount && currentAccount.id && new RegExp('^/(accounts|profiles|online)/' + currentAccount.id + '(/|$)').test(p));
+// Connection trouble is admin information, not something to interrupt play with.
+// It goes to the console and the admin terminal; players just see stale data quietly.
+function dbLog(kind, msg) {
+  console[kind === 'warn' ? 'warn' : 'log']('MAZZIE: ' + msg);
+  if (typeof adminLog === 'function') adminLog(kind, msg);
+}
 function markSignedOut() {
   if (_signedOut) return;
   _signedOut = true;
-  pushToast('Signed out — sign in again to sync and see friends', 'warn', 'logout');
+  dbLog('warn', 'signed out — the database refused your own data; sign in again to sync');
   if (typeof stopLive === 'function') stopLive();
 }
 async function dbUrl(path, force) {
@@ -65,7 +70,9 @@ async function dbUrl(path, force) {
 const DB_TIMEOUT_MS = 9000;
 async function dbReq(method, path, data, retried) {
   if (!fbUrl()) throw new Error('NO_CONFIG');
-  if (Date.now() < (_denyUntil[denyKey(path)] || 0)) throw new Error('DENIED');   // still in the doghouse
+  const isMine = isMyPath(path);
+  // Your own data is always retried: that is how a genuinely lost session gets noticed.
+  if (!isMine && Date.now() < (_denyUntil[denyKey(path)] || 0)) throw new Error('DENIED');   // still in the doghouse
   let r;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const t = ctl ? setTimeout(() => ctl.abort(), DB_TIMEOUT_MS) : null;
@@ -80,17 +87,18 @@ async function dbReq(method, path, data, retried) {
   if (r.status === 401 || r.status === 403) {
     // A stale ID token looks like this too, but only for your OWN data — for anything else
     // a refusal is the rules talking, and a fresh token will not change their mind.
-    if (!retried && _authUser && isMyPath(path)) return dbReq(method, path, data, true);
+    if (!retried && _authUser && isMine) return dbReq(method, path, data, true);
     if (_authUser) { _denyUntil[denyKey(path)] = Date.now() + DENY_COOLDOWN_MS; warnStaleRules(path); }
-    // Only your OWN data being refused means the session is gone; being refused
-    // someone else's account is just the rules doing their job.
-    if (isMyPath(path) && ++_deniedRow >= 2) markSignedOut();
+    // Only a REFUSED READ OF YOUR OWN DATA means the session is gone. A refused WRITE is
+    // usually the anti-cheat turning down a jump in xp or coins — treating that as a
+    // sign-out made the app flip between "Signed out" and "Back online" for ever.
+    if (isMine && method === 'GET' && ++_deniedRow >= 3) markSignedOut();
     throw new Error('DENIED');
   }
-  if (isMyPath(path)) {
+  if (isMine && method === 'GET') {
     _deniedRow = 0;
-    // Talking to the database again? Whatever went wrong has passed — come back to life.
-    if (_signedOut) { _signedOut = false; pushToast('Back online', 'acc', 'refresh'); if (typeof startLive === 'function') startLive(); }
+    // Reading your own data again? Whatever went wrong has passed — come back to life.
+    if (_signedOut) { _signedOut = false; dbLog('ok', 'back online — the database is answering again'); if (typeof startLive === 'function') startLive(); }
   }
   if (!r.ok) throw new Error('DB_' + r.status);
   return r.json();
@@ -138,7 +146,7 @@ function initFirebase() {
     if (CFG().emulator && CFG().emulator.auth) authMod.connectAuthEmulator(FB.auth, CFG().emulator.auth, { disableWarnings: true });
     // Firebase refreshes (or drops) the session on its own — follow it instead of holding a stale user
     authMod.onAuthStateChanged(FB.auth, u => {
-      if (u) { _authUser = u; if (_signedOut) { _signedOut = false; pushToast('Signed back in', 'acc', 'login'); if (typeof startLive === 'function') startLive(); } }
+      if (u) { _authUser = u; if (_signedOut) { _signedOut = false; dbLog('ok', 'signed back in'); if (typeof startLive === 'function') startLive(); } }
       else if (_authUser) { _authUser = null; markSignedOut(); }
     });
     return FB.auth;
