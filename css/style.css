@@ -1539,3 +1539,14 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .friend-row .fr-btns{gap:4px;}
 @media (max-width:400px){.friend-row .btn.sm span,.friend-row .btn.sm{font-size:11px;}}
 .icon-btn.spin .ic{animation:trollSpin .6s linear infinite;}
+
+/* ── Install banner ── */
+.install-btn{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;border-radius:14px;background:linear-gradient(120deg,rgba(var(--cyan-rgb),.14),var(--cell));border:1.5px solid rgba(var(--cyan-rgb),.45);text-align:left;cursor:pointer;transition:transform .1s,border-color var(--trans);}
+.install-btn:active{transform:scale(.985);}
+.install-btn.hidden{display:none!important;}
+.ib-ic{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:11px;background:rgba(var(--cyan-rgb),.16);color:var(--cyan);flex-shrink:0;}
+.ib-ic .ic{width:17px;height:17px;}
+.install-btn .ib-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.install-btn .ib-txt b{font-size:13px;}
+.install-btn .ib-txt small{font-family:var(--mono);font-size:10px;color:var(--dim);}
+#set-install-btn[disabled]{opacity:.5;}

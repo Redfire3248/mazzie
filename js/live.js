@@ -363,3 +363,60 @@ function notifyUser(title, body, tag) {
   if (reg) return post(reg);
   if (navigator.serviceWorker) navigator.serviceWorker.ready.then(post).catch(() => {});
 }
+
+// ══════════════════════════════════════════════════
+// INSTALLING — Chrome hands us its own prompt; iPhone needs a sentence of instruction
+// ══════════════════════════════════════════════════
+let _installEvent = null;
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+function installState() {
+  if (isStandalone()) return 'installed';
+  if (_installEvent) return 'ready';          // Chrome will show a real prompt
+  if (isIos()) return 'ios';                  // Safari has no prompt: tell them where to tap
+  return 'unavailable';
+}
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();                         // keep it for our own button
+  _installEvent = e;
+  updateInstallUI();
+});
+window.addEventListener('appinstalled', () => {
+  _installEvent = null;
+  pushToast('MAZZIE installed — open it from your home screen', 'acc', 'check');
+  updateInstallUI();
+});
+async function installApp() {
+  const st = installState();
+  if (st === 'installed') { pushToast('Already installed', 'info', 'check'); return; }
+  if (st === 'ready') {
+    _installEvent.prompt();
+    const res = await _installEvent.userChoice.catch(() => null);
+    if (res && res.outcome === 'accepted') _installEvent = null;
+    updateInstallUI();
+    return;
+  }
+  if (st === 'ios') {
+    showAvatarMessage('Add to Home Screen',
+      'Tap the Share button at the bottom of Safari, then "Add to Home Screen". Notifications only work once it is added.',
+      'MAZZIE', null, 9000);
+    return;
+  }
+  pushToast('Your browser has no install button — try Chrome, or add it to your home screen', 'info');
+}
+function updateInstallUI() {
+  const st = installState();
+  const show = st === 'ready' || st === 'ios';
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.classList.toggle('hidden', !show);
+  const sub = document.getElementById('install-sub');
+  if (sub) sub.innerText = st === 'ios' ? 'Share → Add to Home Screen' : 'One tap — an icon on your home screen';
+  const row = document.getElementById('set-install');
+  if (row) row.hidden = st === 'unavailable';
+  const val = document.getElementById('set-install-val');
+  if (val) val.innerText = st === 'installed' ? 'Installed — running as an app'
+    : st === 'ios' ? 'Safari: Share → Add to Home Screen'
+    : 'Adds an icon and runs without browser bars';
+  const btn = document.getElementById('set-install-btn');
+  if (btn) { btn.disabled = st === 'installed'; btn.innerText = st === 'installed' ? 'Installed' : 'Install'; }
+}

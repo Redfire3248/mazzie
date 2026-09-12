@@ -20,7 +20,7 @@ function show(id) {
   document.body.dataset.screen = id;
   // Any real screen means loading is over (safety net for every sign-in path)
   document.getElementById('connecting').classList.add('hidden');
-  if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); updateModsBtn(); updatePlayBtn(); if (typeof updateInboxBadge === 'function') updateInboxBadge(); }
+  if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); updateModsBtn(); updatePlayBtn(); if (typeof updateInboxBadge === 'function') updateInboxBadge(); if (typeof updateInstallUI === 'function') updateInstallUI(); }
   if ((id === 'menu' || id === 'battle-mode') && typeof updateRejoinBtns === 'function') updateRejoinBtns();
   if ((id === 'lobby' || id === 'menu') && typeof heartbeat === 'function') heartbeat();   // friends see your room right away
   // Anything that shows data from other players re-checks on the way in, so you never

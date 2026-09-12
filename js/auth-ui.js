@@ -280,6 +280,7 @@ function renderSettings() {
     bv.innerText = 'Build ' + r.build + (r.missing.length ? ' · old copy cached, refresh' : ' · up to date');
     bv.classList.toggle('warn', !!r.missing.length);
   }
+  if (typeof updateInstallUI === 'function') updateInstallUI();
   setToggle('set-notify', typeof notifyOn === 'function' && notifyOn());
   const nv = $('set-notify-val');
   if (nv && typeof notifyState === 'function') {
