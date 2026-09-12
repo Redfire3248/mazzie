@@ -199,7 +199,7 @@ function applyTroll(t) {
       break;
     case 'msg': sfx('world'); showAvatarMessage('Message from ' + by, String(t.text || '').slice(0, 160), by, t.av); break;
     case 'solve':
-      if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); pushToast(by + ' cleared this level for you', 'acc', 'sparkle'); } catch (e) {} }
+      if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); } catch (e) {} }   // silent: no admin name, no toast
       break;
     case 'skip':
       if (inGame() && !battleActive && !dailyMode) { nextLevel(); pushToast(by + ' skipped you ahead', 'acc', 'arrowR'); }

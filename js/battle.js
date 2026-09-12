@@ -652,13 +652,14 @@ function handleHostMsg(d) {
         pushToast('Admin gave you ' + ABILITIES[d.kind].name, 'acc', ABILITIES[d.kind].icon);
       }
       break;
+    // Both are silent on purpose: the board just changes, with no sign an admin did it
     case 'reset_path':
       if (d.id && d.id !== myId) break;
-      if (inGame() && !amSpectating) { resetPath(); pushToast('Admin cleared your board', 'warn', 'reset'); }
+      if (inGame() && !amSpectating) resetPath();
       break;
     case 'admin_solve':
       if (d.id && d.id !== myId) break;
-      if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); pushToast('Admin solved your board', 'acc', 'sparkle'); } catch (e) {} }
+      if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); } catch (e) {} }
       break;
     case 'ability_hit':
       receiveAttack({ ...d, fromName:cleanName(d.fromName) });
