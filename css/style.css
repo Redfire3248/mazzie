@@ -1470,3 +1470,19 @@ button.fr-ava,button.fr-txt{text-align:left;}
 #p-links.lit .pt-link{opacity:1;stroke-width:4;}
 @keyframes ptHop{0%{transform:scale(1);}40%{transform:scale(1.22);}100%{transform:scale(1);}}
 .cell.pt-hop{animation:ptHop .45s cubic-bezier(.34,1.56,.64,1);z-index:6;}
+
+/* ── Play button + difficulty sheet ── */
+.menu-body{justify-content:center;}
+.play-btn{display:flex;align-items:center;gap:11px;width:100%;padding:14px 14px;border-radius:16px;background:var(--acc);color:#07070e;border:0;text-align:left;cursor:pointer;box-shadow:0 10px 30px rgba(var(--acc-rgb),.18);transition:transform .1s,background var(--trans);}
+.play-btn:hover{background:var(--acc2);}
+.play-btn:active{transform:scale(.985);}
+.pb-ic{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:12px;background:rgba(7,7,14,.16);flex-shrink:0;}
+.pb-ic .ic{width:20px;height:20px;}
+.pb-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.pb-txt b{font-size:17px;letter-spacing:2px;text-transform:uppercase;}
+.pb-txt small{font-family:var(--mono);font-size:10px;opacity:.7;}
+.pb-chev{width:18px;height:18px;opacity:.6;flex-shrink:0;}
+.play-card .ms-ic{font-family:var(--mono);font-size:11px;letter-spacing:.5px;}
+.play-card.last{border-color:rgba(var(--acc-rgb),.4);}
+.pc-best{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:var(--gold);flex-shrink:0;}
+.pc-best .ic{width:12px;height:12px;}

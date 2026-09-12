@@ -852,3 +852,49 @@ function updateModsBtn() {
   const btn = document.getElementById('mods-btn');
   if (btn) btn.classList.toggle('on', !!on.length);
 }
+
+// ══════════════════════════════════════════════════
+// PLAY SHEET — every difficulty behind one button, so the menu stays calm
+// ══════════════════════════════════════════════════
+const DIFF_BLURB = {
+  baby:   'Tiny board, no obstacles — a warm-up',
+  easy:   'Room to think',
+  medium: 'More numbers, a few obstacles',
+  hard:   'Long paths and tight corners',
+  expert: 'The biggest board and the most to track'
+};
+function openPlaySheet() {
+  const el = document.getElementById('play-sheet'); if (!el) return;
+  renderPlaySheet();
+  el.classList.remove('hidden');
+  requestAnimationFrame(() => el.classList.add('in'));
+  sfx('tap');
+}
+function closePlaySheet() {
+  const el = document.getElementById('play-sheet'); if (!el) return;
+  el.classList.remove('in');
+  setTimeout(() => el.classList.add('hidden'), 200);
+}
+function renderPlaySheet() {
+  const s = loadSave();
+  document.getElementById('play-sheet-body').innerHTML = `<div class="ms-group">` + DIFFS.map(d => {
+    const c = CONFIGS[d], b = getBest(d);
+    return `<button class="ms-card play-card${d === s.diff ? ' last' : ''}" onclick="playDiff('${d}')">
+      <span class="ms-ic">${c.r}×${c.c}</span>
+      <span class="ms-txt"><b>${d[0].toUpperCase() + d.slice(1)}</b><small>${escapeHtml(DIFF_BLURB[d] || '')}</small></span>
+      <span class="pc-best">${b ? ic('trophy') + fmtMs(b) : ''}</span>
+      <i data-ic="chevR" class="mb-chev"></i>
+    </button>`;
+  }).join('') + `</div>`;
+  hydrateIcons(document.getElementById('play-sheet-body'));
+}
+function playDiff(d) {
+  if (!DIFFS.includes(d)) return;
+  closePlaySheet();
+  setTimeout(() => startFresh(d), 120);
+}
+function updatePlayBtn() {
+  const sub = document.getElementById('play-btn-sub'); if (!sub) return;
+  const s = loadSave();
+  sub.innerText = s.diff ? 'Last played: ' + s.diff[0].toUpperCase() + s.diff.slice(1) : 'Pick a difficulty';
+}
