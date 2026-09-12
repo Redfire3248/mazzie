@@ -231,8 +231,6 @@ function broadcastLobbySettings() {
 const MODIFIERS = {
   boosts: { name: 'Power-ups',     icon: 'bolt',    desc: 'Boosts appear on the board and in your slots' },
   events: { name: 'Random Events', icon: 'sparkle', desc: 'Flips, spins, mirrors and worse hit random players mid-round' },
-  ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible — remember where you have been' },
-  fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is readable' },
   oneshot:{ name: 'One Shot',      icon: 'target',  short: 'One Shot', desc: 'One wrong move and your whole path is wiped' },
   rush:   { name: 'Rush',          icon: 'clock',   short: 'Rush',     desc: 'A countdown per board — run out and the path resets' },
   // Puzzle pieces (see PIECES in js/puzzle.js) — these change the board itself
@@ -269,7 +267,7 @@ function applyMods(list) {
 // PARTY MODE ("Chaos") — the host throws a random troll at a random racer every 10–16 s
 // ══════════════════════════════════════════════════
 const PARTY_TROLLS = { flip: 'flipped upside down', spin: 'sent spinning', mirror: 'mirrored', shake: 'an earthquake',
-  tiny: 'shrunk', invert: 'colour-flipped', fog: 'fogged', frost: 'frozen', party: 'a disco', honk: 'honked' };
+  tiny: 'shrunk', invert: 'colour-flipped', fog: 'fogged', ghost: 'ghosted', frost: 'frozen', party: 'a disco', honk: 'honked' };
 let _chaosT = null, _chaosHit = {}, _chaosLastId = null;
 function startChaos() {
   clearTimeout(_chaosT);

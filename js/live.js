@@ -19,6 +19,7 @@ const TROLLS = {
   honk:      { desc: 'Plays a silly honk' },
   frost:     { desc: 'Freezes their board (4s)' },
   fog:       { desc: 'Hides their numbers (6s)' },
+  ghost:     { desc: 'Makes their trail invisible (7s)' },
   fakeban:   { desc: 'Fake "you are banned" screen, then "just kidding"' },
   fakecoins: { desc: 'Fake "+1,000,000 coins", then "just kidding"' },
   msg:       { desc: 'Private message popup', text: true },
@@ -169,6 +170,7 @@ function applyTroll(t) {
     case 'honk':   sfx('honk'); setTimeout(() => sfx('honk'), 700); break;
     case 'frost':  if (inGame() && !amSpectating) { const ms = t.ms ? 2000 : 4000; inputLockedUntil = performance.now() + ms; isDrawing = false; grid.classList.add('frosted'); setTimeout(() => grid.classList.remove('frosted'), ms); sfx('hit'); } break;
     case 'fog':    grid.classList.add('fogged'); clearTimeout(window._fogT); window._fogT = setTimeout(() => grid.classList.remove('fogged'), t.ms || 6000); break;
+    case 'ghost':  tempClass(document.getElementById('game'), 'mod-ghost', t.ms || 7000); break;
     case 'fakeban': fakeBan(by); break;
     case 'fakecoins':
       sfx('reward'); spawnParticles();

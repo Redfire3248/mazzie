@@ -8,7 +8,7 @@ function randSeed() { return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0
 // ══════════════════════════════════════════════════
 // MODIFIERS IN SOLO — the same list rooms use, minus the ones that need other players
 // ══════════════════════════════════════════════════
-const SOLO_MODS = ['portal', 'oneway', 'locks', 'ghost', 'fog', 'oneshot', 'rush'];
+const SOLO_MODS = ['portal', 'oneway', 'locks', 'oneshot', 'rush'];
 const cleanSolo = l => (Array.isArray(l) ? l : []).filter(k => SOLO_MODS.includes(k));
 function soloMods() { try { return cleanSolo(JSON.parse(localStorage.getItem('mz_pieces') || '[]')); } catch (e) { return []; } }
 function setSoloMods(list) { try { localStorage.setItem('mz_pieces', JSON.stringify(cleanSolo(list))); } catch (e) {} }
@@ -806,7 +806,6 @@ function explainPieces() {
 // ══════════════════════════════════════════════════
 const MOD_GROUPS = [
   { lbl: 'Board pieces', sub: 'change the puzzle itself', keys: ['portal', 'oneway', 'locks'] },
-  { lbl: 'Twists',       sub: 'change what you can see',   keys: ['ghost', 'fog'] },
   { lbl: 'Rules',        sub: 'change what a mistake costs', keys: ['oneshot', 'rush'] }
 ];
 function openModsSheet() {
