@@ -227,9 +227,29 @@ const CMDS = {
     await Promise.all(targets.map(x => adminTroll(x.id, kind, extra)));
     tOk(kind + ' → ' + targets.map(x => x.name).join(', ') + (targets.length === 1 && !onlineCache.some(o => o.id === targets[0].id) ? '  (fires if they are online in the next 3 min)' : ''));
   } },
-  coins: { desc:'Your coins (admin)', sub:{
-    add: { args:[NUM('<amount>')], desc:'Add coins to yourself', run(a) { addCoins(needInt(a[0], 'amount')); updateMenuProfile(); syncAccountToCloud(); tOk('coins = ' + getCoins()); } },
-    set: { args:[NUM('<amount>')], desc:'Set your coins', run(a) { writeSave({ coins: Math.max(0, needInt(a[0], 'amount')) }); updateCoinUI(); syncAccountToCloud(); tOk('coins = ' + getCoins()); } }
+  coins: { desc:'Coins — yours or any player (admin)', sub:{
+    add: { args:[NUM('<amount>')], desc:'Add coins to yourself', run(a) { addCoins(needInt(a[0], 'amount')); updateMenuProfile(); syncAccountToCloud(); tOk('coins = ' + fmtCoins(getCoins())); } },
+    set: { args:[NUM('<amount>')], desc:'Set your coins', run(a) { writeSave({ coins: Math.max(0, needInt(a[0], 'amount')) }); updateCoinUI(); syncAccountToCloud(); tOk('coins = ' + fmtCoins(getCoins())); } },
+    give: { args:[H('<player|me|*>', () => ['me', STAR, ...accountNames()]), NUM('<amount>')], desc:'Give coins to a player ("*" = everyone; negative takes them back)', async run(a) {
+      const n = needInt(a[1], 'amount');
+      const who = (a[0] || '').toLowerCase();
+      if (!a[0] || who === 'me') { addCoins(n); updateMenuProfile(); syncAccountToCloud(); return tOk('coins = ' + fmtCoins(getCoins())); }
+      needSecure();
+      const targets = isStar(who) ? await refreshAccountCache() : [await findAccount(a[0])];
+      if (!targets.length) return tWarn('no accounts');
+      let done = 0;
+      for (const x of targets) {
+        try {
+          const acc = await dbGet('/accounts/' + x.id);
+          const next = Math.max(0, (acc && acc.coins || 0) + n);
+          await dbPatch('/accounts/' + x.id, { coins: next });
+          if (n > 0) await adminTroll(x.id, 'gift', { value: n }).catch(() => {});   // they get a popup
+          if (x.id === (currentAccount || {}).id) { writeSave({ coins: next }); updateCoinUI(); }
+          done++;
+        } catch (e) { tWarn('could not pay ' + x.name); }
+      }
+      tOk((n < 0 ? 'took ' : 'gave ') + fmtCoins(Math.abs(n)) + ' coins ' + (n < 0 ? 'from ' : '→ ') + (done === 1 ? targets[0].name : done + ' players'));
+    } }
   } },
   accounts: { desc:'List every account (admin)', args:[H('[search]')], async run(a) {
     needSecure();

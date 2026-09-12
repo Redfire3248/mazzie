@@ -475,9 +475,10 @@ function onGiftsChanged(all) {
 // INBOX — every gift waiting for you, with who sent it
 // ══════════════════════════════════════════════════
 function updateInboxBadge() {
-  const b = document.getElementById('inbox-badge'); if (!b) return;
+  const b = document.getElementById('inbox-badge'), btn = document.getElementById('inbox-btn');
   const n = giftList().length;
-  b.hidden = !n; b.innerText = n > 9 ? '9+' : n;
+  if (b) { b.hidden = !n; b.innerText = n > 9 ? '9+' : n; }
+  if (btn) btn.hidden = !n;                     // nothing waiting → no empty mailbox to open
 }
 function openInbox() { if (typeof pollGifts === 'function') pollGifts(); show('inbox'); renderInbox(); }
 function renderInbox() {
