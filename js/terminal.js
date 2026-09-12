@@ -69,7 +69,7 @@ function pad(s, n) { s = String(s); return s.length >= n ? s.slice(0, n) : s + '
 const H = (hint, vals, rest) => ({ hint, vals, rest });
 const playerNames = () => Object.values(lobbyPlayers).map(p => p.name);
 const playerArg   = (extra) => H('<player>', () => [...(extra || []), 'me', ...playerNames()]);
-const NUM = h => H(h || '<n>');
+const NUM = h => H(h || '<n>', ['10', '1k', '100k', '10m', '1b']);
 // "*" means "all of them" — usable wherever a command takes one item (set, id, crate, boost, effect)
 const isStar = t => t === '*' || String(t || '').toLowerCase() === 'all';
 const STAR = '*';
@@ -84,7 +84,15 @@ function resolvePlayer(tok) {
   if (!hit) { const pre = entries.filter(([, p]) => p.name.toLowerCase().startsWith(t)); if (pre.length === 1) hit = pre[0]; }
   return hit ? hit[0] : null;
 }
-function needInt(v, name) { const n = parseInt(v); if (isNaN(n)) throw new Error((name || 'value') + ' must be a number'); return n; }
+// Numbers accept k/m/b (and commas): 10k, 2.5m, 100M, 1b, 1,250
+function parseNum(v) {
+  const t = String(v == null ? '' : v).trim().toLowerCase().replace(/[, _]/g, '');
+  const m = /^(-?\d*\.?\d+)([kmbt]?)$/.exec(t);
+  if (!m) return NaN;
+  const mult = { '': 1, k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[m[2]];
+  return Math.round(parseFloat(m[1]) * mult);
+}
+function needInt(v, name) { const n = parseNum(v); if (isNaN(n)) throw new Error((name || 'value') + ' must be a number (10, 10k, 2.5m, 1b)'); return n; }
 function needHost()   { if (!isHost) throw new Error('only the room host can do that'); }
 function needBattle() { if (!battleActive) throw new Error('no battle in progress'); }
 function needSoloBoard() {
@@ -210,7 +218,7 @@ const CMDS = {
       return tOk(kinds.length + ' pranks → ' + targets2.map(x => x.name).join(', ') + ' (one every 1.5s)');
     }
     if (!TROLLS[kind]) { tWarn('effects (or * for all):'); Object.entries(TROLLS).forEach(([k, v]) => termPrint('  ' + pad(k, 11) + v.desc, 'dim')); return; }
-    const extra = TROLLS[kind].text ? { text: a.slice(2).join(' ').slice(0, 160) } : TROLLS[kind].value ? { value: parseInt(a[2]) || 0 } : {};
+    const extra = TROLLS[kind].text ? { text: a.slice(2).join(' ').slice(0, 160) } : TROLLS[kind].value ? { value: parseNum(a[2]) || 0 } : {};
     if (TROLLS[kind].text && !extra.text) throw new Error('add a message: troll <player> msg hello there');
     let targets;
     if ((a[0] || '').toLowerCase() === 'all') targets = (await adminOnline()).filter(o => o.id !== currentAccount.id);
@@ -473,7 +481,7 @@ const CMDS = {
       const tok = (a[1] || 'basic').toLowerCase();
       const ids = isStar(tok) ? Object.keys(CRATES) : [tok];
       if (ids.some(k => !CRATES[k])) throw new Error('crates: ' + Object.keys(CRATES).join(', ') + ' (or *)');
-      const n = Math.max(1, Math.min(20, parseInt(a[2]) || 1));
+      const n = Math.max(1, Math.min(20, parseNum(a[2]) || 1));
       for (const id of ids) for (let i = 0; i < n; i++) await sendGift(id, x.name, a.slice(3).join(' '), true);
       tOk(ids.map(id => n + ' × ' + CRATES[id].name).join(' · ') + ' → ' + x.name);
     } },

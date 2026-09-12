@@ -20,7 +20,9 @@
   --mono:'DM Mono',ui-monospace,Menlo,Consolas,monospace;
   --shadow:0 20px 60px rgba(0,0,0,.55);
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;margin:0;padding:0;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;margin:0;padding:0;}
+/* Only the puzzle itself swallows touch moves — everything else must stay scrollable on a phone */
+.board-wrap,.board-wrap *,#grid,#grid *,#grid-svg,#grid-svg *{touch-action:none;}
 input,textarea,select,.txt{touch-action:auto;user-select:text;-webkit-user-select:text;}
 button{touch-action:manipulation;font:inherit;color:inherit;background:none;border:none;cursor:pointer;}
 [hidden]{display:none!important;}
@@ -1486,3 +1488,33 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .play-card.last{border-color:rgba(var(--acc-rgb),.4);}
 .pc-best{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:var(--gold);flex-shrink:0;}
 .pc-best .ic{width:12px;height:12px;}
+
+.ms-body{touch-action:pan-y;}
+
+/* ── Gift form: pick the crate and how many ── */
+.gift-crates{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+.gift-chip{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 10px;border-radius:12px;background:var(--cell);border:1.5px solid var(--cb);font-size:11.5px;font-weight:700;color:var(--txt2);cursor:pointer;transition:all .15s;}
+.gift-chip small{font-family:var(--mono);font-size:9.5px;opacity:.75;font-weight:400;}
+.gift-chip.on{border-color:rgba(var(--gold-rgb),.6);background:linear-gradient(120deg,rgba(var(--gold-rgb),.14),var(--cell));color:var(--gold);}
+.gift-count{display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;}
+.gc-n{display:flex;flex-direction:column;align-items:center;min-width:56px;}
+.gc-n b{font-family:var(--mono);font-size:20px;}
+.gc-n small{font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;}
+.gc-quick{display:flex;gap:5px;}
+.gc-chip{padding:4px 9px;border-radius:9px;background:var(--cell);border:1px solid var(--cb);font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;}
+.gc-chip:hover{color:var(--gold);border-color:rgba(var(--gold-rgb),.4);}
+.btn.poor{opacity:.55;}
+/* ── Inbox ── */
+.inbox-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;touch-action:pan-y;flex:1;min-height:120px;}
+.inbox-row{display:flex;align-items:center;gap:11px;padding:10px;border-radius:14px;background:var(--cell);border:1.5px solid var(--cb);text-align:left;cursor:pointer;transition:border-color var(--trans),transform .1s;}
+.inbox-row:active{transform:scale(.99);}
+.inbox-row:hover{border-color:rgba(var(--gold-rgb),.45);}
+.ib-art{width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.ib-art svg{width:100%;height:100%;}
+.ib-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.ib-txt b{font-size:13px;}
+.ib-txt small{font-family:var(--mono);font-size:10px;color:var(--dim);}
+.ib-msg{font-size:11px;color:var(--txt2);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ib-open{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;}
+.ib-open .ic{width:13px;height:13px;}
+.ib-all{margin-top:4px;}

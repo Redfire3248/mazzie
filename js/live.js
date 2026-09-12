@@ -49,7 +49,7 @@ function startLive() {
 }
 function stopLive() {
   _liveOn = false;
-  if (_bcES) _bcES.close(); if (_trES) _trES.close(); _bcES = _trES = null; clearInterval(_giftT);
+  _bcES = esKill(_bcES); _trES = esKill(_trES); clearInterval(_giftT);
   if (typeof onGiftsChanged === 'function') _gifts = {};
   if (typeof stopFriends === 'function') stopFriends();
   clearInterval(_hbT); clearInterval(_wdT);
@@ -75,16 +75,34 @@ function reconnectLive() {
 }
 // A stream is dead if it closed, or Firebase's keep-alive (sent about every 30 s) stopped arriving
 function watchStreams() {
-  if (!_liveOn || document.visibilityState === 'hidden') return;
+  if (!_liveOn || document.visibilityState === 'hidden' || streamsPaused()) return;
   const all = [_bcES, _trES, typeof _rqES !== 'undefined' ? _rqES : null, typeof _ivES !== 'undefined' ? _ivES : null];
   if (all.some(es => !es || es.readyState === 2 || Date.now() - (es._last || 0) > 100000)) reconnectLive();
 }
+
+// A stream whose token has expired answers 401 and the browser then retries the SAME stale URL
+// for ever — a flood of failures that also makes the page stutter. So we take the retries over:
+// close the stream ourselves and reopen it with a fresh token, backing off as failures pile up.
+let _esFails = 0, _esPause = 0;
+// Closing a stream on purpose (reconnect, sign-out) must not count as a failure
+function esKill(es) { if (!es) return null; es._dead = true; try { es.close(); } catch (e) {} return null; }
+function streamBackoff() { return Math.min(60000, 1200 * Math.pow(2, Math.min(_esFails, 6))); }
+function streamsPaused() { return Date.now() < _esPause; }
 
 // ── Streams: apply 'put'/'patch' events to a local copy of the node ──
 function streamNode(url, onChange, onAuthRevoked) {
   const es = new EventSource(url);
   es._last = Date.now();
-  const touch = () => { es._last = Date.now(); };
+  const touch = () => { es._last = Date.now(); _esFails = 0; };
+  es.addEventListener('error', () => {
+    if (es._dead) return;
+    es._dead = true; es.close();                       // stop the browser's own retry loop
+    _esFails++;
+    const wait = streamBackoff();
+    _esPause = Date.now() + wait;                      // the watchdog leaves it alone until then
+    if (_esFails === 6) console.warn('live updates keep failing — slowing down retries');
+    if (onAuthRevoked) setTimeout(() => { if (_liveOn) onAuthRevoked(); }, wait);
+  });
   es.addEventListener('keep-alive', touch);
   es.addEventListener('open', touch);
   let cur = null;
@@ -107,7 +125,7 @@ function streamNode(url, onChange, onAuthRevoked) {
   return es;
 }
 async function listenBroadcast() {
-  if (_bcES) _bcES.close();
+  _bcES = esKill(_bcES);
   _bcES = streamNode(await streamUrl('/broadcast'), b => {
     if (!b || !b.msg || typeof b.at !== 'number') return;
     const seen = +localStorage.getItem('mz_bc_seen') || 0;
@@ -117,7 +135,7 @@ async function listenBroadcast() {
   }, () => { if (_liveOn) listenBroadcast(); });          // token expired → reconnect with a fresh one
 }
 async function listenTroll() {
-  if (_trES) _trES.close();
+  _trES = esKill(_trES);
   if (!currentAccount || !currentAccount.id) return;
   const path = '/troll/' + currentAccount.id;
   _trES = streamNode(await streamUrl(path), t => {

@@ -135,6 +135,7 @@
     <button class="icon-btn admin" id="menu-admin-btn" hidden onclick="adminOpen()" title="Admin terminal"><i data-ic="terminal"></i></button>
     <span class="flex"></span>
     <button class="icon-btn friends-btn" onclick="openFriends()" title="Friends"><i data-ic="users"></i><b class="badge" id="friends-badge" hidden>0</b></button>
+    <button class="icon-btn friends-btn" onclick="openInbox()" title="Inbox — gifts sent to you"><i data-ic="mail"></i><b class="badge" id="inbox-badge" hidden>0</b></button>
     <button class="coin-chip" onclick="openStore()" title="Coins — open the Store"><i data-ic="coin"></i><span class="coin-count">0</span><i data-ic="plus" class="cc-plus"></i></button>
     <button class="icon-btn" id="sound-btn" onclick="toggleSound()" title="Sound"><i data-ic="sound"></i></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings"><i data-ic="gear"></i></button>
@@ -183,6 +184,19 @@
       <button class="tile locker" onclick="openLocker()"><i data-ic="palette"></i><b>Locker</b><small>Customize</small></button>
       <button class="tile store" onclick="openStore()"><i data-ic="shop"></i><b>Store</b><small id="store-info">Crates</small></button>
     </div>
+  </div>
+</div>
+
+<!-- INBOX -->
+<div id="inbox" class="screen hidden">
+  <div class="panel-card">
+    <div class="panel-head">
+      <button class="icon-btn" onclick="show('menu')" title="Back"><i data-ic="arrowL"></i></button>
+      <div class="panel-title">Inbox</div>
+      <span class="chip" id="inbox-count"></span>
+    </div>
+    <div class="inbox-list" id="inbox-list"></div>
+    <div class="note"><i data-ic="info"></i>Gifts are crates another player paid for. Open one and whatever drops is yours.</div>
   </div>
 </div>
 

@@ -41,7 +41,7 @@ async function listenFriends() {
   }, () => { if (_liveOn) listenFriends(); });
 }
 function stopFriends() {
-  [_rqES, _ivES].forEach(es => { if (es) es.close(); });
+  [_rqES, _ivES].forEach(es => esKill(es));
   _rqES = _ivES = null;
   clearInterval(_presT); clearInterval(_frPollT);
 }
@@ -197,7 +197,11 @@ async function removeFriend(id, name) {
   try { await dbPatch('/', { ['friends/' + me + '/' + id]: null, ['friends/' + id + '/' + me]: null }); delete _friends[id]; friendsChanged(); }
   catch (e) { pushToast('Could not remove — try again', 'warn'); }
 }
-function giftFriend(name) { openStore(); openGiftForm('basic', name); }
+function giftFriend(name) {
+  if (authMode() !== 'secure' || !currentAccount || currentAccount.offline) { pushToast('Gifting needs you signed in online', 'warn', 'gift'); return; }
+  openStore();
+  setTimeout(() => openGiftForm('basic', name), 60);   // after the Store screen has painted
+}
 
 // ── Invites: one tap makes a room (if needed) and invites them ──
 async function inviteFriend(id) {

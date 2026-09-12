@@ -458,12 +458,52 @@ function onGiftsChanged(all) {
   Object.entries(_gifts).forEach(([id, g]) => {
     if (prev[id] || !g || !CRATES[g.crate]) return;
     sfx('reward'); buzz([20, 40, 20]);
-    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + cleanName(g.fromName), title: CRATES[g.crate].name,
-      sub: g.msg ? '"' + String(g.msg).slice(0, 60) + '"' : 'Open it in the Store', ms: 5000 });
+    const who = cleanName(g.fromName || 'Someone');
+    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + who, title: CRATES[g.crate].name,
+      sub: g.msg ? '"' + String(g.msg).slice(0, 60) + '"' : 'Open it from your Inbox', ms: 5000 });
+    // A line that stays put too, so a gift is never missed while you are mid-board
+    pushToast(who + ' sent you a ' + CRATES[g.crate].name + (g.msg ? ' — "' + String(g.msg).slice(0, 40) + '"' : ''), 'acc', 'gift');
+    if (typeof addChatMsg === 'function' && typeof inBattleSession === 'function' && inBattleSession()) addChatMsg(who + ' sent you a gift', null, true);
   });
   if (isScreen('store')) renderCrates();
+  if (isScreen('inbox')) renderInbox();
+  updateInboxBadge();
   const si = document.getElementById('store-info');
   if (si && giftList().length) { si.innerText = giftList().length + ' gift' + (giftList().length > 1 ? 's' : '') + '!'; si.classList.add('done'); }
+}
+// ══════════════════════════════════════════════════
+// INBOX — every gift waiting for you, with who sent it
+// ══════════════════════════════════════════════════
+function updateInboxBadge() {
+  const b = document.getElementById('inbox-badge'); if (!b) return;
+  const n = giftList().length;
+  b.hidden = !n; b.innerText = n > 9 ? '9+' : n;
+}
+function openInbox() { if (typeof pollGifts === 'function') pollGifts(); show('inbox'); renderInbox(); }
+function renderInbox() {
+  const box = document.getElementById('inbox-list'); if (!box) return;
+  const gifts = giftList();
+  document.getElementById('inbox-count').innerText = gifts.length ? gifts.length + ' waiting' : '';
+  if (!gifts.length) {
+    box.innerHTML = `<div class="search-empty">${ic('mail')}Nothing here yet. Gifts from other players land in this box.</div>`;
+    return;
+  }
+  box.innerHTML = gifts.map(g => {
+    const c = CRATES[g.crate];
+    return `<button class="inbox-row t-${c.tone}" onclick="openGiftById('${g.id}')">
+      <span class="ib-art">${crateArt(c.tone)}</span>
+      <span class="ib-txt"><b>${escapeHtml(c.name)}</b><small>from ${escapeHtml(cleanName(g.fromName || 'someone'))}${g.at ? ' · ' + ago(Date.now() - g.at) : ''}</small>
+        ${g.msg ? `<em class="ib-msg">"${escapeHtml(String(g.msg).slice(0, 60))}"</em>` : ''}</span>
+      <span class="ib-open">${ic('gift')}Open</span>
+    </button>`;
+  }).join('') + (gifts.length > 1 ? `<button class="btn primary ib-all" onclick="openGiftById('${gifts[0].id}')">${ic('gift')}Open them one by one</button>` : '');
+  hydrateIcons(box);
+}
+function openGiftById(id) {
+  const g = giftList().find(x => x.id === id) || giftList()[0];
+  if (!g || _crateBusy) return;
+  if (!isScreen('store')) openStore();
+  setTimeout(() => { closeCrate(); openCrates(g.crate, 1, { gift: g }); }, 60);
 }
 function openGift() {
   const g = giftList()[0]; if (!g) return closeCrate();
@@ -472,32 +512,65 @@ function openGift() {
   openCrates(g.crate, 1, { gift: g });
 }
 
+const GIFT_MAX = 20;
+let _giftPick = { crate: 'basic', n: 1, to: '' };
 function openGiftForm(crateId, toName) {
-  const c = CRATES[crateId];
+  const c = CRATES[crateId]; if (!c) return;
+  _giftPick = { crate: crateId, n: _giftPick.crate === crateId ? _giftPick.n : 1, to: toName || _giftPick.to || '' };
   const ov = document.getElementById('crate-open');
+  ov.className = 'crate-overlay t-' + c.tone;          // the sheet lives in this overlay — show it
   ov.innerHTML = `
     <div class="crate-sheet">
       <button class="icon-btn sheet-x" onclick="closeCrate()">${ic('x')}</button>
-      <div class="crate-art big">${crateArt(c.tone)}</div>
-      <div class="crate-top"><b>Gift a ${c.name}</b><span class="crate-kicker">They open it themselves · costs ${coinHtml(c.price)}</span></div>
-      <label class="field-box"><i data-ic="user"></i><input class="txt" id="gift-to" maxlength="16" placeholder="Friend's username" autocomplete="off" spellcheck="false"></label>
+      <div class="crate-art big" id="gift-art">${crateArt(c.tone)}</div>
+      <div class="crate-top"><b>Send a gift</b><span class="crate-kicker">They open it themselves</span></div>
+      <div class="gift-crates" id="gift-crates"></div>
+      <label class="field-box"><i data-ic="user"></i><input class="txt" id="gift-to" maxlength="16" placeholder="Friend's username" autocomplete="off" spellcheck="false" oninput="_giftPick.to=this.value"></label>
       <label class="field-box"><i data-ic="chat"></i><input class="txt" id="gift-msg" maxlength="60" placeholder="Message (optional)" autocomplete="off"></label>
+      <div class="gift-count">
+        <button class="icon-btn" onclick="giftCount(-1)" title="Fewer">${ic('minus')}</button>
+        <div class="gc-n"><b id="gift-n">1</b><small>crates</small></div>
+        <button class="icon-btn" onclick="giftCount(1)" title="More">${ic('plus')}</button>
+        <div class="gc-quick">${[5, 10, GIFT_MAX].map(n => `<button class="gc-chip" onclick="giftCount(0,${n})">${n}</button>`).join('')}</div>
+      </div>
       <div class="form-err" id="gift-err"></div>
       <div class="sheet-btns"><button class="btn secondary" onclick="openCrateSheet('${crateId}')">Back</button>
-        <button class="btn primary" id="gift-send" onclick="sendGift('${crateId}')">${ic('gift')}Send gift</button></div>
+        <button class="btn primary" id="gift-send" onclick="sendGift()">${ic('gift')}Send <span id="gift-cost"></span></button></div>
     </div>`;
   hydrateIcons(ov);
-  if (toName) document.getElementById('gift-to').value = toName;
-  setTimeout(() => document.getElementById(toName ? 'gift-msg' : 'gift-to').focus(), 50);
+  renderGiftPicker();
+  if (_giftPick.to) document.getElementById('gift-to').value = _giftPick.to;
+  setTimeout(() => document.getElementById(_giftPick.to ? 'gift-msg' : 'gift-to').focus(), 50);
 }
-async function sendGift(crateId, toNameArg, msgArg, free) {
+// Which crate, how many, and what that costs
+function renderGiftPicker() {
+  const box = document.getElementById('gift-crates'); if (!box) return;
+  const giftable = Object.entries(CRATES).filter(([id, c]) => !c.adminOnly && crateVisible(id));
+  box.innerHTML = giftable.map(([id, c]) =>
+    `<button class="gift-chip t-${c.tone}${id === _giftPick.crate ? ' on' : ''}" onclick="giftPickCrate('${id}')">${c.name.replace(' Crate', '')}<small>${coinHtml(c.price)}</small></button>`).join('');
+  const c = CRATES[_giftPick.crate];
+  const total = c.price * _giftPick.n;
+  const art = document.getElementById('gift-art'); if (art) art.innerHTML = crateArt(c.tone);
+  const ov = document.getElementById('crate-open'); if (ov) ov.className = 'crate-overlay t-' + c.tone;
+  const n = document.getElementById('gift-n'); if (n) n.innerText = _giftPick.n;
+  const cost = document.getElementById('gift-cost'); if (cost) cost.innerHTML = coinHtml(total);
+  const send = document.getElementById('gift-send'); if (send) send.classList.toggle('poor', getCoins() < total);
+}
+function giftPickCrate(id) { if (!CRATES[id]) return; _giftPick.crate = id; renderGiftPicker(); sfx('tap'); }
+function giftCount(d, set) {
+  _giftPick.n = Math.max(1, Math.min(GIFT_MAX, set || _giftPick.n + d));
+  renderGiftPicker(); sfx('tap');
+}
+async function sendGift(crateIdArg, toNameArg, msgArg, free, countArg) {
+  const crateId = crateIdArg || _giftPick.crate;
+  const count = Math.max(1, Math.min(GIFT_MAX, countArg || (crateIdArg ? 1 : _giftPick.n)));
   const c = CRATES[crateId];
   const toName = (toNameArg != null ? toNameArg : document.getElementById('gift-to').value).trim();
   const msg = (msgArg != null ? msgArg : (document.getElementById('gift-msg') || {}).value || '').trim().slice(0, 60);
   const err = t => { const e = document.getElementById('gift-err'); if (e) e.innerText = t; if (free) throw new Error(t); };
   if (authMode() !== 'secure' || !currentAccount || currentAccount.offline) return err('Gifting needs you to be signed in online.');
   if (!c || (c.adminOnly && !(free && isAdminUser()))) return err('That crate cannot be gifted.');
-  if (!free && getCoins() < c.price) return err(`You need ${c.price - getCoins()} more coins.`);
+  if (!free && getCoins() < c.price * count) return err(`You need ${c.price * count - getCoins()} more coins${count > 1 ? ' for ' + count + ' crates' : ''}.`);
   const btn = document.getElementById('gift-send'); if (btn) btn.disabled = true;
   try {
     const u = await dbGet('/usernames/' + nameKey(toName));
@@ -518,13 +591,18 @@ async function sendGift(crateId, toNameArg, msgArg, free) {
       await dbPut('/gifts/' + to + '/' + gid, gift);
       return { to, name: toName };
     }
-    // One atomic multi-path write: pay + record which gift was paid for + deliver it
-    const coins = getCoins() - c.price;
-    await dbPatch('/', { ['accounts/' + me + '/coins']: coins, ['accounts/' + me + '/lastGift']: to + '/' + gid, ['gifts/' + to + '/' + gid]: gift });
-    writeSave({ coins });
+    // One atomic multi-path write per crate: pay + record which gift was paid for + deliver it
+    let sent = 0;
+    for (let i = 0; i < count; i++) {
+      const id = i === 0 ? gid : me + '_' + Date.now().toString(36) + randStr(4);
+      const coins = getCoins() - c.price;
+      await dbPatch('/', { ['accounts/' + me + '/coins']: coins, ['accounts/' + me + '/lastGift']: to + '/' + id, ['gifts/' + to + '/' + id]: gift });
+      writeSave({ coins }); sent++;
+    }
     updateCoinUI();
     sfx('buy'); buzz([10, 30, 10]);
-    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift sent', title: c.name + ' → ' + cleanName(toName), chips: [{ html: coinHtml(-c.price), label: 'spent' }], quick: true });
+    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift sent', title: (sent > 1 ? sent + ' × ' : '') + c.name + ' → ' + cleanName(toName),
+      chips: [{ html: coinHtml(-c.price * sent), label: 'spent' }], quick: true });
     closeCrate();
   } catch (e) {
     if (btn) btn.disabled = false;
