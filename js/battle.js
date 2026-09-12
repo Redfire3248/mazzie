@@ -229,13 +229,12 @@ function broadcastLobbySettings() {
 // MODIFIERS — the host picks any mix; they apply to everyone's board for the whole match
 // ══════════════════════════════════════════════════
 const MODIFIERS = {
-  boosts: { name: 'Power-ups',     icon: 'bolt',    desc: 'Use boosts from your bag (Hint, Dash, Frost…)' },
-  events: { name: 'Random Events', icon: 'sparkle', desc: 'Random trolls hit random players' },
-  flip:   { name: 'Upside Down',   icon: 'flipv',   desc: 'The whole board is flipped' },
-  mirror: { name: 'Mirror',        icon: 'mirror',  desc: 'Left and right are swapped' },
-  spin:   { name: 'Spinning',      icon: 'spinner', desc: 'The board slowly turns' },
-  ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible' },
-  fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is shown' },
+  boosts: { name: 'Power-ups',     icon: 'bolt',    desc: 'Boosts appear on the board and in your slots' },
+  events: { name: 'Random Events', icon: 'sparkle', desc: 'Flips, spins, mirrors and worse hit random players mid-round' },
+  ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible — remember where you have been' },
+  fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is readable' },
+  oneshot:{ name: 'One Shot',      icon: 'target',  short: 'One Shot', desc: 'One wrong move and your whole path is wiped' },
+  rush:   { name: 'Rush',          icon: 'clock',   short: 'Rush',     desc: 'A countdown per board — run out and the path resets' },
   // Puzzle pieces (see PIECES in js/puzzle.js) — these change the board itself
   portal: { name: 'Portals',       icon: 'orb',     short: 'Portals', desc: 'Two linked cells: step on one, come out the other' },
   oneway: { name: 'One-Way',       icon: 'arrowR',  short: 'One-Way', desc: 'Arrow cells can only be entered from one side' },

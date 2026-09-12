@@ -76,6 +76,7 @@ for (const [diff, cfg] of Object.entries(CONFIGS)) {
       const idx = new Map(p.path.map((c, i) => [c, i]));
       if (!pieces.length && (p.portals.length || p.oneways.length || p.locks.length)) fail('pieces appeared while switched off', info);
       p.portals.forEach(([a, b]) => {
+        if (p.nodeCells.includes(a) || p.nodeCells.includes(b)) fail('portal on a numbered cell', info);
         if (!idx.has(a) || !idx.has(b)) fail('portal off the path', info);
         else if (Math.abs(idx.get(a) - idx.get(b)) !== 1) fail('portal ends are not consecutive on the path', info);
         if (Math.abs(Math.floor(a / cfg.c) - Math.floor(b / cfg.c)) + Math.abs(a % cfg.c - b % cfg.c) < 3) fail('portal hop too short', info);

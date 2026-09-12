@@ -87,6 +87,7 @@ function buildPuzzle({ rows, cols, baseNodes, level, diff, seed, pieces }) {
         if (j > n - 4) continue;
         const a = path[i], b = path[j];
         if (man(a, b) < 3) continue;                                  // must be a real jump
+        if (n - cut < totalNodes * 3) continue;                       // keep room to space the numbers
         if (portals.some(pr => pr.includes(a) || pr.includes(b))) continue;
         const drop = path.slice(i + 1, j);
         if (drop.some(c => portals.some(pr => pr.includes(c)))) continue;   // never cut away an earlier portal
@@ -99,8 +100,29 @@ function buildPuzzle({ rows, cols, baseNodes, level, diff, seed, pieces }) {
   const onPath = new Set(path);
 
   // Numbered nodes spread evenly along the path (1 = start, last = end)
-  const nodeCells = [];
-  for (let i = 1; i <= totalNodes; i++) nodeCells.push(path[Math.floor(((i - 1) / (totalNodes - 1)) * (path.length - 1))]);
+  const portalCells = new Set(portals.flat());
+  const nodePos = [];
+  for (let i = 1; i <= totalNodes; i++) nodePos.push(Math.floor(((i - 1) / (totalNodes - 1)) * (path.length - 1)));
+  // A number on a portal cell reads as one thing doing two jobs — nudge it one step along the path
+  const freeAt = p => p > 0 && p < path.length - 1 && !portalCells.has(path[p]);
+  for (let k = 1; k < nodePos.length - 1; k++) {
+    if (!portalCells.has(path[nodePos[k]])) continue;
+    let moved = false;
+    for (let d = 1; d <= 4 && !moved; d++) {
+      for (const p of [nodePos[k] + d, nodePos[k] - d]) {
+        if (p <= nodePos[k - 1] || p >= nodePos[k + 1] || !freeAt(p)) continue;
+        nodePos[k] = p; moved = true; break;
+      }
+    }
+    // No gap either side? push a neighbour along to make one
+    if (!moved) {
+      const up = nodePos[k] + 1, dn = nodePos[k] - 1;
+      if (freeAt(up) && nodePos[k + 1] > up && nodePos[k + 1] - 1 > up) { nodePos[k] = up; moved = true; }
+      else if (freeAt(up) && k + 1 < nodePos.length - 1 && nodePos[k + 2] > nodePos[k + 1] + 1) { nodePos[k + 1]++; nodePos[k] = up; moved = true; }
+      else if (freeAt(dn) && k - 1 > 0 && nodePos[k - 1] - 1 > nodePos[k - 2]) { nodePos[k - 1]--; nodePos[k] = dn; moved = true; }
+    }
+  }
+  const nodeCells = nodePos.map(p => path[p]);
 
   // One-way cells: only enterable from the side the solution came from
   const nodeSet = new Set(nodeCells), taken = new Set(portals.flat());

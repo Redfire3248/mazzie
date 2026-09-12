@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Righteous&family=Russo+One&family=Pacifico&family=Orbitron:wght@700;900&family=Bungee&family=Press+Start+2P&family=Cinzel+Decorative:wght@700;900&family=Permanent+Marker&family=Creepster&family=Monoton&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="css/style.css?v=20260914d">
+<link rel="stylesheet" href="css/style.css?v=20260914e">
 </head>
 <body>
 
@@ -173,10 +173,11 @@
       <button class="diff-btn" onclick="startFresh('hard')">Hard</button>
       <button class="diff-btn full" onclick="startFresh('expert')"><i data-ic="bolt"></i>Expert</button>
     </div>
-    <div class="pieces-wrap">
-      <div class="pieces-lbl"><i data-ic="grid"></i>Puzzle pieces<small>tap to switch on</small></div>
-      <div class="pieces-row" id="pieces-row"></div>
-    </div>
+    <button class="mods-btn" id="mods-btn" onclick="openModsSheet()">
+      <span class="mb-ic"><i data-ic="grid"></i></span>
+      <span class="mb-txt"><b>Board modifiers</b><span class="mb-sub" id="mods-btn-sub"></span></span>
+      <i data-ic="chevR" class="mb-chev"></i>
+    </button>
     <button class="menu-qm-btn" onclick="startQuickMatch()">
       <span class="qm-l"><span class="qm-ic"><i data-ic="target"></i></span><span class="qm-main">Quick Match</span></span>
       <span class="qm-sub" id="qm-bracket"></span>
@@ -186,6 +187,19 @@
       <button class="tile locker" onclick="openLocker()"><i data-ic="palette"></i><b>Locker</b><small>Customize</small></button>
       <button class="tile store" onclick="openStore()"><i data-ic="shop"></i><b>Store</b><small id="store-info">Crates</small></button>
     </div>
+  </div>
+</div>
+
+<!-- BOARD MODIFIERS (solo) -->
+<div id="mods-sheet" class="mods-sheet hidden">
+  <div class="ms-card-wrap">
+    <div class="ms-head">
+      <div class="ms-title"><i data-ic="grid"></i>Board modifiers</div>
+      <button class="icon-btn" onclick="clearSoloMods()" title="Turn everything off"><i data-ic="reset"></i></button>
+      <button class="icon-btn" onclick="closeModsSheet()" title="Done"><i data-ic="x"></i></button>
+    </div>
+    <div class="ms-body" id="mods-sheet-body"></div>
+    <button class="btn primary ms-done" onclick="closeModsSheet()"><i data-ic="check"></i>Done</button>
   </div>
 </div>
 
@@ -417,6 +431,7 @@
     <div id="timer">00:00</div>
     <div class="tb-right">
       <div class="lvl-badge" id="lvl-badge">LVL 1</div>
+      <div class="rush-pill" id="rush-pill" style="display:none;"></div>
       <div class="round-pill" id="round-pill">R1/3</div>
     </div>
   </div>
@@ -591,24 +606,24 @@
 <!-- Scripts load in dependency order -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js?v=secure1"></script>
-<script src="js/icons.js?v=20260914d"></script>
-<script src="js/state.js?v=20260914d"></script>
-<script src="js/save.js?v=20260914d"></script>
-<script src="js/cosmetics.js?v=20260914d"></script>
-<script src="js/account.js?v=20260914d"></script>
-<script src="js/auth-ui.js?v=20260914d"></script>
-<script src="js/puzzle.js?v=20260914d"></script>
-<script src="js/game.js?v=20260914d"></script>
-<script src="js/abilities.js?v=20260914d"></script>
-<script src="js/store.js?v=20260914d"></script>
-<script src="js/crates.js?v=20260914d"></script>
-<script src="js/friends.js?v=20260914d"></script>
-<script src="js/emotes.js?v=20260914d"></script>
-<script src="js/live.js?v=20260914d"></script>
-<script src="js/battle.js?v=20260914d"></script>
-<script src="js/matchmaking.js?v=20260914d"></script>
-<script src="js/ui.js?v=20260914d"></script>
-<script src="js/terminal.js?v=20260914d"></script>
+<script src="js/icons.js?v=20260914e"></script>
+<script src="js/state.js?v=20260914e"></script>
+<script src="js/save.js?v=20260914e"></script>
+<script src="js/cosmetics.js?v=20260914e"></script>
+<script src="js/account.js?v=20260914e"></script>
+<script src="js/auth-ui.js?v=20260914e"></script>
+<script src="js/puzzle.js?v=20260914e"></script>
+<script src="js/game.js?v=20260914e"></script>
+<script src="js/abilities.js?v=20260914e"></script>
+<script src="js/store.js?v=20260914e"></script>
+<script src="js/crates.js?v=20260914e"></script>
+<script src="js/friends.js?v=20260914e"></script>
+<script src="js/emotes.js?v=20260914e"></script>
+<script src="js/live.js?v=20260914e"></script>
+<script src="js/battle.js?v=20260914e"></script>
+<script src="js/matchmaking.js?v=20260914e"></script>
+<script src="js/ui.js?v=20260914e"></script>
+<script src="js/terminal.js?v=20260914e"></script>
 
 </body>
 </html>

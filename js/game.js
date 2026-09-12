@@ -5,26 +5,17 @@
 // ── Entry points ──
 function randSeed() { return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0; }
 
-// ── Puzzle pieces the player picked (solo keeps its own list; rooms use the host's modifiers) ──
-function soloPieces() { try { return cleanPieces(JSON.parse(localStorage.getItem('mz_pieces') || '[]')); } catch (e) { return []; } }
-function setSoloPieces(list) { try { localStorage.setItem('mz_pieces', JSON.stringify(cleanPieces(list))); } catch (e) {} }
-function togglePiece(k) {
-  const cur = soloPieces();
-  const on = !cur.includes(k);
-  setSoloPieces(on ? [...cur, k] : cur.filter(x => x !== k));
-  renderPiecesRow(); sfx('tap');
-  if (on && MODIFIERS[k]) pushToast(MODIFIERS[k].name + ': ' + MODIFIERS[k].desc, 'info', MODIFIERS[k].icon);
-}
-// The daily board must be identical for everybody, so it never takes pieces
-function activePieces() { return battleActive ? cleanPieces(battleMods) : dailyMode ? [] : soloPieces(); }
-function renderPiecesRow() {
-  const row = document.getElementById('pieces-row'); if (!row) return;
-  const on = soloPieces();
-  row.innerHTML = PIECES.map(k => {
-    const m = MODIFIERS[k];
-    return `<button class="piece-chip${on.includes(k) ? ' on' : ''}" onclick="togglePiece('${k}')" title="${m.desc}">${ic(m.icon)}<span>${m.short || m.name}</span></button>`;
-  }).join('');
-}
+// ══════════════════════════════════════════════════
+// MODIFIERS IN SOLO — the same list rooms use, minus the ones that need other players
+// ══════════════════════════════════════════════════
+const SOLO_MODS = ['portal', 'oneway', 'locks', 'ghost', 'fog', 'oneshot', 'rush'];
+const cleanSolo = l => (Array.isArray(l) ? l : []).filter(k => SOLO_MODS.includes(k));
+function soloMods() { try { return cleanSolo(JSON.parse(localStorage.getItem('mz_pieces') || '[]')); } catch (e) { return []; } }
+function setSoloMods(list) { try { localStorage.setItem('mz_pieces', JSON.stringify(cleanSolo(list))); } catch (e) {} }
+// What is switched on for the board in front of you (the daily is the same for everyone, so it takes none)
+function activeMods() { return battleActive ? cleanMods(battleMods) : dailyMode ? [] : soloMods(); }
+function modOn(k)     { return activeMods().includes(k); }
+function activePieces() { return cleanPieces(activeMods()); }
 
 function startFresh(diff) {
   dailyMode = false; level = 1;
@@ -90,7 +81,7 @@ function startGame(diff, seed) {
   document.getElementById('win').classList.add('hidden');
   updateInGameLevelBadge(); updateMyGameAvatar();
   abilityInv = []; renderAbilityBar();
-  applyMods(inBattle ? battleMods : []);
+  applyMods(activeMods());
   if (inBattle) {
     document.getElementById('grid').innerHTML = ''; clearSvg();
     showCountdown(3, () => { show('game'); calcSize(); generate(); startTimer(); });
@@ -202,7 +193,8 @@ function generate() {
 
   isDrawing = false; amSpectating = false;
   updateFillBar(); markNextNode();
-  requestAnimationFrame(cachePos);
+  requestAnimationFrame(() => { cachePos(); drawPortalLinks(); });
+  explainPieces();
 }
 
 function cachePos() {
@@ -298,6 +290,7 @@ function tryReach(target) {
   // Portal hop: the twin is across the board, so step straight onto it
   if (portalMap.get(h) === target) {
     if (!canStep(target)) return false;
+    portalHopFx(h, target);
     push(target, true); if (checkWin()) return true;
     sfx('ability'); afterPathChange(); return true;
   }
@@ -429,6 +422,13 @@ function flashCell(idx) {
   const el = cells[idx]; if (!el) return;
   el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
   sfx('err');
+  // One Shot: a wrong move costs you the whole path
+  if (modOn('oneshot') && pathIndices.length > 1) {
+    resetPath(); buzz([30, 20, 30]);
+    pushToast('One Shot — path wiped', 'warn', 'target');
+    const g = document.getElementById('grid');
+    g.classList.remove('oneshot-hit'); void g.offsetWidth; g.classList.add('oneshot-hit');
+  }
 }
 
 // ── Keyboard: arrows / WASD extend, Backspace undoes, 1-3 fire boosts ──
@@ -464,6 +464,7 @@ function initSvg() {
     <path id="p-glow" class="p-glow"/><path id="p-line" class="p-line"/><path id="p-core" class="p-core"/>
     <path id="p-flow" class="p-flow"/>
     <g id="p-head" class="p-head"><circle r="1"/><path d="M-1.8 0H1.8M0 -1.8V1.8M-1.2 -1.2L1.2 1.2M1.2 -1.2L-1.2 1.2"/></g>
+    <g id="p-links"></g>
     <g id="p-hint"></g>`;
   paintTrailGradient();
 }
@@ -532,12 +533,14 @@ function updateFillBar() {
 let _timerLast = 0;
 function startTimer() {
   clearInterval(timerInt); timerMs = 0; elapsedSec = 0; timerFrozen = false; selfFreezeUntil = 0;
+  startRush();
   _timerLast = performance.now();
   renderTimer();
   timerInt = setInterval(tickTimer, 100);
 }
 function tickTimer() {
   const now = performance.now(), dt = now - _timerLast; _timerLast = now;
+  tickRush(dt);
   const el = document.getElementById('timer');
   const frozen = timerFrozen || now < selfFreezeUntil;
   el.classList.toggle('frozen', frozen);
@@ -680,7 +683,7 @@ function onViewportResize() {
     document.getElementById('grid').style.gridTemplateColumns = `repeat(${cols},${cellSize}px)`;
     document.getElementById('grid').style.setProperty('--cs', cellSize + 'px');
     cells.forEach(c => { c.style.width = c.style.height = cellSize + 'px'; });
-    requestAnimationFrame(() => { cachePos(); redrawPath(); });
+    requestAnimationFrame(() => { cachePos(); redrawPath(); drawPortalLinks(); });
   }, 60);
 }
 window.addEventListener('resize', onViewportResize);
@@ -731,4 +734,122 @@ function showWinnerLook() {
     const t = titleHtml(getMyAvatar());
     who.innerHTML = '<b>' + escapeHtml(myName) + '</b>' + rankChip(myRank()) + (t ? '<span class="win-title-txt">' + t + '</span>' : '');
   }
+}
+
+// ══════════════════════════════════════════════════
+// RUSH — a countdown per board; run out and your path is wiped (the clock keeps running)
+// ══════════════════════════════════════════════════
+let rushLeft = 0, rushLimit = 0;
+function startRush() {
+  const pill = document.getElementById('rush-pill');
+  rushLimit = Math.max(12, Math.round(solvableCount * 1.6));
+  rushLeft = rushLimit;
+  if (pill) { pill.style.display = modOn('rush') ? 'flex' : 'none'; pill.classList.remove('low'); }
+  paintRush();
+}
+function paintRush() {
+  const pill = document.getElementById('rush-pill'); if (!pill || !modOn('rush')) return;
+  pill.innerHTML = ic('clock') + Math.max(0, Math.ceil(rushLeft)) + 's';
+  pill.classList.toggle('low', rushLeft <= 5);
+}
+function tickRush(dt) {
+  if (!modOn('rush') || !inGame() || amSpectating || timerFrozen) return;
+  rushLeft -= dt / 1000;
+  if (rushLeft <= 0) {
+    rushLeft = rushLimit;
+    if (pathIndices.length) { resetPath(); sfx('err'); buzz([40, 30, 40]); pushToast('Out of time — path wiped', 'warn', 'clock'); }
+  }
+  paintRush();
+}
+
+// ══════════════════════════════════════════════════
+// PORTAL LINKS — a dashed line joins the twins so you can see where a hop lands
+// ══════════════════════════════════════════════════
+function drawPortalLinks() {
+  const layer = document.getElementById('p-links'); if (!layer) return;
+  layer.innerHTML = '';
+  const done = new Set();
+  portalMap.forEach((b, a) => {
+    if (done.has(a) || done.has(b)) return;
+    done.add(a); done.add(b);
+    const p = cellCenter(a), q = cellCenter(b);
+    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+    const off = Math.hypot(q.x - p.x, q.y - p.y) * 0.18;           // bow the line so it never hides the grid lines
+    const el = document.createElementNS(SVGNS, 'path');
+    el.setAttribute('d', `M${p.x},${p.y} Q${mx - (q.y - p.y) * 0.18},${my + (q.x - p.x) * 0.18} ${q.x},${q.y}`);
+    el.setAttribute('class', 'pt-link');
+    el.setAttribute('stroke', cells[a].style.getPropertyValue('--pt') || '#c084fc');
+    layer.appendChild(el);
+  });
+}
+// The hop itself: both ends flash and the link lights up
+function portalHopFx(from, to) {
+  [from, to].forEach(c => { const el = cells[c]; if (!el) return; el.classList.remove('pt-hop'); void el.offsetWidth; el.classList.add('pt-hop'); setTimeout(() => el.classList.remove('pt-hop'), 500); });
+  const layer = document.getElementById('p-links'); if (!layer) return;
+  layer.classList.add('lit'); setTimeout(() => layer.classList.remove('lit'), 500);
+}
+
+// ══════════════════════════════════════════════════
+// "WHAT IS THIS?" — each piece explains itself the first time you meet it
+// ══════════════════════════════════════════════════
+function explainPieces() {
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem('mz_seen_mods') || '[]'); } catch (e) {}
+  const here = activeMods().filter(k => MODIFIERS[k] && !seen.includes(k));
+  if (!here.length) return;
+  here.forEach((k, i) => setTimeout(() => pushToast(MODIFIERS[k].name + ' — ' + MODIFIERS[k].desc, 'info', MODIFIERS[k].icon), 900 + i * 1400));
+  try { localStorage.setItem('mz_seen_mods', JSON.stringify([...seen, ...here])); } catch (e) {}
+}
+
+// ══════════════════════════════════════════════════
+// MODIFIER SHEET (solo) — pick what changes about your boards
+// ══════════════════════════════════════════════════
+const MOD_GROUPS = [
+  { lbl: 'Board pieces', sub: 'change the puzzle itself', keys: ['portal', 'oneway', 'locks'] },
+  { lbl: 'Twists',       sub: 'change what you can see',   keys: ['ghost', 'fog'] },
+  { lbl: 'Rules',        sub: 'change what a mistake costs', keys: ['oneshot', 'rush'] }
+];
+function openModsSheet() {
+  const el = document.getElementById('mods-sheet'); if (!el) return;
+  renderModsSheet();
+  el.classList.remove('hidden');
+  requestAnimationFrame(() => el.classList.add('in'));
+  sfx('tap');
+}
+function closeModsSheet() {
+  const el = document.getElementById('mods-sheet'); if (!el) return;
+  el.classList.remove('in');
+  setTimeout(() => el.classList.add('hidden'), 200);
+  updateModsBtn();
+}
+function renderModsSheet() {
+  const on = soloMods();
+  document.getElementById('mods-sheet-body').innerHTML = MOD_GROUPS.map(g => `
+    <div class="ms-group">
+      <div class="ms-group-lbl">${escapeHtml(g.lbl)}<small>${escapeHtml(g.sub)}</small></div>
+      ${g.keys.map(k => {
+        const m = MODIFIERS[k]; if (!m) return '';
+        return `<button class="ms-card${on.includes(k) ? ' on' : ''}" onclick="toggleSoloMod('${k}')">
+          <span class="ms-ic">${ic(m.icon)}</span>
+          <span class="ms-txt"><b>${escapeHtml(m.name)}</b><small>${escapeHtml(m.desc)}</small></span>
+          <span class="ms-sw"><i></i></span>
+        </button>`;
+      }).join('')}
+    </div>`).join('')
+    + `<div class="ms-foot">${ic('info')}These only change your own boards. In a room the host picks them for everyone.</div>`;
+}
+function toggleSoloMod(k) {
+  const cur = soloMods(), on = !cur.includes(k);
+  setSoloMods(on ? [...cur, k] : cur.filter(x => x !== k));
+  renderModsSheet(); updateModsBtn(); sfx(on ? 'node' : 'back');
+}
+function clearSoloMods() { setSoloMods([]); renderModsSheet(); updateModsBtn(); sfx('back'); }
+function updateModsBtn() {
+  const sub = document.getElementById('mods-btn-sub'); if (!sub) return;
+  const on = soloMods();
+  sub.innerHTML = on.length
+    ? on.map(k => `<span class="mb-chip">${ic(MODIFIERS[k].icon)}${escapeHtml(MODIFIERS[k].short || MODIFIERS[k].name)}</span>`).join('')
+    : '<span class="mb-off">Plain boards — tap to add a twist</span>';
+  const btn = document.getElementById('mods-btn');
+  if (btn) btn.classList.toggle('on', !!on.length);
 }
