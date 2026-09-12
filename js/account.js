@@ -611,7 +611,7 @@ async function syncAccountToCloud() {
   // Public profile (anyone signed in can view it; the rules cap xp/clears at the real account's values).
   // Your look + name always go out, even when the anti-cheat is holding your progress back for now.
   if (secure) {
-    const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME };
+    const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME, b: myBuild() };
     try {
       if (progressOk) await dbPut('/profiles/' + id, { ...look, xp: s.xp || 0, cleared: s.totalCleared || 0 });
       else await dbPatch('/profiles/' + id, look).catch(() => putProfileFromAccount(id, look));
@@ -622,13 +622,14 @@ async function syncAccountToCloud() {
 // What your friends see of you: name + look. Cheap to publish, so it goes out
 // as soon as it changes instead of waiting for the next full sync.
 const lookStamp = () => myName + '|' + JSON.stringify(getMyAvatar());
+const myBuild = () => (typeof MZ_BUILD === 'string' ? MZ_BUILD : '');
 let _lookSent = '';
 async function publishLookIfChanged() {
   if (authMode() !== 'secure' || !currentAccount || currentAccount.offline || !_authUser) return;
   const stamp = lookStamp();
   if (stamp === _lookSent) return;
   const id = currentAccount.id;
-  const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME };
+  const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME, b: myBuild() };
   try {
     await dbPatch('/profiles/' + id, look).catch(() => putProfileFromAccount(id, look));
     _lookSent = stamp;

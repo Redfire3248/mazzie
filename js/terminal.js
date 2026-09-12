@@ -152,6 +152,9 @@ const CMDS = {
   } },
   doctor: { desc:'Check why admin tools might be refused', async run() {
     clearDenyCache();                       // diagnose for real, never from a cached refusal
+    const b = mzBuildReport();
+    tOk('this device    build ' + b.build + '  ·  ' + b.features + ' features');
+    if (b.missing.length) tWarn('  an old copy is cached here — hard-refresh (Ctrl+Shift+R): missing ' + b.missing.join(', '));
     const mode = authMode();
     tInfo('auth mode      ' + mode);
     if (mode !== 'secure') return tWarn('admin tools need secure mode (firebaseConfig.apiKey in config.js)');
@@ -173,8 +176,8 @@ const CMDS = {
     const checks = [['/online', 'online list'], ['/broadcast', 'world messages'], ['/gifts/' + currentAccount.id, 'gift inbox'], ['/friends/' + currentAccount.id, 'friends list'], ['/friendReq/' + currentAccount.id, 'friend requests'], ['/invites/' + currentAccount.id, 'room invites'], ['/profiles/' + currentAccount.id, 'player profiles']];
     let stale = false;
     for (const [p, what] of checks) {
-      try { await dbGet(p); tOk('rules: ' + pad(what, 14) + 'ok'); }
-      catch (e) { stale = true; tErr('rules: ' + pad(what, 14) + 'refused'); }
+      try { await dbGet(p); tOk('rules: ' + pad(what, 17) + 'ok'); }
+      catch (e) { stale = true; tErr('rules: ' + pad(what, 17) + 'refused'); }
     }
     // Why a friend's level/rank might be missing: their profile node
     try {
@@ -184,9 +187,12 @@ const CMDS = {
       for (const id of ids.slice(0, 10)) {
         const [prof, on] = await Promise.all([dbGet('/profiles/' + id).catch(() => 'refused'), dbGet('/online/' + id).catch(() => 'refused')]);
         const nm = (fr[id] && fr[id].name) || id.slice(0, 8);
-        if (prof === 'refused') tErr('profile ' + pad(nm, 12) + 'refused by the rules');
-        else if (!prof) tWarn('profile ' + pad(nm, 12) + 'empty — they have not opened the new version yet');
-        else tOk('profile ' + pad(nm, 12) + 'xp ' + (prof.xp || 0) + ' · cleared ' + (prof.cleared || 0) + ' · ' + (prof.av ? 'look ok' : 'no look') + (on && on.at ? ' · online' : ''));
+        if (prof === 'refused') tErr('profile ' + pad(nm, 14) + 'refused by the rules');
+        else if (!prof) tWarn('profile ' + pad(nm, 14) + 'nothing published yet — they have not opened the game since the update');
+        else {
+          const theirs = prof.b ? (prof.b === MZ_BUILD ? 'build ' + prof.b + ' (same as you)' : 'build ' + prof.b + ' — OLDER than yours') : 'build unknown (older version)';
+          tOk('profile ' + pad(nm, 14) + 'xp ' + (prof.xp || 0) + ' · cleared ' + (prof.cleared || 0) + ' · ' + (prof.av ? 'look ok' : 'no look') + (on && on.at ? ' · online' : '') + ' · ' + theirs);
+        }
       }
     } catch (e) { tWarn('could not read your friends list'); }
     if (stale) {
@@ -306,7 +312,18 @@ const CMDS = {
       tWarn('banned ' + x.name + ' until ' + new Date(until).toLocaleString());
       refreshAccountCache(true);
     } },
-    setxp:    { args:[H('<name>', accountNames), H('<xp>', ['0']), H('[clears]')], desc:'Fix a cheater: set XP (and clears)', async run(a) {
+    setlvl:   { args:[H('<name>', accountNames), NUM('<level>'), H('[clears]')], desc:'Set a player LEVEL (the badge number) — works out the XP for you', async run(a) {
+      const x = await findAccount(a[0]);
+      const lvl = needInt(a[1], 'level');
+      if (lvl < 1 || lvl > 9999) throw new Error('level must be 1–9999');
+      const xp = 30 * Math.pow(lvl - 1, 2);                      // the exact XP that lands on this level
+      const cl = a[2] != null ? needInt(a[2], 'clears') : null;
+      await adminSetProgress(x.id, xp, cl);
+      tOk(x.name + ' → LVL ' + lvl + ' (' + fmtCoins(xp) + ' xp)' + (cl != null ? ', ' + cl + ' clears' : ''));
+      termPrint('they may need to sign out and in again to see it', 'dim');
+      refreshAccountCache(true);
+    } },
+    setxp:    { args:[H('<name>', accountNames), NUM('<xp>'), H('[clears]')], desc:'Set raw XP (see "setlvl" to set the level itself)', async run(a) {
       const x = await findAccount(a[0]);
       const xp = needInt(a[1], 'xp'); if (xp < 0) throw new Error('xp must be ≥ 0');
       const cl = a[2] != null ? needInt(a[2], 'clears') : null;
