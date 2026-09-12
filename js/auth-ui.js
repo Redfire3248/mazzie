@@ -274,6 +274,12 @@ function renderSettings() {
   setToggle('set-sound', getSetting('sound', true));
   setToggle('set-haptics', getSetting('haptics', true));
   setToggle('set-autonext', getSetting('autoNext', false));
+  const bv = $('set-build-val');
+  if (bv && typeof mzBuildReport === 'function') {
+    const r = mzBuildReport();
+    bv.innerText = 'Build ' + r.build + (r.missing.length ? ' · old copy cached, refresh' : ' · up to date');
+    bv.classList.toggle('warn', !!r.missing.length);
+  }
   setToggle('set-notify', typeof notifyOn === 'function' && notifyOn());
   const nv = $('set-notify-val');
   if (nv && typeof notifyState === 'function') {

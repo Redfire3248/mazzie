@@ -95,6 +95,38 @@ function ic(name, cls) {
               : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"')
     + `>${body}</svg>`;
 }
+// ══════════════════════════════════════════════════
+// BUILD STAMP — "is the newest version actually running?" without guessing
+// The number comes from the ?v= on the script tags, so it is always the truth.
+// ══════════════════════════════════════════════════
+const MZ_BUILD = (() => {
+  const src = [...document.scripts].map(s => s.src || '').find(s => /\/js\/[a-z-]+\.js\?v=/.test(s)) || '';
+  const m = /[?&]v=([^&]+)/.exec(src);
+  return m ? decodeURIComponent(m[1]) : 'dev';
+})();
+// What this build brought with it — checked live, so a stale cache shows up as "missing"
+const MZ_FEATURES = {
+  'board modifiers sheet': 'openModsSheet',
+  'puzzle pieces':         'buildPieces',
+  'inbox + bulk gifting':  'openAllGifts',
+  'mods command':          'setModsNow',
+  'spectator trolls':      'showSpecTroll',
+  'notifications':         'notifyUser',
+  'signed-out guard':      'markSignedOut',
+  'forward-only dash':     'useAbility'
+};
+function mzBuildReport() {
+  const missing = Object.entries(MZ_FEATURES).filter(([, fn]) => typeof window[fn] !== 'function').map(([n]) => n);
+  return { build: MZ_BUILD, features: Object.keys(MZ_FEATURES).length - missing.length + '/' + Object.keys(MZ_FEATURES).length, missing };
+}
+window.addEventListener('load', () => {
+  const r = mzBuildReport();
+  console.log('%c MAZZIE %c build ' + r.build + ' %c ' + r.features + ' features ',
+    'background:#2dff7f;color:#07070e;font-weight:700;border-radius:3px 0 0 3px',
+    'background:#1a1a28;color:#eeeef8', r.missing.length ? 'background:#ff4d6a;color:#fff;border-radius:0 3px 3px 0' : 'background:#11331f;color:#2dff7f;border-radius:0 3px 3px 0');
+  if (r.missing.length) console.warn('MAZZIE: an old copy is cached — missing ' + r.missing.join(', ') + '. Hard-refresh (Ctrl+Shift+R) to update.');
+});
+
 function hydrateIcons(root) {
   (root || document).querySelectorAll('i[data-ic]').forEach(el => {
     const t = document.createElement('template');

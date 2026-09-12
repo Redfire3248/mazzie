@@ -143,6 +143,13 @@ const CMDS = {
     tInfo('auth mode: ' + authMode());
   } },
 
+  version: { desc:'Which build is running, and what it includes', run() {
+    const r = mzBuildReport();
+    tOk('build ' + r.build + '  ·  ' + r.features + ' features present');
+    Object.entries(MZ_FEATURES).forEach(([name, fn]) =>
+      termPrint('  ' + (typeof window[fn] === 'function' ? '[x] ' : '[ ] ') + name, typeof window[fn] === 'function' ? 'ok' : 'warn'));
+    if (r.missing.length) tWarn('an old copy is cached — hard-refresh (Ctrl+Shift+R)');
+  } },
   doctor: { desc:'Check why admin tools might be refused', async run() {
     const mode = authMode();
     tInfo('auth mode      ' + mode);
