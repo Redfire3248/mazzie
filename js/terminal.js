@@ -168,6 +168,19 @@ const CMDS = {
       try { await dbGet(p); tOk('rules: ' + pad(what, 14) + 'ok'); }
       catch (e) { stale = true; tErr('rules: ' + pad(what, 14) + 'refused'); }
     }
+    // Why a friend's level/rank might be missing: their profile node
+    try {
+      const fr = await dbGet('/friends/' + currentAccount.id) || {};
+      const ids = Object.keys(fr);
+      if (!ids.length) tInfo('friends        none yet');
+      for (const id of ids.slice(0, 10)) {
+        const [prof, on] = await Promise.all([dbGet('/profiles/' + id).catch(() => 'refused'), dbGet('/online/' + id).catch(() => 'refused')]);
+        const nm = (fr[id] && fr[id].name) || id.slice(0, 8);
+        if (prof === 'refused') tErr('profile ' + pad(nm, 12) + 'refused by the rules');
+        else if (!prof) tWarn('profile ' + pad(nm, 12) + 'empty — they have not opened the new version yet');
+        else tOk('profile ' + pad(nm, 12) + 'xp ' + (prof.xp || 0) + ' · cleared ' + (prof.cleared || 0) + ' · ' + (prof.av ? 'look ok' : 'no look') + (on && on.at ? ' · online' : ''));
+      }
+    } catch (e) { tWarn('could not read your friends list'); }
     if (stale) {
       tWarn('your published database rules are out of date');
       termPrint('  fix: Firebase console → Realtime Database → Rules → paste database.rules.json from GitHub → Publish', 'dim');

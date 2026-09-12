@@ -229,7 +229,8 @@
   <div class="panel-card friends-card">
     <div class="panel-head">
       <button class="icon-btn" onclick="closeFriends()" title="Back"><i data-ic="arrowL"></i></button>
-      <div class="panel-title">Friends</div><span class="icon-btn ghost"></span>
+      <div class="panel-title">Friends</div>
+      <button class="icon-btn" onclick="refreshFriendsNow(this)" title="Refresh now"><i data-ic="refresh"></i></button>
     </div>
     <div class="search-row">
       <label class="search-box"><i data-ic="user"></i><input class="txt" id="friend-add" maxlength="16" placeholder="Add by username…" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')sendFriendRequest()"></label>

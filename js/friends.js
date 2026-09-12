@@ -67,19 +67,34 @@ function friendsChanged() {
 }
 
 // ── Presence ──
-let _presTick = 0;
+let _presTick = 0, _profFails = 0;
 async function refreshPresence(full) {
   await loadFriends();
   const ids = Object.keys(_friends);
+  let failed = 0;
   // Presence every pass (it changes the most); looks and levels every other pass, so a
   // long friends list does not mean a burst of requests every few seconds
   const looks = full || _presTick++ % 2 === 0;
   await Promise.all(ids.map(async id => {
     try { _presence[id] = await dbGet('/online/' + id); } catch (e) { _presence[id] = null; }
     if (!looks) return;
-    try { const p = await dbGet('/profiles/' + id); if (p) _profiles[id] = p; } catch (e) {}
+    try { const p = await dbGet('/profiles/' + id); if (p) _profiles[id] = p; else failed++; }
+    catch (e) { failed++; }
   }));
+  // Every single profile missing usually means the database rules are not published yet
+  if (ids.length && failed === ids.length) _profFails++; else _profFails = 0;
+  if (_profFails === 3 && isScreen('friends')) pushToast('No profiles came back — are the database rules published?', 'warn', 'alert');
   if (isScreen('friends')) renderFriends();
+}
+async function refreshFriendsNow(btn) {
+  if (!friendsReady()) { pushToast('Sign in online to see friends', 'warn'); return; }
+  if (btn) btn.classList.add('spin');
+  _profiles = {};                                   // forget what we had and read it all again
+  await refreshPresence(true);
+  if (btn) setTimeout(() => btn.classList.remove('spin'), 400);
+  const known = Object.keys(_friends).filter(id => _profiles[id]).length;
+  pushToast(known ? 'Friends updated' : 'Nothing new came back', known ? 'acc' : 'warn', 'refresh');
+  sfx('tap');
 }
 function friendStatus(id) {
   const p = _presence[id];

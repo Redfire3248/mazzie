@@ -1009,10 +1009,12 @@ function showFinalResults() {
     list.appendChild(row);
   });
 
-  // Placement XP bonus (once per match)
-  const bonus = [60, 30, 15][myPlace] || 0;
+  // Placement reward (once per match): first place is worth far more than the rest,
+  // and gets bigger the more people you beat
+  const rivals = Math.max(0, Object.keys(lobbyPlayers).length - 1);
+  const bonus = [120, 45, 20][myPlace] || 10;
   const bEl = document.getElementById('fin-bonus');
-  const placeCoins = [30, 18, 10][myPlace] || 5;
+  const placeCoins = ([150, 50, 25][myPlace] || 10) + (myPlace === 0 ? 25 * rivals : 0);
   if (battleActive && myPlace >= 0) {
     if (bonus) addXp(bonus);
     addCoins(placeCoins);

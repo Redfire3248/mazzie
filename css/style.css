@@ -1538,3 +1538,4 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .friend-row .btn.sm{padding:0 10px;}
 .friend-row .fr-btns{gap:4px;}
 @media (max-width:400px){.friend-row .btn.sm span,.friend-row .btn.sm{font-size:11px;}}
+.icon-btn.spin .ic{animation:trollSpin .6s linear infinite;}
