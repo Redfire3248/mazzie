@@ -97,7 +97,9 @@ async function refreshPresence(full) {
   }
   // Every single profile missing usually means the database rules are not published yet
   if (ids.length && failed === ids.length) _profFails++; else _profFails = 0;
-  if (_profFails === 3 && isScreen('friends')) pushToast('No profiles came back — are the database rules published?', 'warn', 'alert');
+  if (_profFails === 3 && isScreen('friends')) pushToast(typeof _signedOut !== 'undefined' && _signedOut
+    ? 'Signed out — sign in again to see your friends properly'
+    : 'No profiles came back — are the database rules published?', 'warn', 'alert');
   if (isScreen('friends')) renderFriends();
 }
 async function refreshFriendsNow(btn) {

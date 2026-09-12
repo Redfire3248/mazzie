@@ -28,26 +28,52 @@ function fbCfg()   { const c = CFG().firebaseConfig; return c && c.apiKey ? c : 
 function authMode(){ return !fbUrl() ? 'local' : fbCfg() ? 'secure' : 'legacy'; }
 
 // ── REST (adds the signed-in user's ID token so database rules can check it) ──
-async function dbUrl(path) {
+// Signed out of a secure database? Every call would come back 401, so don't make it.
+// (That flood of 401s was also what stopped friends' profiles from ever loading.)
+let _signedOut = false, _deniedRow = 0;
+const isMyPath = p => !!(currentAccount && currentAccount.id && new RegExp('^/(accounts|profiles|online)/' + currentAccount.id + '(/|$)').test(p));
+function markSignedOut() {
+  if (_signedOut) return;
+  _signedOut = true;
+  pushToast('Signed out — sign in again to sync and see friends', 'warn', 'logout');
+  if (typeof stopLive === 'function') stopLive();
+}
+async function dbUrl(path, force) {
   const qs = [];
   if (CFG().dbNamespace) qs.push('ns=' + encodeURIComponent(CFG().dbNamespace));
-  if (_authUser) qs.push('auth=' + encodeURIComponent(await _authUser.getIdToken()));
+  if (_authUser) qs.push('auth=' + encodeURIComponent(await _authUser.getIdToken(!!force)));
+  else if (authMode() === 'secure' && currentAccount && !currentAccount.offline) { markSignedOut(); throw new Error('NO_AUTH'); }
   return fbUrl() + path + '.json' + (qs.length ? '?' + qs.join('&') : '');
 }
 // The live streams hold connections open, so a request can sit in the browser's queue for ever.
 // Every call gets a deadline: better to fail and retry on the next pass than to hang the screen.
 const DB_TIMEOUT_MS = 9000;
-async function dbReq(method, path, data) {
+async function dbReq(method, path, data, retried) {
   if (!fbUrl()) throw new Error('NO_CONFIG');
   let r;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const t = ctl ? setTimeout(() => ctl.abort(), DB_TIMEOUT_MS) : null;
   try {
-    r = await fetch(await dbUrl(path), { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+    r = await fetch(await dbUrl(path, retried), { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' },
       body: data === undefined ? undefined : JSON.stringify(data), signal: ctl ? ctl.signal : undefined });
-  } catch (e) { throw new Error(e && e.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK'); }
+  } catch (e) {
+    if (e && e.message === 'NO_AUTH') throw e;                       // not a network problem: we are signed out
+    throw new Error(e && e.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK');
+  }
   finally { if (t) clearTimeout(t); }
-  if (r.status === 401 || r.status === 403) throw new Error('DENIED');
+  if (r.status === 401 || r.status === 403) {
+    // A stale ID token looks exactly like this. Ask for a fresh one and try once more.
+    if (!retried && _authUser) return dbReq(method, path, data, true);
+    // Only your OWN data being refused means the session is gone; being refused
+    // someone else's account is just the rules doing their job.
+    if (isMyPath(path) && ++_deniedRow >= 2) markSignedOut();
+    throw new Error('DENIED');
+  }
+  if (isMyPath(path)) {
+    _deniedRow = 0;
+    // Talking to the database again? Whatever went wrong has passed — come back to life.
+    if (_signedOut) { _signedOut = false; pushToast('Back online', 'acc', 'refresh'); if (typeof startLive === 'function') startLive(); }
+  }
   if (!r.ok) throw new Error('DB_' + r.status);
   return r.json();
 }
@@ -92,6 +118,11 @@ function initFirebase() {
     const app = appMod.getApps().find(a => a.name === '[DEFAULT]') || appMod.initializeApp(fbCfg());
     FB.auth = authMod.initializeAuth(app, { persistence: [authMod.indexedDBLocalPersistence, authMod.browserLocalPersistence] });
     if (CFG().emulator && CFG().emulator.auth) authMod.connectAuthEmulator(FB.auth, CFG().emulator.auth, { disableWarnings: true });
+    // Firebase refreshes (or drops) the session on its own — follow it instead of holding a stale user
+    authMod.onAuthStateChanged(FB.auth, u => {
+      if (u) { _authUser = u; if (_signedOut) { _signedOut = false; pushToast('Signed back in', 'acc', 'login'); if (typeof startLive === 'function') startLive(); } }
+      else if (_authUser) { _authUser = null; markSignedOut(); }
+    });
     return FB.auth;
   })();
   _fbReady.catch(() => { _fbReady = null; });
