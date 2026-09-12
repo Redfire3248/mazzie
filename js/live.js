@@ -46,6 +46,7 @@ function startLive() {
   clearInterval(_wdT); _wdT = setInterval(watchStreams, 20000);
   window.addEventListener('online', reconnectLive);
   window.addEventListener('pageshow', onPageShow);
+  window.addEventListener('focus', catchUpNow);
 }
 function stopLive() {
   _liveOn = false;
@@ -56,13 +57,21 @@ function stopLive() {
   document.removeEventListener('visibilitychange', onVis);
   window.removeEventListener('online', reconnectLive);
   window.removeEventListener('pageshow', onPageShow);
+  window.removeEventListener('focus', catchUpNow);
 }
 let _wdT = null, _hiddenAt = 0;
+// Back in the app, or back on this tab? Catch up on everything at once — no reload needed.
+function catchUpNow() {
+  if (typeof clearDenyCache === 'function') clearDenyCache();     // give anything refused a fresh chance
+  if (typeof pollGifts === 'function') pollGifts();
+  if (typeof pollInbox === 'function') pollInbox();
+  if (typeof refreshPresence === 'function' && isScreen('friends')) refreshPresence(true);
+  if (typeof refreshFromCloud === 'function' && _signedOut) refreshFromCloud().catch(() => {});
+}
 function onVis() {
   if (document.visibilityState === 'hidden') { _hiddenAt = Date.now(); return; }
   heartbeat();
-  if (typeof pollInbox === 'function') pollInbox();
-  if (typeof refreshPresence === 'function' && isScreen('friends')) refreshPresence(true);
+  catchUpNow();
   // Back from the background: the phone probably cut the streams — reconnect and catch up now
   if (_hiddenAt && Date.now() - _hiddenAt > 5000) reconnectLive();
   _hiddenAt = 0;
@@ -154,7 +163,7 @@ async function pollGifts() {
   if (!_liveOn || !currentAccount || !currentAccount.id || typeof onGiftsChanged !== 'function') return;
   try { onGiftsChanged(await dbGet('/gifts/' + currentAccount.id)); } catch (e) {}
 }
-function listenGifts() { clearInterval(_giftT); pollGifts(); _giftT = setInterval(pollGifts, 30000); }
+function listenGifts() { clearInterval(_giftT); pollGifts(); _giftT = setInterval(pollGifts, 12000); }
 async function heartbeat() {
   if (!_liveOn || document.visibilityState === 'hidden' || !currentAccount) return;
   dbPut('/online/' + currentAccount.id, {

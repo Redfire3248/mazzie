@@ -23,6 +23,9 @@ function show(id) {
   if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); updateModsBtn(); updatePlayBtn(); if (typeof updateInboxBadge === 'function') updateInboxBadge(); }
   if ((id === 'menu' || id === 'battle-mode') && typeof updateRejoinBtns === 'function') updateRejoinBtns();
   if ((id === 'lobby' || id === 'menu') && typeof heartbeat === 'function') heartbeat();   // friends see your room right away
+  // Anything that shows data from other players re-checks on the way in, so you never
+  // have to reload to see a gift, an invite or a friend request
+  if (['menu', 'store', 'inbox', 'friends', 'lobby'].includes(id) && typeof catchUpNow === 'function') catchUpNow();
   if (el && typeof fitText === 'function') { requestAnimationFrame(() => fitText(el)); setTimeout(() => fitText(el), 350); }   // shrink long titles to fit
 }
 function isScreen(id) { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }

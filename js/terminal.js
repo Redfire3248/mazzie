@@ -312,10 +312,13 @@ const CMDS = {
       tWarn('banned ' + x.name + ' until ' + new Date(until).toLocaleString());
       refreshAccountCache(true);
     } },
-    setlvl:   { args:[H('<name>', accountNames), NUM('<level>'), H('[clears]')], desc:'Set a player LEVEL (the badge number) — works out the XP for you', async run(a) {
+    setlvl:   { args:[H('<name>', accountNames), H('<level>', ['10', '50', '100', '500', '1291']), H('[clears]')], desc:'Set a player LEVEL (the badge number) — works out the XP for you', async run(a) {
       const x = await findAccount(a[0]);
       const lvl = needInt(a[1], 'level');
-      if (lvl < 1 || lvl > 9999) throw new Error('level must be 1–9999');
+      // The database caps xp at 50,000,000, which works out to level 1291
+      const MAX_LVL = Math.floor(Math.sqrt(50000000 / 30)) + 1;
+      if (lvl < 1) throw new Error('level must be 1 or more');
+      if (lvl > MAX_LVL) throw new Error('level ' + lvl + ' needs more xp than the database allows — highest is ' + MAX_LVL);
       const xp = 30 * Math.pow(lvl - 1, 2);                      // the exact XP that lands on this level
       const cl = a[2] != null ? needInt(a[2], 'clears') : null;
       await adminSetProgress(x.id, xp, cl);

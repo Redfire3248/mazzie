@@ -33,7 +33,7 @@ function authMode(){ return !fbUrl() ? 'local' : fbCfg() ? 'secure' : 'legacy'; 
 let _signedOut = false, _deniedRow = 0;
 // A path the rules refuse stays refused until the rules change — stop asking for a while
 // instead of firing the same doomed request every few seconds (that was the 401 flood).
-const _denyUntil = {}, DENY_COOLDOWN_MS = 5 * 60000;
+const _denyUntil = {}, DENY_COOLDOWN_MS = 45000;      // short: long mutes used to mean "reload the app"
 const denyKey = p => '/' + String(p || '').split('/')[1];
 let _rulesWarned = false;
 // Checking what is wrong, or a refresh the player asked for, must never be throttled
@@ -55,8 +55,9 @@ function dbLog(kind, msg) {
 function markSignedOut() {
   if (_signedOut) return;
   _signedOut = true;
+  // The loops stay running on purpose: the next successful read is what brings the app back,
+  // and stopping them was why everything needed a reload.
   dbLog('warn', 'signed out — the database refused your own data; sign in again to sync');
-  if (typeof stopLive === 'function') stopLive();
 }
 async function dbUrl(path, force) {
   const qs = [];
@@ -88,7 +89,10 @@ async function dbReq(method, path, data, retried) {
     // A stale ID token looks like this too, but only for your OWN data — for anything else
     // a refusal is the rules talking, and a fresh token will not change their mind.
     if (!retried && _authUser && isMine) return dbReq(method, path, data, true);
-    if (_authUser) { _denyUntil[denyKey(path)] = Date.now() + DENY_COOLDOWN_MS; warnStaleRules(path); }
+    // Only a refused READ suggests the rules are behind. A refused WRITE is usually a value
+    // the rules turned down (anti-cheat, or the 50M xp cap) and must not silence anything.
+    if (_authUser && method === 'GET') { _denyUntil[denyKey(path)] = Date.now() + DENY_COOLDOWN_MS; warnStaleRules(path); }
+    else if (_authUser) dbLog('warn', method + ' ' + path + ' was rejected — the rules turned down that value (anti-cheat or a cap)');
     // Only a REFUSED READ OF YOUR OWN DATA means the session is gone. A refused WRITE is
     // usually the anti-cheat turning down a jump in xp or coins — treating that as a
     // sign-out made the app flip between "Signed out" and "Back online" for ever.
