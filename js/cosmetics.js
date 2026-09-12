@@ -244,6 +244,13 @@ function grantItem(set, id) {
   owned[set] = { ...(owned[set] || {}), [id]: true };
   writeSave({ owned });
 }
+function takeItem(set, id) {
+  const s = loadSave(), owned = s.owned || {};
+  if (owned[set]) { delete owned[set][id]; writeSave({ owned }); }
+  // Wearing it? Fall back to the default so you are not shown something you no longer own
+  const av = { ...(s.avatar || {}) };
+  if (av[set] === id) { av[set] = DEFAULT_AVATAR[set]; writeSave({ avatar: av }); applyMyCosmetics(); updateMenuProfile(); }
+}
 // One-time move from level unlocks: keep everything a player had already unlocked
 async function migrateOwned() {
   await cosmeticsLoaded;

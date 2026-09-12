@@ -70,6 +70,9 @@ const H = (hint, vals, rest) => ({ hint, vals, rest });
 const playerNames = () => Object.values(lobbyPlayers).map(p => p.name);
 const playerArg   = (extra) => H('<player>', () => [...(extra || []), 'me', ...playerNames()]);
 const NUM = h => H(h || '<n>');
+// "*" means "all of them" — usable wherever a command takes one item (set, id, crate, boost, effect)
+const isStar = t => t === '*' || String(t || '').toLowerCase() === 'all';
+const STAR = '*';
 
 function resolvePlayer(tok) {
   if (!tok) return null;
@@ -193,10 +196,20 @@ const CMDS = {
     tInfo(list.length + ' online');
     onlineCache = list;
   } },
-  troll: { desc:'Prank a player (or "all" online)', args:[H('<player|all>', () => ['all', ...new Set([...onlineCache.map(o => o.name), ...accountNames()])]), H('<effect>', () => Object.keys(TROLLS)), H('[text|number]', null, true)], async run(a) {
+  troll: { desc:'Prank a player (or "all" online); effect "*" fires every prank', args:[H('<player|all>', () => ['all', ...new Set([...onlineCache.map(o => o.name), ...accountNames()])]), H('<effect|*>', () => [STAR, ...Object.keys(TROLLS)]), H('[text|number]', null, true)], async run(a) {
     needSecure();
     const kind = (a[1] || '').toLowerCase();
-    if (!TROLLS[kind]) { tWarn('effects:'); Object.entries(TROLLS).forEach(([k, v]) => termPrint('  ' + pad(k, 11) + v.desc, 'dim')); return; }
+    // "*" = the whole prank menu, one every 1.5s (skips the ones needing a message, and never resets anyone)
+    if (isStar(kind)) {
+      const kinds = Object.keys(TROLLS).filter(k => !TROLLS[k].text && !TROLLS[k].value && k !== 'reset' && k !== 'solve' && k !== 'skip');
+      let targets2;
+      if ((a[0] || '').toLowerCase() === 'all') targets2 = (await adminOnline()).filter(o => o.id !== currentAccount.id);
+      else { const hit = onlineCache.find(o => o.name.toLowerCase() === (a[0] || '').toLowerCase()); targets2 = [hit || await findAccount(a[0])]; }
+      if (!targets2.length) return tWarn('nobody to troll');
+      kinds.forEach((k, i) => setTimeout(() => targets2.forEach(x => adminTroll(x.id, k, {}).catch(() => {})), i * 1500));
+      return tOk(kinds.length + ' pranks → ' + targets2.map(x => x.name).join(', ') + ' (one every 1.5s)');
+    }
+    if (!TROLLS[kind]) { tWarn('effects (or * for all):'); Object.entries(TROLLS).forEach(([k, v]) => termPrint('  ' + pad(k, 11) + v.desc, 'dim')); return; }
     const extra = TROLLS[kind].text ? { text: a.slice(2).join(' ').slice(0, 160) } : TROLLS[kind].value ? { value: parseInt(a[2]) || 0 } : {};
     if (TROLLS[kind].text && !extra.text) throw new Error('add a message: troll <player> msg hello there');
     let targets;
@@ -335,20 +348,23 @@ const CMDS = {
     dailyMode = false; startGame(d); adminClose(); tOk('solo → ' + d);
   } },
   boost: { desc:'In-match boosts', sub:{
-    give:  { args:[H('<kind>', () => Object.keys(ABILITIES)), playerArg()], desc:'Give a boost (to a player if host)', run(a) {
-      const k = a[0]; if (!ABILITIES[k]) throw new Error('kinds: ' + Object.keys(ABILITIES).join(', '));
+    give:  { args:[H('<kind|*>', () => [STAR, ...Object.keys(ABILITIES)]), playerArg()], desc:'Give a boost ("*" fills every slot)', run(a) {
+      const kinds = isStar(a[0]) ? Object.keys(ABILITIES).slice(0, MAX_SLOTS) : [a[0]];
+      if (kinds.some(k => !ABILITIES[k])) throw new Error('kinds: ' + Object.keys(ABILITIES).join(', ') + ' (or *)');
       const pid = a[1] ? resolvePlayer(a[1]) : myId;
       if (!pid) throw new Error('no such player: ' + a[1]);
       if (pid === myId) {
-        if (abilityInv.length >= MAX_SLOTS) abilityInv.shift();
-        abilityInv.push(k); renderAbilityBar(abilityInv.length - 1); return tOk('gave you ' + k);
+        kinds.forEach(k => { if (abilityInv.length >= MAX_SLOTS) abilityInv.shift(); abilityInv.push(k); });
+        renderAbilityBar(abilityInv.length - 1); return tOk('gave you ' + kinds.join(', '));
       }
-      needHost(); broadcastAll({ type:'grant_boost', id:pid, kind:k }); tOk('gave ' + k + ' → ' + pname(pid));
+      needHost(); kinds.forEach(k => broadcastAll({ type:'grant_boost', id:pid, kind:k })); tOk('gave ' + kinds.join(', ') + ' → ' + pname(pid));
     } },
-    fire:  { args:[H('<kind>', () => Object.keys(ABILITIES))], desc:'Use a boost right now', run(a) {
-      if (!ABILITIES[a[0]]) throw new Error('kinds: ' + Object.keys(ABILITIES).join(', '));
+    fire:  { args:[H('<kind|*>', () => [STAR, ...Object.keys(ABILITIES)])], desc:'Use a boost right now ("*" fires them all)', run(a) {
+      const kinds = isStar(a[0]) ? Object.keys(ABILITIES) : [a[0]];
+      if (kinds.some(k => !ABILITIES[k])) throw new Error('kinds: ' + Object.keys(ABILITIES).join(', ') + ' (or *)');
       if (!inGame()) throw new Error('not in a game');
-      tOk(useAbility(a[0]) ? 'fired ' + a[0] : 'could not fire ' + a[0] + ' here');
+      const fired = kinds.filter(k => useAbility(k));
+      tOk(fired.length ? 'fired ' + fired.join(', ') : 'could not fire ' + kinds.join(', ') + ' here');
     } },
     list:  { desc:'Show your slots + all kinds', run() {
       tInfo('slots: [' + abilityInv.join(', ') + ']');
@@ -432,27 +448,34 @@ const CMDS = {
     addChatMsg('Admin: ' + msg, null, true); sfx('world'); showAvatarMessage('Announcement · ' + myName, msg, myName, getMyAvatar()); tOk('announced');
   } },
   crate:    { desc:'Crates', sub:{
-    keys: { args:[H('<player|me>', () => ['me', ...accountNames()]), H('<crate>', () => Object.keys(CRATES)), NUM('<n>')], desc:'Give crate keys (any crate, admin too)', async run(a) {
-      const kind = (a[1] || '').toLowerCase(); if (!CRATES[kind]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
+    keys: { args:[H('<player|me>', () => ['me', ...accountNames()]), H('<crate|*>', () => [STAR, ...Object.keys(CRATES)]), NUM('<n>')], desc:'Give crate keys ("*" = every crate)', async run(a) {
+      const tok = (a[1] || '').toLowerCase();
+      const kinds = isStar(tok) ? Object.keys(CRATES) : [tok];
+      if (kinds.some(k => !CRATES[k])) throw new Error('crates: ' + Object.keys(CRATES).join(', ') + ' (or *)');
       const n = needInt(a[2], 'n');
-      if (!a[0] || a[0].toLowerCase() === 'me') { addKeys(kind, n); syncAccountToCloud(); return tOk('you have ' + getKeys(kind) + ' ' + CRATES[kind].name + ' keys'); }
+      if (!a[0] || a[0].toLowerCase() === 'me') {
+        kinds.forEach(k => addKeys(k, n)); syncAccountToCloud();
+        return tOk(kinds.map(k => getKeys(k) + ' ' + CRATES[k].name).join(' · ') + ' keys');
+      }
       needSecure(); const x = await findAccount(a[0]);
       const acc = await dbGet('/accounts/' + x.id);
       const cur = keyMap(acc && acc.crateKeys);
-      cur[kind] = Math.max(0, (cur[kind] || 0) + n);
+      kinds.forEach(k => { cur[k] = Math.max(0, (cur[k] || 0) + n); });
       await dbPatch('/accounts/' + x.id, { crateKeys: cur });
-      if (n > 0) await adminTroll(x.id, 'keys', { text: kind + ':' + n }).catch(() => {});
-      tOk(x.name + ' now has ' + cur[kind] + ' ' + CRATES[kind].name + ' keys');
+      if (n > 0) await adminTroll(x.id, 'keys', { text: kinds[0] + ':' + n }).catch(() => {});
+      tOk(x.name + ': ' + kinds.map(k => cur[k] + ' ' + CRATES[k].name).join(' · ') + ' keys');
     } },
     open: { args:[H('<crate>', () => Object.keys(CRATES))], desc:'Open a crate for free', run(a) {
       const id = (a[0] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
       adminClose(); if (!isScreen('store')) openStore(); openCrates(id, 1, { free: true }); } },
-    gift: { args:[H('<player>', accountNames), H('<crate>', () => Object.keys(CRATES)), NUM('[count]'), H('[message…]', null, true)], desc:'Give a player free crates (admin crates too) — they open them from the Store', async run(a) {
+    gift: { args:[H('<player>', accountNames), H('<crate|*>', () => [STAR, ...Object.keys(CRATES)]), NUM('[count]'), H('[message…]', null, true)], desc:'Give a player free crates ("*" = one lot of each) — they open them from the Store', async run(a) {
       needSecure(); const x = await findAccount(a[0]);
-      const id = (a[1] || 'basic').toLowerCase(); if (!CRATES[id]) throw new Error('crates: ' + Object.keys(CRATES).join(', '));
+      const tok = (a[1] || 'basic').toLowerCase();
+      const ids = isStar(tok) ? Object.keys(CRATES) : [tok];
+      if (ids.some(k => !CRATES[k])) throw new Error('crates: ' + Object.keys(CRATES).join(', ') + ' (or *)');
       const n = Math.max(1, Math.min(20, parseInt(a[2]) || 1));
-      for (let i = 0; i < n; i++) await sendGift(id, x.name, a.slice(3).join(' '), true);
-      tOk(n + ' × ' + CRATES[id].name + ' → ' + x.name);
+      for (const id of ids) for (let i = 0; i < n; i++) await sendGift(id, x.name, a.slice(3).join(' '), true);
+      tOk(ids.map(id => n + ' × ' + CRATES[id].name).join(' · ') + ' → ' + x.name);
     } },
     odds: { desc:'Show drop odds + pool sizes', run() {
       Object.entries(CRATES).forEach(([id, c]) => { const p = cratePool(c); tInfo(pad(id, 7) + c.price + 'c  ' + RAR_ORDER.filter(r => c.odds[r]).map(r => r + ' ' + c.odds[r] + '% (' + (p[r] || []).length + ')').join(' · ')); });
@@ -465,18 +488,73 @@ const CMDS = {
         if ((want === 'admin' && i.admin) || set === want) termPrint(pad(set, 7) + pad(i.id, 14) + pad(i.name, 14) + rarityOf(i).name, i.admin ? 'warn' : 'dim');
       }));
     } },
-    give: { args:[H('<player>', accountNames), H('<set>', ['icon', 'color', 'frame', 'trail', 'title']), H('<id>', () => { const t = tokenize(document.getElementById('term-input').value).toks; const set = COSMETIC_SETS[(t[3] || {}).v]; return set ? set.map(i => i.id) : []; })],
-      desc:'Give a player any cosmetic (admin ones too)', async run(a) {
+    give: { args:[H('<player>', accountNames), H('<set|*>', [STAR, 'icon', 'color', 'frame', 'trail', 'title']), H('<id|*>', () => { const t = tokenize(document.getElementById('term-input').value).toks; const set = COSMETIC_SETS[(t[3] || {}).v]; return [STAR, ...(set ? set.map(i => i.id) : [])]; })],
+      desc:'Give a player a cosmetic — "*" for every id, or "cosmetic give <player> *" for the lot', async run(a) {
       needSecure(); const x = await findAccount(a[0]);
-      const set = (a[1] || '').toLowerCase(), item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], a[2]);
-      if (!item) throw new Error('unknown ' + set + ' id — try: cosmetic list ' + set);
-      await dbPatch('/accounts/' + x.id + '/owned/' + set, { [item.id]: true });
-      await adminTroll(x.id, 'cosmetic', { text: set + ':' + item.id }).catch(() => {});
-      tOk('gave ' + item.name + ' (' + set + ') → ' + x.name);
+      const setTok = (a[1] || '').toLowerCase();
+      // Which sets, and which items in them?
+      const sets = isStar(setTok) || !setTok ? Object.keys(COSMETIC_SETS) : [setTok];
+      if (sets.some(s => !COSMETIC_SETS[s])) throw new Error('sets: ' + Object.keys(COSMETIC_SETS).join(', ') + ' (or *)');
+      const allIds = isStar(setTok) || isStar(a[2]) || (sets.length > 1 && !a[2]) || !a[2];
+      if (!allIds) {
+        const item = _find(COSMETIC_SETS[sets[0]], a[2]);
+        if (!item) throw new Error('unknown ' + sets[0] + ' id — try: cosmetic list ' + sets[0]);
+        await dbPatch('/accounts/' + x.id + '/owned/' + sets[0], { [item.id]: true });
+        await adminTroll(x.id, 'cosmetic', { text: sets[0] + ':' + item.id }).catch(() => {});
+        return tOk('gave ' + item.name + ' (' + sets[0] + ') → ' + x.name);
+      }
+      let n = 0, last = null;
+      for (const set of sets) {
+        const ids = COSMETIC_SETS[set].filter(i => i.id !== 'none');
+        if (!ids.length) continue;
+        await dbPatch('/accounts/' + x.id + '/owned/' + set, Object.fromEntries(ids.map(i => [i.id, true])));
+        n += ids.length; last = { set, item: ids[ids.length - 1] };
+      }
+      if (last) await adminTroll(x.id, 'cosmetic', { text: last.set + ':' + last.item.id }).catch(() => {});
+      tOk('gave ' + n + ' cosmetics (' + sets.join(', ') + ') → ' + x.name);
     } },
-    me: { args:[H('<set>', ['icon', 'color', 'frame', 'trail', 'title']), H('<id>')], desc:'Give yourself a cosmetic', run(a) {
-      const set = (a[0] || '').toLowerCase(), item = COSMETIC_SETS[set] && _find(COSMETIC_SETS[set], a[1]);
-      if (!item) throw new Error('unknown id'); grantItem(set, item.id); syncAccountToCloud(); tOk('you own ' + item.name);
+    take: { args:[H('<player|me>', () => ['me', ...accountNames()]), H('<set|*>', [STAR, 'icon', 'color', 'frame', 'trail', 'title']), H('<id|*>', () => { const t = tokenize(document.getElementById('term-input').value).toks; const set = COSMETIC_SETS[(t[3] || {}).v]; return [STAR, ...(set ? set.map(i => i.id) : [])]; })],
+      desc:'Take a cosmetic back ("*" strips the set, or everything)', async run(a) {
+      const setTok = (a[1] || '').toLowerCase();
+      const sets = isStar(setTok) || !setTok ? Object.keys(COSMETIC_SETS) : [setTok];
+      if (sets.some(s => !COSMETIC_SETS[s])) throw new Error('sets: ' + Object.keys(COSMETIC_SETS).join(', ') + ' (or *)');
+      const allIds = isStar(setTok) || isStar(a[2]) || !a[2];
+      const mine = !a[0] || a[0].toLowerCase() === 'me';
+      // One named item
+      if (!allIds) {
+        const item = _find(COSMETIC_SETS[sets[0]], a[2]);
+        if (!item) throw new Error('unknown ' + sets[0] + ' id — try: cosmetic list ' + sets[0]);
+        if (mine) { takeItem(sets[0], item.id); syncAccountToCloud(); return tWarn('took ' + item.name + ' (' + sets[0] + ') from you'); }
+        needSecure(); const x = await findAccount(a[0]);
+        await dbPatch('/accounts/' + x.id + '/owned/' + sets[0], { [item.id]: null });
+        return tWarn('took ' + item.name + ' (' + sets[0] + ') from ' + x.name);
+      }
+      // Whole sets
+      let n = 0;
+      if (mine) {
+        sets.forEach(set => COSMETIC_SETS[set].forEach(i => { if (i.id !== 'none') { takeItem(set, i.id); n++; } }));
+        writeSave({ unlockAll: false }); syncAccountToCloud();
+        return tWarn('took ' + n + ' cosmetics (' + sets.join(', ') + ') from you');
+      }
+      needSecure(); const x = await findAccount(a[0]);
+      for (const set of sets) {
+        const ids = COSMETIC_SETS[set].filter(i => i.id !== 'none');
+        await dbPatch('/accounts/' + x.id + '/owned/' + set, Object.fromEntries(ids.map(i => [i.id, null])));
+        n += ids.length;
+      }
+      tWarn('took ' + n + ' cosmetics (' + sets.join(', ') + ') from ' + x.name);
+    } },
+    me: { args:[H('<set|*>', [STAR, 'icon', 'color', 'frame', 'trail', 'title']), H('<id|*>', [STAR])], desc:'Give yourself a cosmetic ("*" for all)', run(a) {
+      const setTok = (a[0] || '').toLowerCase();
+      const sets = isStar(setTok) || !setTok ? Object.keys(COSMETIC_SETS) : [setTok];
+      if (sets.some(s => !COSMETIC_SETS[s])) throw new Error('sets: ' + Object.keys(COSMETIC_SETS).join(', ') + ' (or *)');
+      if (sets.length === 1 && a[1] && !isStar(a[1])) {
+        const item = _find(COSMETIC_SETS[sets[0]], a[1]);
+        if (!item) throw new Error('unknown id'); grantItem(sets[0], item.id); syncAccountToCloud(); return tOk('you own ' + item.name);
+      }
+      let n = 0;
+      sets.forEach(set => COSMETIC_SETS[set].forEach(i => { if (i.id !== 'none') { grantItem(set, i.id); n++; } }));
+      syncAccountToCloud(); tOk('you own ' + n + ' more cosmetics (' + sets.join(', ') + ')');
     } }
   } },
   unlock:   { desc:'Cosmetics: unlock everything / relock', args:[H('<all|reset>', ['all', 'reset'])], run(a) {
