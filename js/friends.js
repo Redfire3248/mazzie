@@ -8,6 +8,7 @@
 // ══════════════════════════════════════════════════
 
 let _friends = {}, _reqIn = {}, _invites = {}, _presence = {}, _profiles = {};
+const xpLevel = xp => getXpLevel(xp || 0);
 let _rqES = null, _ivES = null, _presT = null, _frPollT = null, _seenInvites = new Set();
 const friendsReady = () => authMode() === 'secure' && currentAccount && !currentAccount.offline && !currentAccount.local && _authUser;
 
@@ -112,7 +113,16 @@ function renderFriends() {
   }
   const out = loadSave().friendOut || {};
   const reqs = Object.entries(_reqIn), invs = Object.entries(_invites);
-  const rankOf = id => rankChip(getRank((_profiles[id] || {}).cleared || 0), 'tiny');
+  // A missing profile is not "Newbie" — say nothing rather than something wrong
+  const rankOf = id => {
+    const p = _profiles[id];
+    return p && typeof p.cleared === 'number' ? rankChip(getRank(p.cleared), 'tiny') : '';
+  };
+  const lvlOf = (id, st) => {
+    const p = _profiles[id];
+    const lvl = st.lvl || (p && typeof p.xp === 'number' ? xpLevel(p.xp) : 0);
+    return lvl ? getLevelBadge(lvl) + ' ' : '';
+  };
   const list = Object.entries(_friends).map(([id, f]) => ({ id, f: { ...f, ...(_profiles[id] ? { name: _profiles[id].name || f.name, av: _profiles[id].av || f.av } : {}) }, st: friendStatus(id) }))
     .sort((a, b) => b.st.on - a.st.on || String(a.f.name).localeCompare(String(b.f.name)));
   const row = (id, name, av, right, sub, cls) => `<div class="friend-row${cls ? ' ' + cls : ''}">
@@ -140,7 +150,7 @@ function renderFriends() {
     return row(id, name, f.av,
       joinBtn + inviteBtn + `<button class="icon-btn sm" onclick="openProfile('${id}')" title="View profile">${ic('user')}</button><button class="icon-btn sm" onclick="giftFriend('${escapeHtml(name)}')" title="Send a gift">${ic('gift')}</button>`
         + `<button class="icon-btn sm ghost-x" onclick="removeFriend('${id}','${escapeHtml(name)}')" title="Remove">${ic('x')}</button>`,
-      rankOf(id) + `<i class="dot${st.on ? ' on' : ''}"></i>${st.text}${st.on && st.lvl ? ' · LVL ' + st.lvl : ''}`, st.on ? 'online' : '');
+      lvlOf(id, st) + rankOf(id) + `<i class="dot${st.on ? ' on' : ''}"></i>${st.text}`, st.on ? 'online' : '');
   }).join('')
     + Object.entries(out).filter(([id]) => !_friends[id]).map(([id, name]) => row(id, name, null,
       `<button class="icon-btn sm ghost-x" onclick="cancelRequest('${id}')" title="Cancel">${ic('x')}</button>`, 'Request sent · waiting', 'pending')).join('')

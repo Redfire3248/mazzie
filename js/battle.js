@@ -306,6 +306,10 @@ function onPartyTroll(d) {
 
 // ── Spectating: play the same prank on the little board you are watching ──
 const SPEC_TROLL_MS = { flip: 10000, mirror: 10000, spin: 6000, tiny: 8000, shake: 4000, invert: 8000, fog: 6000, frost: 4000, ghost: 7000, party: 6000 };
+function clearSpecTrollFx() {
+  const wrap = document.getElementById('spec-mini-grid'); if (!wrap) return;
+  [...wrap.classList].filter(c => c.startsWith('sp-')).forEach(c => { clearTimeout(wrap['_t_' + c]); wrap.classList.remove(c); });
+}
 function showSpecTroll(pid, kind) {
   const wrap = document.getElementById('spec-mini-grid');
   if (!wrap || !SPEC_TROLL_MS[kind]) return;
@@ -861,6 +865,7 @@ function specNavigate(dir) {
 }
 
 function specSelectPlayer(pid) {
+  clearSpecTrollFx();
   if (!lobbyPlayers[pid] || pid === myId) return;
   specViewPid = pid;
   const p = lobbyPlayers[pid];
@@ -892,7 +897,8 @@ function renderMiniBoardForPlayer(pid) {
   const cs = Math.max(14, Math.min(56, Math.floor((maxW - pad * 2 - (cols - 1) * gap) / cols), Math.floor((maxH - pad * 2 - (rows - 1) * gap) / rows)));
   const av = sanitizeAvatar((lobbyPlayers[pid] || playerCache[pid] || {}).avatar || {});
   const t = _find(TRAILS, av.trail) || TRAILS[0];
-  wrap.className = 'spec-mini-grid spec-board';
+  const keepFx = [...wrap.classList].filter(c => c.startsWith('sp-'));   // a prank mid-flight survives the redraw
+  wrap.className = ['spec-mini-grid', 'spec-board', ...keepFx].join(' ');
   wrap.style.cssText = `grid-template-columns:repeat(${cols},${cs}px);padding:${pad}px;gap:${gap}px;--trail-rgb:${t.rgb};--trail:rgb(${t.rgb});--trail-core:${t.core || '#fff'};--cs:${cs}px;--r:${Math.max(4, Math.round(cs * 0.2))}px`;
   const visible = new Set(solutionPath), pSet = new Set(path);
   const head = path.length ? path[path.length - 1] : -1;
