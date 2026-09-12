@@ -193,6 +193,7 @@ function generate() {
 
   isDrawing = false; amSpectating = false;
   updateFillBar(); markNextNode();
+  if (typeof runPendingTroll === 'function') setTimeout(runPendingTroll, 250);   // an admin effect that was waiting for a board
   requestAnimationFrame(() => { cachePos(); drawPortalLinks(); });
   explainPieces();
 }

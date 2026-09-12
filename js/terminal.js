@@ -701,14 +701,25 @@ function soloRegen() {
   if (!inGame() || !cells.length) { startGame(currentDiff || 'easy'); return; }
   updateInGameLevelBadge(); generate(); startTimer();
 }
+let _autoSolveT = null;
 function adminAutoSolve() {
   if (!inGame() || !solutionPath.length || amSpectating) throw new Error('no board to solve');
+  clearInterval(_autoSolveT);
+  const board = _boardId;                       // if a new board appears, stop touching this one
+  // Hold the player's input while it draws: a stray tap used to break the sequence
+  // half way through and the win would never fire.
+  inputLockedUntil = performance.now() + solutionPath.length * 30 + 400;
+  isDrawing = false;
   resetPath(); push(solutionPath[0]);
   let i = 1;
-  const iv = setInterval(() => {
-    if (!inGame() || amSpectating || i >= solutionPath.length) { clearInterval(iv); return; }
+  _autoSolveT = setInterval(() => {
+    if (!inGame() || amSpectating || board !== _boardId || i >= solutionPath.length) { clearInterval(_autoSolveT); return; }
+    // Something knocked the path out of step (a tap that slipped through, a troll) — start over
+    if (pathIndices.length !== i || pathIndices[i - 1] !== solutionPath[i - 1]) {
+      resetPath(); push(solutionPath[0]); i = 1; return;
+    }
     push(solutionPath[i++], true);
-    if (checkWin()) { clearInterval(iv); return; }
+    if (checkWin()) { clearInterval(_autoSolveT); return; }
     afterPathChange();
   }, 30);
 }

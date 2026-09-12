@@ -38,6 +38,7 @@ async function streamUrl(path) {
   return u.toString();
 }
 function startLive() {
+  initServiceWorker();                      // notifications + home-screen install
   if (_liveOn || authMode() !== 'secure' || !currentAccount || currentAccount.offline) return;
   _liveOn = true;
   listenBroadcast(); listenTroll(); listenGifts(); heartbeat();
@@ -148,11 +149,31 @@ function onBroadcastValue(b) {
   localStorage.setItem('mz_bc_seen', String(b.at));
   showWorldMessage(String(b.msg).slice(0, 200), b.by, b.av);
 }
+let _lastTrollAt = 0, _pendingTroll = null;
 function onTrollValue(t) {
   if (!t || !t.kind || typeof t.at !== 'number') return;
-  dbDelete('/troll/' + currentAccount.id).catch(() => {});        // one-shot: clear it so it never replays
-  if (Date.now() - t.at > 3 * 60000) return;
+  if (t.at === _lastTrollAt) return;                              // the same one echoing back
+  _lastTrollAt = t.at;
+  if (Date.now() - t.at > 3 * 60000) { dbDelete('/troll/' + currentAccount.id).catch(() => {}); return; }
+  // Board effects need a board. If the player is on the menu, hold it and run it when they start one,
+  // instead of quietly doing nothing — that was why solve "sometimes failed".
+  if ((t.kind === 'solve' || t.kind === 'clearpath') && (!inGame() || amSpectating || !cells.length)) {
+    _pendingTroll = { ...t, holdUntil: Date.now() + 3 * 60000 };
+    dbDelete('/troll/' + currentAccount.id).catch(() => {});
+    return;
+  }
   applyTroll(t);
+  // Clear it only once it has been acted on, so a second command sent moments later is not
+  // wiped out by this delete
+  dbDelete('/troll/' + currentAccount.id).catch(() => {});
+}
+// Called when a board appears: run anything that was waiting for one
+function runPendingTroll() {
+  const p = _pendingTroll; if (!p) return;
+  if (Date.now() > p.holdUntil) { _pendingTroll = null; return; }
+  if (!inGame() || amSpectating || !cells.length) return;
+  _pendingTroll = null;
+  try { applyTroll(p); } catch (e) {}
 }
 async function listenBroadcast() {
   _bcES = esKill(_bcES);
@@ -307,11 +328,23 @@ async function adminOnline() {
 // SYSTEM NOTIFICATIONS — so an invite still reaches you with the app in the background
 // (the browser only allows these after the player says yes in Settings)
 // ══════════════════════════════════════════════════
-function notifySupported() { return typeof Notification !== 'undefined'; }
+// The worker is what actually shows notifications; the page only asks it to.
+let _swReg = null;
+async function initServiceWorker() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return null;
+  try {
+    _swReg = await navigator.serviceWorker.register('sw.js?v=1', { scope: './' });
+    await navigator.serviceWorker.ready;
+    return _swReg;
+  } catch (e) { console.warn('MAZZIE: service worker not available', e && e.message); return null; }
+}
+function notifySupported() { return typeof Notification !== 'undefined' && 'serviceWorker' in navigator; }
 function notifyState() { return notifySupported() ? Notification.permission : 'unsupported'; }
 function notifyOn() { return notifySupported() && Notification.permission === 'granted' && getSetting('notify', true); }
 async function askNotify() {
-  if (!notifySupported()) { pushToast('This browser has no notifications', 'warn'); return false; }
+  if (!notifySupported()) { pushToast('This browser cannot show notifications', 'warn'); return false; }
+  if (!_swReg) await initServiceWorker();
+  if (!_swReg) { pushToast('Notifications need the app served over https', 'warn'); return false; }
   if (Notification.permission === 'denied') { pushToast('Notifications are blocked in your browser settings', 'warn'); return false; }
   if (Notification.permission !== 'granted') {
     try { await Notification.requestPermission(); } catch (e) {}
@@ -321,11 +354,12 @@ async function askNotify() {
   if (ok) pushToast('Notifications on — invites will reach you in the background', 'acc', 'mail');
   return ok;
 }
-// Only when the app is not in front: on screen you already get the popup
+// Only when the app is not in front: on screen you already get the popup.
+// Always via the worker — `new Notification()` is refused outright on Android.
 function notifyUser(title, body, tag) {
   if (!notifyOn() || document.visibilityState === 'visible') return;
-  try {
-    const n = new Notification(title, { body, tag: tag || 'mazzie' });
-    n.onclick = () => { try { window.focus(); } catch (e) {} n.close(); };
-  } catch (e) {}
+  const reg = _swReg || (navigator.serviceWorker && navigator.serviceWorker.controller ? null : null);
+  const post = r => { if (r && r.active) r.active.postMessage({ type: 'notify', title, body, tag }); };
+  if (reg) return post(reg);
+  if (navigator.serviceWorker) navigator.serviceWorker.ready.then(post).catch(() => {});
 }
