@@ -1386,3 +1386,31 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .cell.key-cell .pc-mark{color:var(--gold);}
 .cell.key-cell.taken .pc-mark{opacity:.35;}
 .cell.active .pc-mark{color:#07070e;}
+
+/* Menu tiles: three across, squarer corners, nothing cut off */
+.menu-row{grid-template-columns:repeat(3,1fr);gap:8px;}
+.tile{height:78px;border-radius:12px;padding:0 4px;}
+.tile b{font-size:12px;letter-spacing:1.2px;}
+.tile small{font-size:9.5px;}
+@media (max-width:360px){.tile b{font-size:11px;letter-spacing:.8px;}.tile small{font-size:9px;}}
+/* Rank badges */
+.rank-chip{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;letter-spacing:.4px;color:var(--rk);vertical-align:middle;}
+.rank-chip .ic{width:12px;height:12px;}
+.rank-chip.tiny{font-size:9px;margin-right:5px;}
+.rank-chip.tiny .ic{width:10px;height:10px;}
+/* Your look while you play */
+.tb-me{display:flex;align-items:center;gap:7px;}
+.tb-ava{display:flex;align-items:center;justify-content:center;padding:0;background:none;border:0;cursor:pointer;transition:transform .1s;}
+.tb-ava:active{transform:scale(.92);}
+/* Win card: your avatar is the badge */
+.win-ava{display:flex;align-items:center;justify-content:center;margin-bottom:2px;}
+.win-who{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;font-size:13px;margin-bottom:2px;}
+.win-who b{font-size:14px;}
+.win-title-txt{font-size:11px;color:var(--dim);}
+/* Chat: a face beside every message */
+.chat-msg{flex-direction:row;align-items:flex-end;gap:7px;}
+.chat-msg.mine{flex-direction:row-reverse;}
+.chat-msg.system{flex-direction:column;}
+.chat-ava{flex-shrink:0;line-height:0;}
+.chat-body{display:flex;flex-direction:column;gap:2px;min-width:0;max-width:calc(100% - 30px);}
+.chat-msg.mine .chat-body{align-items:flex-end;}

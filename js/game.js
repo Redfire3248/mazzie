@@ -88,7 +88,7 @@ function startGame(diff, seed) {
   if (inBattle) rp.innerText = 'R' + battleRound + '/' + maxRounds;
   document.getElementById('diff-label').innerText = dailyMode ? 'DAILY · ' + todayKey().slice(5) : diff.toUpperCase();
   document.getElementById('win').classList.add('hidden');
-  updateInGameLevelBadge();
+  updateInGameLevelBadge(); updateMyGameAvatar();
   abilityInv = []; renderAbilityBar();
   applyMods(inBattle ? battleMods : []);
   if (inBattle) {
@@ -576,6 +576,7 @@ function broadcastProgress() {
 function onWin() {
   if (!inGame() || amSpectating) return;
   isDrawing = false; stopTimer();
+  showWinnerLook();
   const ms = Math.round(timerMs), sec = Math.round(ms / 100) / 10, time = fmtMs(ms);
   sfx('win'); buzz([20, 40, 30]);
   const grid = document.getElementById('grid');
@@ -716,4 +717,18 @@ function buildPieces(pz) {
     if (cells[p.lock]) { cells[p.lock].classList.add('lock-cell', 'shut'); if (!cells[p.lock].dataset.num) cells[p.lock].innerHTML = '<div class="pc-mark">' + ic('lock') + '</div>'; }
     if (cells[p.key])  { cells[p.key].classList.add('key-cell');           if (!cells[p.key].dataset.num)  cells[p.key].innerHTML  = '<div class="pc-mark">' + ic('key')  + '</div>'; }
   });
+}
+
+// ── Your avatar on the board and on the win card ──
+function updateMyGameAvatar() {
+  const el = document.getElementById('tb-ava'); if (!el) return;
+  el.innerHTML = renderAvatar(getMyAvatar(), myName, 26);
+}
+function showWinnerLook() {
+  const ava = document.getElementById('win-ava'), who = document.getElementById('win-who');
+  if (ava) ava.innerHTML = renderAvatar(getMyAvatar(), myName, 74);
+  if (who) {
+    const t = titleHtml(getMyAvatar());
+    who.innerHTML = '<b>' + escapeHtml(myName) + '</b>' + rankChip(myRank()) + (t ? '<span class="win-title-txt">' + t + '</span>' : '');
+  }
 }

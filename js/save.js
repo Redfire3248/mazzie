@@ -47,6 +47,13 @@ const RANKS = [
   { min:200, name:'Mythic',  icon:'orb',   color:'var(--danger)' }
 ];
 function rankIcon(rank) { return `<span class="rank-ic" style="color:${rank.color}">${ic(rank.icon)}</span>`; }
+const rankByName = n => RANKS.find(r => r.name === n) || RANKS[0];
+// Small "icon + name" badge used wherever a player is listed
+function rankChip(rank, cls) {
+  const r = typeof rank === 'string' ? rankByName(rank) : (rank || RANKS[0]);
+  return `<span class="rank-chip${cls ? ' ' + cls : ''}" style="--rk:${r.color}">${ic(r.icon)}${r.name}</span>`;
+}
+function myRank() { return getRank(loadSave().totalCleared || 0); }
 const DIFF_XP = { baby:10, easy:20, medium:35, hard:55, expert:80 };
 
 function getRank(cleared) {

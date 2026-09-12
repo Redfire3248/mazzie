@@ -353,7 +353,7 @@ function renderLobby() {
       <div class="p-lvl-wrap">${getLevelBadge(p.xpLevel || 1)}</div></div>
     <div class="p-info">
       <div class="p-name">${escapeHtml(p.name)}${isMe ? ' <span class="you">(you)</span>' : ''}</div>
-      <div class="p-meta">${escapeHtml(p.rankName || 'Newbie')}${title ? ' · ' + escapeHtml(title) : ''}</div>
+      <div class="p-meta">${rankChip(p.rankName)}${title ? ' · ' + escapeHtml(title) : ''}</div>
     </div>
     <div class="p-tag ${p.host ? 'host' : 'guest'}">${p.host ? 'HOST' : 'GUEST'}</div>`;
     if (isHost && !isMe) {
@@ -805,7 +805,7 @@ function renderSpectateList() {
     const fillClass = isQuit ? ' quit-fill' : (done ? '' : ' racing');
     row.innerHTML = `<div class="spec-row-top">
       ${renderAvatar(p.avatar, p.name, 30)}
-      <div class="spec-name">${escapeHtml(p.name)}${isMe ? ' (you)' : ''} ${getLevelBadge(p.xpLevel || 1)}</div>
+      <div class="spec-name">${escapeHtml(p.name)}${isMe ? ' (you)' : ''} ${getLevelBadge(p.xpLevel || 1)}${rankChip(p.rankName, 'tiny')}</div>
       <div class="spec-status${done ? ' done' : ''}${isQuit ? ' quit' : ''}">${escapeHtml(statusTxt)}</div>
     </div>
     <div class="prog-bar-bg"><div class="prog-bar-fill${fillClass}" id="prog-${escapeHtml(pid)}" style="width:${pct}%"></div></div>`;
@@ -927,7 +927,7 @@ function showRoundResults(order) {
       ${renderAvatar(p && p.avatar, e.name, 30)}
       <div class="rr-info">
         <div class="rr-name">${escapeHtml(e.name)}${e.id === myId ? ' (you)' : ''}</div>
-        <div class="rr-pts">+${pts} pts · Total: ${roundScores[e.id]} pts</div>
+        <div class="rr-pts">${rankChip((p && p.rankName) || e.rankName, 'tiny')}+${pts} pts · Total: ${roundScores[e.id]} pts</div>
       </div>
       <div class="rr-time">${escapeHtml(e.quit ? 'QUIT' : e.time)}</div>`;
     list.appendChild(row);
@@ -979,7 +979,7 @@ function showFinalResults() {
       ${renderAvatar(p && p.avatar, p ? p.name : '?', 36)}
       <div class="fin-info">
         <div class="fin-name">${escapeHtml(p ? p.name : '???')}${pid === myId ? ' (you)' : ''}</div>
-        <div class="fin-score">${maxRounds} round${maxRounds !== 1 ? 's' : ''}</div>
+        <div class="fin-score">${rankChip(p && p.rankName, 'tiny')}${maxRounds} round${maxRounds !== 1 ? 's' : ''}</div>
       </div>
       <div class="fin-pts">${pts} pts</div>`;
     list.appendChild(row);

@@ -195,7 +195,7 @@ function sendChat(preset) {
 }
 function receiveChatMsg(d) {
   if (d.id === myId) return;
-  addChatMsg(d.msg, d.name, false, false);
+  addChatMsg(d.msg, d.name, false, false, d.id);
   chatUnread++;
   if (document.getElementById('chat-overlay').classList.contains('hidden')) {
     document.getElementById('game-chat-btn').classList.add('has-unread');
@@ -209,15 +209,17 @@ function showChatPeek(name, msg) {
   el.innerHTML = `<b>${escapeHtml(name)}</b> ${escapeHtml(msg)}`;
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
 }
-function addChatMsg(msg, name, isSystem, isMe) {
+function addChatMsg(msg, name, isSystem, isMe, pid) {
   const msgs = document.getElementById('chat-msgs');
   const div  = document.createElement('div');
   div.className = 'chat-msg' + (isSystem ? ' system' : isMe ? ' mine' : '');
+  const who = isMe ? { avatar: getMyAvatar() } : (typeof lobbyPlayers !== 'undefined' && lobbyPlayers[pid]) || null;
+  const ava = isSystem ? '' : `<div class="chat-ava">${renderAvatar(sanitizeAvatar((who && who.avatar) || {}), isMe ? myName : name, 22)}</div>`;
   div.innerHTML = isSystem
     ? `<div class="chat-bubble">${escapeHtml(msg)}</div>`
-    : `<div class="chat-msg-name">${isMe ? 'You' : escapeHtml(name)}</div><div class="chat-bubble">${escapeHtml(msg)}</div>`;
+    : `${ava}<div class="chat-body"><div class="chat-msg-name">${isMe ? 'You' : escapeHtml(name)}</div><div class="chat-bubble">${escapeHtml(msg)}</div></div>`;
   msgs.appendChild(div);
-  chatMsgs.push({ msg, name, isSystem, isMe });
+  chatMsgs.push({ msg, name, isSystem, isMe, pid });
   while (msgs.childElementCount > 120) msgs.firstChild.remove();
   scrollChatBottom();
 }
