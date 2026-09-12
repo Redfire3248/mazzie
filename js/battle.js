@@ -273,16 +273,16 @@ function startChaos() {
   clearTimeout(_chaosT);
   if (battleRound <= 1) { _chaosHit = {}; _chaosLastId = null; }
   if (!isHost || !partyMode) return;
-  _chaosT = setTimeout(chaosTick, 7000 + Math.random() * 5000);
+  _chaosT = setTimeout(chaosTick, 4000 + Math.random() * 3000);
 }
 function chaosTick() {
   if (!isHost || !partyMode || !battleActive || roundEnded) return;
   const done = new Set(finishOrder.map(f => f.id));
   const alive = Object.keys(lobbyPlayers).filter(pid => !quitPlayers.has(pid) && !done.has(pid));
   // Fair rotation: never the same player twice in a row (when others are still playing),
-  // at least 18 s between hits on one player, and whoever waited longest goes first
+  // a breather between hits on one player, and whoever waited longest goes first
   const now = Date.now();
-  let pool = alive.filter(pid => now - (_chaosHit[pid] || 0) >= 18000);
+  let pool = alive.filter(pid => now - (_chaosHit[pid] || 0) >= 9000);
   if (pool.length > 1) pool = pool.filter(pid => pid !== _chaosLastId);
   if (pool.length) {
     pool.sort((a, b) => (_chaosHit[a] || 0) - (_chaosHit[b] || 0));
@@ -293,14 +293,30 @@ function chaosTick() {
     const msg = { type:'party_troll', id, kind, name: (lobbyPlayers[id] || {}).name || 'Someone' };
     broadcastAll(msg); onPartyTroll(msg);
   }
-  _chaosT = setTimeout(chaosTick, 10000 + Math.random() * 6000);
+  _chaosT = setTimeout(chaosTick, 5000 + Math.random() * 4000);
 }
 function onPartyTroll(d) {
   if (!PARTY_TROLLS[d.kind]) return;
   const name = cleanName(d.name), me = d.id === myId;
   if (me && battleActive && !amSpectating) applyTroll({ kind: d.kind, by: 'Chaos', ms: 5000 });
+  else if (amSpectating) showSpecTroll(d.id, d.kind);          // watching? see what they are dealing with
   pushToast((me ? 'You got ' : name + ' got ') + PARTY_TROLLS[d.kind] + '!', me ? 'warn' : 'info', 'sparkle');
   addChatMsg('Chaos: ' + name + ' got ' + PARTY_TROLLS[d.kind], null, true);
+}
+
+// ── Spectating: play the same prank on the little board you are watching ──
+const SPEC_TROLL_MS = { flip: 10000, mirror: 10000, spin: 6000, tiny: 8000, shake: 4000, invert: 8000, fog: 6000, frost: 4000, ghost: 7000, party: 6000 };
+function showSpecTroll(pid, kind) {
+  const wrap = document.getElementById('spec-mini-grid');
+  if (!wrap || !SPEC_TROLL_MS[kind]) return;
+  // Mark the row so you can tell who is being hit even when you are watching someone else
+  const row = document.getElementById('spec-row-' + pid);
+  if (row) { row.classList.remove('trolled'); void row.offsetWidth; row.classList.add('trolled'); setTimeout(() => row.classList.remove('trolled'), 2000); }
+  if (pid !== specViewPid) return;                              // the board only shows the player you picked
+  const cls = 'sp-' + kind;
+  wrap.classList.remove(cls); void wrap.offsetWidth; wrap.classList.add(cls);
+  clearTimeout(wrap['_t_' + cls]);
+  wrap['_t_' + cls] = setTimeout(() => wrap.classList.remove(cls), SPEC_TROLL_MS[kind]);
 }
 function pickRoundDiff() {
   if (battleDiffSetting === 'mm') return mmRoundDiff();
@@ -625,6 +641,10 @@ function handleHostMsg(d) {
         const amt = Math.max(-100000, Math.min(100000, parseInt(d.amount) || 0));
         addXp(amt); updateMenuProfile(); pushToast('+' + amt + ' XP from admin', 'xp');
       }
+      break;
+    case 'force_boost':
+      if (d.id && d.id !== myId) break;
+      if (inGame() && !amSpectating) { try { useAbility(String(d.kind || '')); } catch (e) {} }
       break;
     case 'grant_boost':
       if ((d.id === myId || !d.id) && ABILITIES[d.kind] && abilityInv.length < MAX_SLOTS) {

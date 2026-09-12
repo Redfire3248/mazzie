@@ -387,12 +387,28 @@ const CMDS = {
       }
       needHost(); kinds.forEach(k => broadcastAll({ type:'grant_boost', id:pid, kind:k })); tOk('gave ' + kinds.join(', ') + ' → ' + pname(pid));
     } },
-    fire:  { args:[H('<kind|*>', () => [STAR, ...Object.keys(ABILITIES)])], desc:'Use a boost right now ("*" fires them all)', run(a) {
+    fire:  { args:[H('<kind|*>', () => [STAR, ...Object.keys(ABILITIES)]), playerArg(['all'])], desc:'Fire a boost now — on yourself, or on a player if you host', run(a) {
       const kinds = isStar(a[0]) ? Object.keys(ABILITIES) : [a[0]];
       if (kinds.some(k => !ABILITIES[k])) throw new Error('kinds: ' + Object.keys(ABILITIES).join(', ') + ' (or *)');
-      if (!inGame()) throw new Error('not in a game');
-      const fired = kinds.filter(k => useAbility(k));
-      tOk(fired.length ? 'fired ' + fired.join(', ') : 'could not fire ' + kinds.join(', ') + ' here');
+      const who = (a[1] || '').toLowerCase();
+
+      // No target (or "me") → your own board, Power-ups match or not
+      if (!who || who === 'me') {
+        if (!inGame()) throw new Error('not in a game');
+        const fired = kinds.filter(k => useAbility(k));
+        return tOk(fired.length ? 'fired ' + fired.join(', ') : 'could not fire ' + kinds.join(', ') + ' here');
+      }
+
+      needHost();
+      const ids = who === 'all' ? Object.keys(lobbyPlayers) : [resolvePlayer(a[1])];
+      if (ids.some(p => !p)) throw new Error('no such player');
+      ids.forEach(pid => kinds.forEach(k => {
+        if (pid === myId) { useAbility(k); return; }
+        // A self-boost runs on their board; an attack lands on them as a hit
+        if (ABILITIES[k].attack) broadcastAll({ type:'ability_hit', from:myId, fromName:'Admin', kind:k, id:pid });
+        else broadcastAll({ type:'force_boost', id:pid, kind:k });
+      }));
+      tOk('fired ' + kinds.join(', ') + ' → ' + (who === 'all' ? 'everyone' : pname(ids[0])));
     } },
     list:  { desc:'Show your slots + all kinds', run() {
       tInfo('slots: [' + abilityInv.join(', ') + ']');
@@ -442,6 +458,16 @@ const CMDS = {
     const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player');
     if (pid === myId) resetPath(); else broadcastAll({ type:'reset_path', id:pid });
     tOk('cleared ' + pname(pid) + "'s board");
+  } },
+  mods:     { desc:'Board modifiers on/off right now (solo, or the whole room if you host)', sub:{
+    list: { desc:'What is switched on', run() {
+      const on = activeMods();
+      tInfo('active: ' + (on.map(k => MODIFIERS[k].name).join(', ') || 'none'));
+      Object.entries(MODIFIERS).forEach(([k, m]) => termPrint('  ' + (on.includes(k) ? '[x] ' : '[ ] ') + pad(k, 9) + m.desc, on.includes(k) ? 'ok' : 'dim'));
+    } },
+    on:  { args:[H('<modifier|*>', () => [STAR, ...Object.keys(MODIFIERS)], true)], desc:'Switch modifiers on and rebuild the board', run(a) { setModsNow(a, true); } },
+    off: { args:[H('<modifier|*>', () => [STAR, ...Object.keys(MODIFIERS)], true)], desc:'Switch modifiers off and rebuild the board', run(a) { setModsNow(a, false); } },
+    clear: { desc:'Turn every modifier off', run() { setModsNow(['*'], false); } }
   } },
   kick:     { desc:'Kick a player (host)', args:[H('<player>', playerNames)], run(a) {
     needHost(); const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player'); if (pid === myId) throw new Error('cannot kick yourself');
@@ -889,3 +915,34 @@ document.addEventListener('keydown', e => {
 // Phones: long-press the logo (menu) or the timer (in game)
 onLongPress(document.querySelector('#menu .logo'), 900, adminOpen);
 onLongPress(document.getElementById('timer'), 900, adminOpen);
+
+// ── mods on/off, applied to the board in front of you (and everyone else's, if you host) ──
+function setModsNow(list, on) {
+  const toks = (list || []).map(x => String(x).toLowerCase()).filter(Boolean);
+  if (!toks.length) throw new Error('which modifier? try: mods list');
+  const keys = toks.some(isStar) ? Object.keys(MODIFIERS) : toks;
+  const bad = keys.filter(k => !MODIFIERS[k]);
+  if (bad.length) throw new Error('unknown: ' + bad.join(', ') + ' — try: mods list');
+
+  if (battleActive || inBattleSession()) {
+    needHost();
+    const next = on ? [...new Set([...battleMods, ...keys])] : battleMods.filter(k => !keys.includes(k));
+    setMods(next); renderModRow(); broadcastLobbySettings();
+    if (battleActive) {
+      // Board pieces are baked into the board, so hand everyone a fresh one with the new rules
+      const seed = randSeed(); battleSeed = seed; roundEnded = false;
+      finishOrder = []; progressState = {}; remotePaths = {};
+      broadcastAll({ type:'start_round', round:battleRound, maxRounds, seed, diff:battleDiff, level, abilities:abilitiesEnabled, mods:battleMods });
+      initialSeed = seed; startGame(battleDiff, seed); startChaos(); adminClose();
+    }
+    return tOk('modifiers: ' + (battleMods.map(k => MODIFIERS[k].name).join(', ') || 'none'));
+  }
+
+  // Solo: only the ones that make sense on your own boards
+  const solo = keys.filter(k => SOLO_MODS.includes(k));
+  if (!solo.length) throw new Error('solo modifiers: ' + SOLO_MODS.join(', '));
+  const next = on ? [...new Set([...soloMods(), ...solo])] : soloMods().filter(k => !solo.includes(k));
+  setSoloMods(next); updateModsBtn();
+  if (inGame() && !dailyMode) { generate(); startTimer(); adminClose(); }     // same level, new rules
+  tOk('modifiers: ' + (soloMods().map(k => MODIFIERS[k].name).join(', ') || 'none'));
+}

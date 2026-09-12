@@ -158,7 +158,9 @@ function relayAttack(msg) {
   adminLog('info', out.fromName + ' used ' + msg.kind);
 }
 function receiveAttack(d) {
-  if (d.from === myId || !battleActive || amSpectating || !ABILITIES[d.kind]) return;
+  if (d.id && d.id !== myId) return;                       // aimed at one player (admin)
+  if (d.from === myId || amSpectating || !ABILITIES[d.kind]) return;
+  if (!battleActive && !d.id) return;                      // normal attacks only fly in a match
   const now = performance.now();
   const who = d.fromName || 'A rival';
   if (now < shieldUntil) {

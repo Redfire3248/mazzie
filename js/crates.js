@@ -466,6 +466,7 @@ function onGiftsChanged(all) {
     showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + who, title: what,
       sub: msg ? '"' + String(msg.msg).slice(0, 60) + '"' : 'Open them from your Inbox', ms: 5000 });
     pushToast(who + ' sent you ' + what + (msg ? ' — "' + String(msg.msg).slice(0, 40) + '"' : ''), 'acc', 'gift');
+    if (typeof notifyUser === 'function') notifyUser('MAZZIE', who + ' sent you ' + what, 'gift');
     if (typeof addChatMsg === 'function' && typeof inBattleSession === 'function' && inBattleSession()) addChatMsg(who + ' sent you ' + what, null, true);
   }
   if (isScreen('store')) renderCrates();

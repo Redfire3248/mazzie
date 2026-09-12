@@ -1518,3 +1518,17 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .ib-open{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;}
 .ib-open .ic{width:13px;height:13px;}
 .ib-all{margin-top:4px;}
+/* ── Spectating: the prank shows on the little board too ── */
+.spec-mini-grid{transition:transform .3s cubic-bezier(.34,1.4,.64,1);}
+.spec-mini-grid.sp-flip{transform:rotate(180deg);}
+.spec-mini-grid.sp-mirror{transform:scaleX(-1);}
+.spec-mini-grid.sp-tiny{transform:scale(.62);}
+.spec-mini-grid.sp-spin{animation:trollSpin 5s linear infinite;}
+.spec-mini-grid.sp-shake{animation:trollShake .12s linear infinite;}
+.spec-mini-grid.sp-invert{filter:invert(1) hue-rotate(180deg);}
+.spec-mini-grid.sp-party{animation:trollParty 1.4s linear infinite;}
+.spec-mini-grid.sp-frost{filter:brightness(1.15) saturate(.35) hue-rotate(160deg);}
+.spec-mini-grid.sp-fog .node{color:transparent;background:rgba(var(--txt-rgb),.16);box-shadow:none;}
+.spec-mini-grid.sp-ghost .spec-trail{opacity:.06;}
+.spec-row.trolled{animation:specTrolled 1.8s ease-out;}
+@keyframes specTrolled{0%{box-shadow:0 0 0 2px rgba(var(--gold-rgb),.8);}100%{box-shadow:0 0 0 0 rgba(var(--gold-rgb),0);}}

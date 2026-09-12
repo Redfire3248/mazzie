@@ -61,6 +61,7 @@ let _wdT = null, _hiddenAt = 0;
 function onVis() {
   if (document.visibilityState === 'hidden') { _hiddenAt = Date.now(); return; }
   heartbeat();
+  if (typeof refreshPresence === 'function' && isScreen('friends')) refreshPresence();
   // Back from the background: the phone probably cut the streams — reconnect and catch up now
   if (_hiddenAt && Date.now() - _hiddenAt > 5000) reconnectLive();
   _hiddenAt = 0;
@@ -160,6 +161,7 @@ async function heartbeat() {
     where: battleActive ? 'battle' : (document.body.dataset.screen || 'menu'),
     room: inBattleSession() && !battleActive && !isQuickMatch ? roomCode : ''
   }).catch(() => {});
+  if (typeof publishLookIfChanged === 'function') publishLookIfChanged();   // friends see a new name/look right away
 }
 
 // ── World message banner ──
@@ -257,4 +259,31 @@ async function adminOnline() {
   const all = (await dbGet('/online')) || {};
   const now = Date.now();
   return Object.entries(all).filter(([, o]) => o && now - o.at < 120000).map(([id, o]) => ({ id, ...o })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ══════════════════════════════════════════════════
+// SYSTEM NOTIFICATIONS — so an invite still reaches you with the app in the background
+// (the browser only allows these after the player says yes in Settings)
+// ══════════════════════════════════════════════════
+function notifySupported() { return typeof Notification !== 'undefined'; }
+function notifyState() { return notifySupported() ? Notification.permission : 'unsupported'; }
+function notifyOn() { return notifySupported() && Notification.permission === 'granted' && getSetting('notify', true); }
+async function askNotify() {
+  if (!notifySupported()) { pushToast('This browser has no notifications', 'warn'); return false; }
+  if (Notification.permission === 'denied') { pushToast('Notifications are blocked in your browser settings', 'warn'); return false; }
+  if (Notification.permission !== 'granted') {
+    try { await Notification.requestPermission(); } catch (e) {}
+  }
+  const ok = Notification.permission === 'granted';
+  setSetting('notify', ok);
+  if (ok) pushToast('Notifications on — invites will reach you in the background', 'acc', 'mail');
+  return ok;
+}
+// Only when the app is not in front: on screen you already get the popup
+function notifyUser(title, body, tag) {
+  if (!notifyOn() || document.visibilityState === 'visible') return;
+  try {
+    const n = new Notification(title, { body, tag: tag || 'mazzie' });
+    n.onclick = () => { try { window.focus(); } catch (e) {} n.close(); };
+  } catch (e) {}
 }

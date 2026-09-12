@@ -274,6 +274,14 @@ function renderSettings() {
   setToggle('set-sound', getSetting('sound', true));
   setToggle('set-haptics', getSetting('haptics', true));
   setToggle('set-autonext', getSetting('autoNext', false));
+  setToggle('set-notify', typeof notifyOn === 'function' && notifyOn());
+  const nv = $('set-notify-val');
+  if (nv && typeof notifyState === 'function') {
+    const st = notifyState();
+    nv.innerText = st === 'unsupported' ? 'Not available in this browser'
+      : st === 'denied' ? 'Blocked — turn them on in your browser settings'
+      : 'Invites and gifts while the app is in the background';
+  }
   // Admin
   $('set-admin').hidden = !isAdminUser();
 }
@@ -306,3 +314,10 @@ document.addEventListener('keydown', e => {
   else if (isScreen('forgot') && document.activeElement && document.activeElement.closest('#forgot-code-form')) { e.preventDefault(); forgotSubmitCode(); }
   else if (!$('pin-modal').classList.contains('hidden')) { e.preventDefault(); savePinModal(); }
 });
+
+async function toggleNotify() {
+  if (typeof notifyOn !== 'function') return;
+  if (notifyOn()) { setSetting('notify', false); renderSettings(); sfx('tap'); return; }
+  await askNotify();
+  renderSettings(); sfx('tap');
+}

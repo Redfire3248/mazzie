@@ -17,8 +17,8 @@ async function listenFriends() {
   if (!friendsReady()) return;
   const me = currentAccount.id;
   loadFriends();
-  _frPollT = setInterval(loadFriends, 60000);
-  if (isScreen('friends')) { refreshPresence(); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 20000); }
+  _frPollT = setInterval(loadFriends, 30000);
+  if (isScreen('friends')) { refreshPresence(); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 7000); }
   _rqES = streamNode(await streamUrl('/friendReq/' + me), v => {
     const prev = _reqIn;
     _reqIn = v && typeof v === 'object' ? v : {};
@@ -26,6 +26,7 @@ async function listenFriends() {
       if (prev[id] || !r) return;
       sfx('world');
       showAvatarMessage('Friend request', cleanName(r.name) + ' wants to be friends', cleanName(r.name), r.av, 5000);
+      notifyUser('MAZZIE', cleanName(r.name) + ' wants to be friends', 'friendreq');
     });
     friendsChanged();
   }, () => { if (_liveOn) listenFriends(); });
@@ -65,11 +66,16 @@ function friendsChanged() {
 }
 
 // ── Presence ──
-async function refreshPresence() {
+let _presTick = 0;
+async function refreshPresence(full) {
   await loadFriends();
   const ids = Object.keys(_friends);
+  // Presence every pass (it changes the most); looks and levels every other pass, so a
+  // long friends list does not mean a burst of requests every few seconds
+  const looks = full || _presTick++ % 2 === 0;
   await Promise.all(ids.map(async id => {
     try { _presence[id] = await dbGet('/online/' + id); } catch (e) { _presence[id] = null; }
+    if (!looks) return;
     try { const p = await dbGet('/profiles/' + id); if (p) _profiles[id] = p; } catch (e) {}
   }));
   if (isScreen('friends')) renderFriends();
@@ -89,8 +95,8 @@ function openFriends() {
   document.getElementById('friend-add-err').innerText = '';
   renderFriends();
   if (!friendsReady()) return;
-  refreshPresence();
-  clearInterval(_presT); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 20000);
+  refreshPresence(true);
+  clearInterval(_presT); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 7000);
 }
 // Back to the room (fully set up: host gets Start + settings) or the menu
 function closeFriends() {
@@ -248,6 +254,9 @@ function dismissInvite(id) {
 function showInvite(id, inv) {
   const el = document.getElementById('invite-pop'); if (!el) return;
   sfx('world'); buzz([30, 40, 30]);
+  const who = cleanName(inv.name);
+  pushToast(who + ' invited you to a room', 'acc', 'swords');
+  notifyUser('MAZZIE', who + ' invited you to play' + (inv.room ? ' (room ' + inv.room + ')' : ''), 'invite');
   el.innerHTML = `<div class="ip-ava">${renderAvatar(sanitizeAvatar(inv.av || {}), cleanName(inv.name), 46)}</div>
     <div class="ip-txt"><small>Room invite</small><b>${escapeHtml(cleanName(inv.name))} wants to play!</b></div>
     <div class="ip-btns"><button class="btn primary sm" onclick="acceptInvite('${id}')">${ic('login')}Join</button>
@@ -303,7 +312,7 @@ async function openProfile(id, hint, quiet) {
   if (!quiet) {
     sfx('tap');
     clearInterval(_profT);
-    _profT = setInterval(() => { if (document.getElementById('profile-pop').hidden) clearInterval(_profT); else openProfile(id, hint, true); }, 6000);
+    _profT = setInterval(() => { if (document.getElementById('profile-pop').hidden) clearInterval(_profT); else openProfile(id, hint, true); }, 3000);
   }
 }
 function closeProfile() { const el = document.getElementById('profile-pop'); if (el) el.hidden = true; clearInterval(_profT); }

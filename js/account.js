@@ -552,8 +552,24 @@ async function syncAccountToCloud() {
     try {
       if (progressOk) await dbPut('/profiles/' + id, { ...look, xp: s.xp || 0, cleared: s.totalCleared || 0 });
       else await dbPatch('/profiles/' + id, look).catch(() => dbPut('/profiles/' + id, { ...look, xp: 0, cleared: 0 }));
+      _lookSent = lookStamp();
     } catch (e) {}
   }
+}
+// What your friends see of you: name + look. Cheap to publish, so it goes out
+// as soon as it changes instead of waiting for the next full sync.
+const lookStamp = () => myName + '|' + JSON.stringify(getMyAvatar());
+let _lookSent = '';
+async function publishLookIfChanged() {
+  if (authMode() !== 'secure' || !currentAccount || currentAccount.offline || !_authUser) return;
+  const stamp = lookStamp();
+  if (stamp === _lookSent) return;
+  const s = loadSave(), id = currentAccount.id;
+  const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME };
+  try {
+    await dbPatch('/profiles/' + id, look).catch(() => dbPut('/profiles/' + id, { ...look, xp: s.xp || 0, cleared: s.totalCleared || 0 }));
+    _lookSent = stamp;
+  } catch (e) {}
 }
 
 async function initAccount(onReady) {
