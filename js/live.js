@@ -8,6 +8,7 @@
 // ══════════════════════════════════════════════════
 
 let _bcES = null, _trES = null, _hbT = null, _liveOn = false;
+let _bcOff = null, _trOff = null, _giftOff = null;     // live-socket unsubscribers
 const TROLLS = {
   flip:      { desc: 'Turns their board upside down (10s)' },
   spin:      { desc: 'Slowly spins their board (6s)' },
@@ -24,6 +25,7 @@ const TROLLS = {
   fakecoins: { desc: 'Fake "+1,000,000 coins", then "just kidding"' },
   msg:       { desc: 'Private message popup', text: true },
   solve:     { desc: 'Clears their current level for them' },
+  clearpath: { desc: 'Wipes the path they have drawn so far' },
   skip:      { desc: 'Sends them to the next level' },
   level:     { desc: 'Moves them to level N', value: true },
   gift:      { desc: 'Gift coins (already added by the admin)', value: true },
@@ -36,7 +38,7 @@ async function streamUrl(path) {
   return u.toString();
 }
 function startLive() {
-  if (_liveOn || authMode() !== 'secure' || !currentAccount || currentAccount.offline || typeof EventSource === 'undefined') return;
+  if (_liveOn || authMode() !== 'secure' || !currentAccount || currentAccount.offline) return;
   _liveOn = true;
   listenBroadcast(); listenTroll(); listenGifts(); heartbeat();
   if (typeof listenFriends === 'function') listenFriends();
@@ -51,6 +53,8 @@ function startLive() {
 function stopLive() {
   _liveOn = false;
   _bcES = esKill(_bcES); _trES = esKill(_trES); clearInterval(_giftT);
+  [_bcOff, _trOff, _giftOff].forEach(off => { if (off) try { off(); } catch (e) {} });
+  _bcOff = _trOff = _giftOff = null;
   if (typeof onGiftsChanged === 'function') _gifts = {};
   if (typeof stopFriends === 'function') stopFriends();
   clearInterval(_hbT); clearInterval(_wdT);
@@ -86,6 +90,7 @@ function reconnectLive() {
 }
 // A stream is dead if it closed, or Firebase's keep-alive (sent about every 30 s) stopped arriving
 function watchStreams() {
+  if (liveReady()) return;                            // the SDK reconnects on its own
   if (!_liveOn || document.visibilityState === 'hidden' || streamsPaused()) return;
   const all = [_bcES, _trES];                       // friend requests and invites are polled, not streamed
   if (all.some(es => !es || es.readyState === 2 || Date.now() - (es._last || 0) > 100000)) reconnectLive();
@@ -135,8 +140,23 @@ function streamNode(url, onChange, onAuthRevoked) {
   es.addEventListener('cancel', () => { es.close(); if (onAuthRevoked) setTimeout(onAuthRevoked, 5000); });
   return es;
 }
+// One handler, whether the value arrived over the socket or a poll
+function onBroadcastValue(b) {
+  if (!b || !b.msg || typeof b.at !== 'number') return;
+  const seen = +localStorage.getItem('mz_bc_seen') || 0;
+  if (b.at <= seen || Date.now() - b.at > 20 * 60000) return;     // already seen, or older than 20 min
+  localStorage.setItem('mz_bc_seen', String(b.at));
+  showWorldMessage(String(b.msg).slice(0, 200), b.by, b.av);
+}
+function onTrollValue(t) {
+  if (!t || !t.kind || typeof t.at !== 'number') return;
+  dbDelete('/troll/' + currentAccount.id).catch(() => {});        // one-shot: clear it so it never replays
+  if (Date.now() - t.at > 3 * 60000) return;
+  applyTroll(t);
+}
 async function listenBroadcast() {
   _bcES = esKill(_bcES);
+  if (liveReady()) { _bcOff = (_bcOff || (() => {}))(), _bcOff = liveWatch('/broadcast', onBroadcastValue); return; }
   _bcES = streamNode(await streamUrl('/broadcast'), b => {
     if (!b || !b.msg || typeof b.at !== 'number') return;
     const seen = +localStorage.getItem('mz_bc_seen') || 0;
@@ -149,6 +169,7 @@ async function listenTroll() {
   _trES = esKill(_trES);
   if (!currentAccount || !currentAccount.id) return;
   const path = '/troll/' + currentAccount.id;
+  if (liveReady()) { _trOff = (_trOff || (() => {}))(), _trOff = liveWatch(path, onTrollValue); return; }
   _trES = streamNode(await streamUrl(path), t => {
     if (!t || !t.kind || typeof t.at !== 'number') return;
     dbDelete(path).catch(() => {});                      // one-shot: clear it so it never replays
@@ -163,7 +184,15 @@ async function pollGifts() {
   if (!_liveOn || !currentAccount || !currentAccount.id || typeof onGiftsChanged !== 'function') return;
   try { onGiftsChanged(await dbGet('/gifts/' + currentAccount.id)); } catch (e) {}
 }
-function listenGifts() { clearInterval(_giftT); pollGifts(); _giftT = setInterval(pollGifts, 12000); }
+function listenGifts() {
+  clearInterval(_giftT);
+  if (_giftOff) { _giftOff(); _giftOff = null; }
+  if (liveReady() && currentAccount && currentAccount.id) {
+    _giftOff = liveWatch('/gifts/' + currentAccount.id, v => onGiftsChanged(v));   // arrives the moment it is sent
+    return;
+  }
+  pollGifts(); _giftT = setInterval(pollGifts, 12000);
+}
 async function heartbeat() {
   if (!_liveOn || document.visibilityState === 'hidden' || !currentAccount) return;
   dbPut('/online/' + currentAccount.id, {
@@ -210,6 +239,9 @@ function applyTroll(t) {
     case 'msg': sfx('world'); showAvatarMessage('Message from ' + by, String(t.text || '').slice(0, 160), by, t.av); break;
     case 'solve':
       if (inGame() && !amSpectating && cells.length) { try { adminAutoSolve(); } catch (e) {} }   // silent: no admin name, no toast
+      break;
+    case 'clearpath':
+      if (inGame() && !amSpectating) resetPath();                                                 // silent as well
       break;
     case 'skip':
       if (inGame() && !battleActive && !dailyMode) { nextLevel(); pushToast(by + ' skipped you ahead', 'acc', 'arrowR'); }

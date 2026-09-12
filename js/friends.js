@@ -16,46 +16,84 @@ const friendsReady = () => authMode() === 'secure' && currentAccount && !current
 // Friend requests and invites are POLLED, not streamed. A browser only allows a handful of
 // connections per host; four permanent streams left none for ordinary reads, so profiles and
 // presence could sit in the queue for ever and the list never updated.
-let _rqPollT = null;
+let _rqPollT = null, _liveOff = [];
 async function listenFriends() {
   stopFriends();
   if (!friendsReady()) return;
+  const me = currentAccount.id;
+
+  // With the live socket nothing is polled: requests, invites and the list itself
+  // arrive the instant they change, and each friend's presence and look follow them.
+  if (liveReady()) {
+    _liveOff.push(liveWatch('/friendReq/' + me, v => applyRequests(v)));
+    _liveOff.push(liveWatch('/invites/' + me, v => applyInvites(v)));
+    _liveOff.push(liveWatch('/friends/' + me, v => {
+      _friends = v && typeof v === 'object' ? v : {};
+      watchFriendDetails();                      // follow whoever is on the list now
+      friendsChanged();
+      if (isScreen('friends')) renderFriends();
+    }));
+    return;
+  }
+
   loadFriends();
   _frPollT = setInterval(loadFriends, 30000);
   if (isScreen('friends')) { refreshPresence(true); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 7000); }
   pollInbox();
   _rqPollT = setInterval(pollInbox, 10000);
 }
+// One listener per friend for presence and one for their profile — all on the same socket
+let _detailOff = {};
+function watchFriendDetails() {
+  if (!liveReady()) return;
+  Object.keys(_detailOff).forEach(id => {         // drop anyone no longer a friend
+    if (_friends[id]) return;
+    _detailOff[id].forEach(off => { if (off) off(); });
+    delete _detailOff[id]; delete _presence[id]; delete _profiles[id];
+  });
+  Object.keys(_friends).forEach(id => {
+    if (_detailOff[id]) return;
+    _detailOff[id] = [
+      liveWatch('/online/' + id,   v => { _presence[id] = v; if (isScreen('friends')) renderFriends(); }),
+      liveWatch('/profiles/' + id, v => { if (v) _profiles[id] = v; if (isScreen('friends')) renderFriends(); })
+    ];
+  });
+}
+// Shared by the socket and the polling fallback
+function applyRequests(v) {
+  const prev = _reqIn;
+  _reqIn = v && typeof v === 'object' ? v : {};
+  Object.entries(_reqIn).forEach(([id, r]) => {
+    if (prev[id] || !r) return;
+    sfx('world');
+    showAvatarMessage('Friend request', cleanName(r.name) + ' wants to be friends', cleanName(r.name), r.av, 5000);
+    notifyUser('MAZZIE', cleanName(r.name) + ' wants to be friends', 'friendreq');
+  });
+  friendsChanged();
+}
+function applyInvites(v) {
+  _invites = v && typeof v === 'object' ? v : {};
+  Object.entries(_invites).forEach(([id, inv]) => {
+    if (!inv || _seenInvites.has(id + inv.at)) return;
+    _seenInvites.add(id + inv.at);
+    if (typeof inv.at === 'number' && Date.now() - inv.at > 5 * 60000) return;   // stale
+    showInvite(id, inv);
+  });
+  friendsChanged();
+}
 // One pass: any new friend requests, any new room invites
 async function pollInbox() {
   if (!friendsReady() || document.visibilityState === 'hidden') return;
   const me = currentAccount.id;
-  try {
-    const prev = _reqIn;
-    const v = await dbGet('/friendReq/' + me);
-    _reqIn = v && typeof v === 'object' ? v : {};
-    Object.entries(_reqIn).forEach(([id, r]) => {
-      if (prev[id] || !r) return;
-      sfx('world');
-      showAvatarMessage('Friend request', cleanName(r.name) + ' wants to be friends', cleanName(r.name), r.av, 5000);
-      notifyUser('MAZZIE', cleanName(r.name) + ' wants to be friends', 'friendreq');
-    });
-  } catch (e) {}
-  try {
-    const v = await dbGet('/invites/' + me);
-    _invites = v && typeof v === 'object' ? v : {};
-    Object.entries(_invites).forEach(([id, inv]) => {
-      if (!inv || _seenInvites.has(id + inv.at)) return;
-      _seenInvites.add(id + inv.at);
-      if (typeof inv.at === 'number' && Date.now() - inv.at > 5 * 60000) return;   // stale
-      showInvite(id, inv);
-    });
-  } catch (e) {}
-  friendsChanged();
+  try { applyRequests(await dbGet('/friendReq/' + me)); } catch (e) {}
+  try { applyInvites(await dbGet('/invites/' + me)); } catch (e) {}
 }
 function stopFriends() {
   [_rqES, _ivES].forEach(es => esKill(es));
   _rqES = _ivES = null;
+  _liveOff.forEach(off => { if (off) try { off(); } catch (e) {} }); _liveOff = [];
+  Object.values(_detailOff || {}).forEach(l => l.forEach(off => { if (off) try { off(); } catch (e) {} }));
+  _detailOff = {};
   clearInterval(_presT); clearInterval(_frPollT); clearInterval(_rqPollT);
 }
 // Friends list (fetched when needed; it changes rarely)

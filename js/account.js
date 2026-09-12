@@ -20,6 +20,25 @@ let accountReady   = false;
 let _authUser      = null;   // firebase.User (secure mode)
 
 const CFG = () => window.MAZZIE_CONFIG || {};
+function dbUrlForSdk() {
+  const c = CFG();
+  if (c.firebaseConfig && c.firebaseConfig.databaseURL) return c.firebaseConfig.databaseURL;
+  if (!c.firebaseUrl) return undefined;
+  return c.firebaseUrl + (c.dbNamespace ? '?ns=' + c.dbNamespace : '');
+}
+// ── Live subscriptions (one socket for all of them) ──
+// liveWatch(path, cb) calls cb(value) now and on every change; returns a stop function.
+// Without the SDK it returns null and the caller keeps its old polling.
+function liveWatch(path, cb) {
+  if (!FB.db || !FB.dbMod) return null;
+  try {
+    const r = FB.dbMod.ref(FB.db, path);
+    const off = FB.dbMod.onValue(r, snap => { try { cb(snap.val()); } catch (e) { console.warn(e); } },
+      err => dbLog('warn', 'live ' + path + ': ' + (err && err.message)));
+    return () => { try { off(); } catch (e) {} };
+  } catch (e) { return null; }
+}
+const liveReady = () => !!(FB.db && FB.dbMod);
 function fbUrl() {
   const u = CFG().firebaseUrl;
   return u && !u.includes('YOUR-PROJECT') ? u.replace(/\/$/, '') : null;
@@ -139,15 +158,26 @@ function initFirebase() {
   if (_fbReady) return _fbReady;
   _fbReady = (async () => {
     const V = '10.12.5';
-    const [appMod, authMod] = await Promise.all([
+    const [appMod, authMod, dbMod] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
-      import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`)
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
+      // The database SDK keeps ONE socket open, refreshes its own token and reconnects by
+      // itself. Everything live rides on it, which is why nothing needs a reload any more.
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-database.js`).catch(() => null)
     ]);
     Object.assign(FB, authMod);
     FB.appMod = appMod;
+    FB.dbMod = dbMod;
     const app = appMod.getApps().find(a => a.name === '[DEFAULT]') || appMod.initializeApp(fbCfg());
     FB.auth = authMod.initializeAuth(app, { persistence: [authMod.indexedDBLocalPersistence, authMod.browserLocalPersistence] });
     if (CFG().emulator && CFG().emulator.auth) authMod.connectAuthEmulator(FB.auth, CFG().emulator.auth, { disableWarnings: true });
+    if (dbMod) {
+      try {
+        FB.db = dbMod.getDatabase(app, dbUrlForSdk());
+        const em = CFG().emulator && CFG().emulator.database;
+        if (em) dbMod.connectDatabaseEmulator(FB.db, em.host || '127.0.0.1', em.port || 9000);
+      } catch (e) { FB.db = null; console.warn('MAZZIE: live database unavailable, falling back to polling', e && e.message); }
+    }
     // Firebase refreshes (or drops) the session on its own — follow it instead of holding a stale user
     authMod.onAuthStateChanged(FB.auth, u => {
       if (u) { _authUser = u; if (_signedOut) { _signedOut = false; dbLog('ok', 'signed back in'); if (typeof startLive === 'function') startLive(); } }

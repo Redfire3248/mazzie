@@ -484,21 +484,11 @@ const CMDS = {
     rounds:     { args:[NUM()], desc:'Set round count (host)', run(a) { needHost(); maxRounds = Math.max(1, Math.min(10, needInt(a[0]))); document.getElementById('rounds-disp').innerText = maxRounds; broadcastLobbySettings(); tOk('rounds = ' + maxRounds); } },
     boosts:     { args:[H('<on|off>', ['on', 'off'])], desc:'Power-ups modifier on/off (host)', run(a) { needHost(); setMods(a[0] === 'off' ? battleMods.filter(k => k !== 'boosts') : [...new Set([...battleMods, 'boosts'])]); renderModRow(); broadcastLobbySettings(); tOk('boosts ' + (abilitiesEnabled ? 'on' : 'off')); } }
   } },
-  solve:    { desc:"Solve a player's board (host, in a match)", args:[playerArg(['all'])], run(a) {
-    needHost(); needBattle();
-    const t = (a[0] || '').toLowerCase(); if (!t) throw new Error('who? a player name, me, or all');
-    if (t === 'all') { broadcastAll({ type:'admin_solve' }); if (!amSpectating) adminAutoSolve(); return tOk('solving every board'); }
-    const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player');
-    if (pid === myId) adminAutoSolve(); else broadcastAll({ type:'admin_solve', id:pid });
-    tOk('solving ' + pname(pid) + "'s board");
+  solve:    { desc:"Solve a player's board — anyone, anywhere", args:[H('<player|me|all>', () => ['me', 'all', ...playerNames(), ...accountNames()])], async run(a) {
+    return boardCommand(a[0], 'solve');
   } },
-  clear:    { desc:"Clear a player's board (host, in a match)", args:[playerArg(['all'])], run(a) {
-    needHost(); needBattle();
-    const t = (a[0] || '').toLowerCase(); if (!t) throw new Error('who? a player name, me, or all');
-    if (t === 'all') { broadcastAll({ type:'reset_path' }); resetPath(); return tOk('cleared every board'); }
-    const pid = resolvePlayer(a[0]); if (!pid) throw new Error('no such player');
-    if (pid === myId) resetPath(); else broadcastAll({ type:'reset_path', id:pid });
-    tOk('cleared ' + pname(pid) + "'s board");
+  clear:    { desc:"Wipe a player's path — anyone, anywhere", args:[H('<player|me|all>', () => ['me', 'all', ...playerNames(), ...accountNames()])], async run(a) {
+    return boardCommand(a[0], 'clear');
   } },
   mods:     { desc:'Board modifiers on/off right now (solo, or the whole room if you host)', sub:{
     list: { desc:'What is switched on', run() {
@@ -986,4 +976,52 @@ function setModsNow(list, on) {
   setSoloMods(next); updateModsBtn();
   if (inGame() && !dailyMode) { generate(); startTimer(); adminClose(); }     // same level, new rules
   tOk('modifiers: ' + (soloMods().map(k => MODIFIERS[k].name).join(', ') || 'none'));
+}
+
+// ══════════════════════════════════════════════════
+// solve / clear — three ways to reach a player, tried in order:
+//   1. it is you            → do it here
+//   2. you host their room  → peer message, instant
+//   3. anyone else          → the admin channel in the database (works from anywhere)
+// ══════════════════════════════════════════════════
+async function boardCommand(who, kind) {
+  const t = String(who || '').toLowerCase();
+  if (!t) throw new Error('who? a player name, me, or all');
+  const doHere = () => kind === 'solve' ? adminAutoSolve() : resetPath();
+  const peerMsg = id => kind === 'solve' ? { type:'admin_solve', id } : { type:'reset_path', id };
+
+  if (t === 'me') { needSoloOrBattleBoard(); doHere(); return tOk(kind === 'solve' ? 'solving your board' : 'cleared your board'); }
+
+  if (t === 'all') {
+    if (isHost && battleActive) {
+      broadcastAll(kind === 'solve' ? { type:'admin_solve' } : { type:'reset_path' });
+      if (!amSpectating) doHere();
+      return tOk(kind === 'solve' ? 'solving every board' : 'cleared every board');
+    }
+    // Not hosting: reach every online player through the admin channel
+    needSecure();
+    const online = (await adminOnline()).filter(o => o.id !== currentAccount.id);
+    if (!online.length) return tWarn('nobody else is online');
+    await Promise.all(online.map(o => adminTroll(o.id, kind === 'solve' ? 'solve' : 'clearpath', {})));
+    return tOk(kind + ' → ' + online.map(o => o.name).join(', '));
+  }
+
+  // A player in the room you host: instant, over the room connection
+  if (isHost && battleActive) {
+    const pid = resolvePlayer(who);
+    if (pid === myId) { doHere(); return tOk(kind === 'solve' ? 'solving your board' : 'cleared your board'); }
+    if (pid) { broadcastAll(peerMsg(pid)); return tOk(kind + ' → ' + pname(pid)); }
+  }
+
+  // Anyone else, anywhere: the admin channel
+  needSecure();
+  const hit = onlineCache.find(o => o.name.toLowerCase() === String(who).toLowerCase()) || await findAccount(who);
+  await adminTroll(hit.id, kind === 'solve' ? 'solve' : 'clearpath', {});
+  // Say honestly whether it landed now or is waiting for them
+  let on = onlineCache.some(o => o.id === hit.id);
+  if (!on) { try { const p = await dbGet('/online/' + hit.id); on = !!(p && typeof p.at === 'number' && Date.now() - p.at < 120000); } catch (e) {} }
+  tOk(kind + ' → ' + hit.name + (on ? '' : '  (waiting — it fires when they next open the game, within 3 min)'));
+}
+function needSoloOrBattleBoard() {
+  if (!inGame() || !cells.length) throw new Error('you are not on a board');
 }
