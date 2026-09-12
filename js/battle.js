@@ -237,9 +237,9 @@ const MODIFIERS = {
   ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible' },
   fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is shown' },
   // Puzzle pieces (see PIECES in js/puzzle.js) — these change the board itself
-  portal: { name: 'Portals',       icon: 'orb',     desc: 'Two linked cells: step on one, come out the other' },
-  oneway: { name: 'One-Way',       icon: 'arrowR',  desc: 'Arrow cells can only be entered from one side' },
-  locks:  { name: 'Locks & Keys',  icon: 'lock',    desc: 'Locked cells open only once you take their key' }
+  portal: { name: 'Portals',       icon: 'orb',     short: 'Portals', desc: 'Two linked cells: step on one, come out the other' },
+  oneway: { name: 'One-Way',       icon: 'arrowR',  short: 'One-Way', desc: 'Arrow cells can only be entered from one side' },
+  locks:  { name: 'Locks & Keys',  icon: 'lock',    short: 'Locks',   desc: 'Locked cells open only once you take their key' }
 };
 const cleanMods = m => (Array.isArray(m) ? m : []).filter(k => MODIFIERS[k]).slice(0, 12);
 function setMods(list) { battleMods = cleanMods(list); partyMode = battleMods.includes('events'); abilitiesEnabled = battleMods.includes('boosts'); }

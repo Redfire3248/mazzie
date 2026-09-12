@@ -1355,9 +1355,9 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .pieces-lbl{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);}
 .pieces-lbl .ic{width:13px;height:13px;}
 .pieces-lbl small{text-transform:none;letter-spacing:.3px;opacity:.65;}
-.pieces-row{display:flex;gap:7px;flex-wrap:wrap;}
-.piece-chip{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border-radius:12px;background:var(--cell);border:1px solid var(--cb);color:var(--dim);font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s;}
-.piece-chip .ic{width:15px;height:15px;}
+.pieces-row{display:flex;gap:6px;}
+.piece-chip{flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 4px;border-radius:12px;background:var(--cell);border:1px solid var(--cb);color:var(--dim);font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:all .15s;}
+.piece-chip .ic{width:14px;height:14px;flex-shrink:0;}
 .piece-chip.on{color:var(--acc);border-color:rgba(var(--acc-rgb),.55);background:linear-gradient(120deg,rgba(var(--acc-rgb),.16),var(--cell));}
 .piece-chip:active{transform:scale(.96);}
 /* Portals: a tinted ring, twins share a colour */

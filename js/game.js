@@ -22,7 +22,7 @@ function renderPiecesRow() {
   const on = soloPieces();
   row.innerHTML = PIECES.map(k => {
     const m = MODIFIERS[k];
-    return `<button class="piece-chip${on.includes(k) ? ' on' : ''}" onclick="togglePiece('${k}')" title="${m.desc}">${ic(m.icon)}<span>${m.name}</span></button>`;
+    return `<button class="piece-chip${on.includes(k) ? ' on' : ''}" onclick="togglePiece('${k}')" title="${m.desc}">${ic(m.icon)}<span>${m.short || m.name}</span></button>`;
   }).join('');
 }
 
