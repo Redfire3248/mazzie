@@ -13,15 +13,26 @@ let _rqES = null, _ivES = null, _presT = null, _frPollT = null, _seenInvites = n
 const friendsReady = () => authMode() === 'secure' && currentAccount && !currentAccount.offline && !currentAccount.local && _authUser;
 
 // ── Live streams (started/stopped by live.js) ──
+// Friend requests and invites are POLLED, not streamed. A browser only allows a handful of
+// connections per host; four permanent streams left none for ordinary reads, so profiles and
+// presence could sit in the queue for ever and the list never updated.
+let _rqPollT = null;
 async function listenFriends() {
   stopFriends();
   if (!friendsReady()) return;
-  const me = currentAccount.id;
   loadFriends();
   _frPollT = setInterval(loadFriends, 30000);
-  if (isScreen('friends')) { refreshPresence(); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 7000); }
-  _rqES = streamNode(await streamUrl('/friendReq/' + me), v => {
+  if (isScreen('friends')) { refreshPresence(true); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 7000); }
+  pollInbox();
+  _rqPollT = setInterval(pollInbox, 10000);
+}
+// One pass: any new friend requests, any new room invites
+async function pollInbox() {
+  if (!friendsReady() || document.visibilityState === 'hidden') return;
+  const me = currentAccount.id;
+  try {
     const prev = _reqIn;
+    const v = await dbGet('/friendReq/' + me);
     _reqIn = v && typeof v === 'object' ? v : {};
     Object.entries(_reqIn).forEach(([id, r]) => {
       if (prev[id] || !r) return;
@@ -29,9 +40,9 @@ async function listenFriends() {
       showAvatarMessage('Friend request', cleanName(r.name) + ' wants to be friends', cleanName(r.name), r.av, 5000);
       notifyUser('MAZZIE', cleanName(r.name) + ' wants to be friends', 'friendreq');
     });
-    friendsChanged();
-  }, () => { if (_liveOn) listenFriends(); });
-  _ivES = streamNode(await streamUrl('/invites/' + me), v => {
+  } catch (e) {}
+  try {
+    const v = await dbGet('/invites/' + me);
     _invites = v && typeof v === 'object' ? v : {};
     Object.entries(_invites).forEach(([id, inv]) => {
       if (!inv || _seenInvites.has(id + inv.at)) return;
@@ -39,13 +50,13 @@ async function listenFriends() {
       if (typeof inv.at === 'number' && Date.now() - inv.at > 5 * 60000) return;   // stale
       showInvite(id, inv);
     });
-    friendsChanged();
-  }, () => { if (_liveOn) listenFriends(); });
+  } catch (e) {}
+  friendsChanged();
 }
 function stopFriends() {
   [_rqES, _ivES].forEach(es => esKill(es));
   _rqES = _ivES = null;
-  clearInterval(_presT); clearInterval(_frPollT);
+  clearInterval(_presT); clearInterval(_frPollT); clearInterval(_rqPollT);
 }
 // Friends list (fetched when needed; it changes rarely)
 async function loadFriends() {
@@ -75,12 +86,15 @@ async function refreshPresence(full) {
   // Presence every pass (it changes the most); looks and levels every other pass, so a
   // long friends list does not mean a burst of requests every few seconds
   const looks = full || _presTick++ % 2 === 0;
-  await Promise.all(ids.map(async id => {
+  // One friend at a time: the live streams already hold several connections open, and firing
+  // a request per friend at once means they queue behind each other and time out.
+  for (const id of ids) {
     try { _presence[id] = await dbGet('/online/' + id); } catch (e) { _presence[id] = null; }
-    if (!looks) return;
+    if (!looks) continue;
     try { const p = await dbGet('/profiles/' + id); if (p) _profiles[id] = p; else failed++; }
     catch (e) { failed++; }
-  }));
+    if (isScreen('friends')) renderFriends();          // show each row as it arrives
+  }
   // Every single profile missing usually means the database rules are not published yet
   if (ids.length && failed === ids.length) _profFails++; else _profFails = 0;
   if (_profFails === 3 && isScreen('friends')) pushToast('No profiles came back — are the database rules published?', 'warn', 'alert');
@@ -111,7 +125,7 @@ function openFriends() {
   document.getElementById('friend-add-err').innerText = '';
   renderFriends();
   if (!friendsReady()) return;
-  refreshPresence(true);
+  refreshPresence(true); pollInbox();
   clearInterval(_presT); _presT = setInterval(() => { if (isScreen('friends')) refreshPresence(); else clearInterval(_presT); }, 7000);
 }
 // Back to the room (fully set up: host gets Start + settings) or the menu

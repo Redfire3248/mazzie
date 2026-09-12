@@ -34,13 +34,19 @@ async function dbUrl(path) {
   if (_authUser) qs.push('auth=' + encodeURIComponent(await _authUser.getIdToken()));
   return fbUrl() + path + '.json' + (qs.length ? '?' + qs.join('&') : '');
 }
+// The live streams hold connections open, so a request can sit in the browser's queue for ever.
+// Every call gets a deadline: better to fail and retry on the next pass than to hang the screen.
+const DB_TIMEOUT_MS = 9000;
 async function dbReq(method, path, data) {
   if (!fbUrl()) throw new Error('NO_CONFIG');
   let r;
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), DB_TIMEOUT_MS) : null;
   try {
     r = await fetch(await dbUrl(path), { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-      body: data === undefined ? undefined : JSON.stringify(data) });
-  } catch (e) { throw new Error('NETWORK'); }
+      body: data === undefined ? undefined : JSON.stringify(data), signal: ctl ? ctl.signal : undefined });
+  } catch (e) { throw new Error(e && e.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK'); }
+  finally { if (t) clearTimeout(t); }
   if (r.status === 401 || r.status === 403) throw new Error('DENIED');
   if (!r.ok) throw new Error('DB_' + r.status);
   return r.json();
@@ -551,7 +557,7 @@ async function syncAccountToCloud() {
     const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME };
     try {
       if (progressOk) await dbPut('/profiles/' + id, { ...look, xp: s.xp || 0, cleared: s.totalCleared || 0 });
-      else await dbPatch('/profiles/' + id, look).catch(() => dbPut('/profiles/' + id, { ...look, xp: 0, cleared: 0 }));
+      else await dbPatch('/profiles/' + id, look).catch(() => putProfileFromAccount(id, look));
       _lookSent = lookStamp();
     } catch (e) {}
   }
@@ -564,12 +570,22 @@ async function publishLookIfChanged() {
   if (authMode() !== 'secure' || !currentAccount || currentAccount.offline || !_authUser) return;
   const stamp = lookStamp();
   if (stamp === _lookSent) return;
-  const s = loadSave(), id = currentAccount.id;
+  const id = currentAccount.id;
   const look = { name: myName, av: getMyAvatar(), at: SERVER_TIME };
   try {
-    await dbPatch('/profiles/' + id, look).catch(() => dbPut('/profiles/' + id, { ...look, xp: s.xp || 0, cleared: s.totalCleared || 0 }));
+    await dbPatch('/profiles/' + id, look).catch(() => putProfileFromAccount(id, look));
     _lookSent = stamp;
   } catch (e) {}
+}
+// Writing a whole profile needs xp + clears, and the rules cap them at what the account really has.
+// Take them from the account itself — publishing zeros would show everyone as a level 1 Newbie.
+async function putProfileFromAccount(id, look) {
+  let acc = null;
+  try { acc = await dbGet('/accounts/' + id); } catch (e) {}
+  const s = loadSave();
+  const xp = Math.min(s.xp || 0, (acc && acc.xp) || 0) || (acc && acc.xp) || 0;
+  const cleared = Math.min(s.totalCleared || 0, (acc && acc.totalCleared) || 0) || (acc && acc.totalCleared) || 0;
+  return dbPut('/profiles/' + id, { ...look, xp, cleared });
 }
 
 async function initAccount(onReady) {

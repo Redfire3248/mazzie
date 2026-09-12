@@ -61,7 +61,8 @@ let _wdT = null, _hiddenAt = 0;
 function onVis() {
   if (document.visibilityState === 'hidden') { _hiddenAt = Date.now(); return; }
   heartbeat();
-  if (typeof refreshPresence === 'function' && isScreen('friends')) refreshPresence();
+  if (typeof pollInbox === 'function') pollInbox();
+  if (typeof refreshPresence === 'function' && isScreen('friends')) refreshPresence(true);
   // Back from the background: the phone probably cut the streams — reconnect and catch up now
   if (_hiddenAt && Date.now() - _hiddenAt > 5000) reconnectLive();
   _hiddenAt = 0;
@@ -77,7 +78,7 @@ function reconnectLive() {
 // A stream is dead if it closed, or Firebase's keep-alive (sent about every 30 s) stopped arriving
 function watchStreams() {
   if (!_liveOn || document.visibilityState === 'hidden' || streamsPaused()) return;
-  const all = [_bcES, _trES, typeof _rqES !== 'undefined' ? _rqES : null, typeof _ivES !== 'undefined' ? _ivES : null];
+  const all = [_bcES, _trES];                       // friend requests and invites are polled, not streamed
   if (all.some(es => !es || es.readyState === 2 || Date.now() - (es._last || 0) > 100000)) reconnectLive();
 }
 
