@@ -21,8 +21,15 @@ function makeRng(seed) {
 
 const OBSTACLES_BY_DIFF = { baby: 0, easy: 1, medium: 2, hard: 3, expert: 5 };
 
+// ── Puzzle pieces: extra rules the player can switch on (solo picker / room modifiers) ──
+//   portal  two linked cells; stepping on one comes out the other (the path jumps there)
+//   oneway  a cell you may only enter from the side the solution uses
+//   locks   a locked cell that opens only once you have stepped on its key
+const PIECES = ['portal', 'oneway', 'locks'];
+const cleanPieces = list => (Array.isArray(list) ? list : []).filter(k => PIECES.includes(k));
+
 // → { path, nodeCells, obstacles, totalNodes, rng }
-function buildPuzzle({ rows, cols, baseNodes, level, diff, seed }) {
+function buildPuzzle({ rows, cols, baseNodes, level, diff, seed, pieces }) {
   const total = rows * cols;
   const nb = i => {
     const res = [], r = Math.floor(i / cols), c = i % cols;
@@ -61,11 +68,76 @@ function buildPuzzle({ rows, cols, baseNodes, level, diff, seed }) {
     const p2 = walk(corner, 8000);
     if (p2.length > path.length) path = p2;
   }
+  // ── Pieces ──
+  const man = (a, b) => Math.abs(Math.floor(a / cols) - Math.floor(b / cols)) + Math.abs(a % cols - b % cols);
+  const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  const want = new Set(cleanPieces(pieces));
+
+  // Portals: cut a chunk out of the walk — the two loose ends become a linked pair,
+  // so the solution now has to hop across the board. Cut cells just become hidden.
+  const portals = [];
+  if (want.has('portal')) {
+    const many = path.length >= 34 ? 2 : 1;
+    for (let p = 0; p < many && path.length >= 16; p++) {
+      for (let t = 0; t < 60; t++) {
+        const n = path.length;
+        const i = 3 + Math.floor(rng() * Math.max(1, n - 12));
+        const cut = 2 + Math.floor(rng() * Math.max(1, Math.min(7, Math.floor(n * 0.18))));
+        const j = i + cut + 1;
+        if (j > n - 4) continue;
+        const a = path[i], b = path[j];
+        if (man(a, b) < 3) continue;                                  // must be a real jump
+        if (portals.some(pr => pr.includes(a) || pr.includes(b))) continue;
+        const drop = path.slice(i + 1, j);
+        if (drop.some(c => portals.some(pr => pr.includes(c)))) continue;   // never cut away an earlier portal
+        path.splice(i + 1, cut);
+        portals.push([a, b]);
+        break;
+      }
+    }
+  }
   const onPath = new Set(path);
 
   // Numbered nodes spread evenly along the path (1 = start, last = end)
   const nodeCells = [];
   for (let i = 1; i <= totalNodes; i++) nodeCells.push(path[Math.floor(((i - 1) / (totalNodes - 1)) * (path.length - 1))]);
+
+  // One-way cells: only enterable from the side the solution came from
+  const nodeSet = new Set(nodeCells), taken = new Set(portals.flat());
+  const oneways = [];
+  if (want.has('oneway')) {
+    const cands = [];
+    for (let i = 2; i < path.length - 1; i++) {
+      if (nodeSet.has(path[i]) || taken.has(path[i]) || taken.has(path[i - 1])) continue;
+      if (man(path[i - 1], path[i]) !== 1) continue;                   // never straight after a portal hop
+      cands.push(i);
+    }
+    const max = Math.min(4, 1 + Math.floor(level / 7));
+    for (const i of shuffle(cands)) {
+      if (oneways.length >= max) break;
+      if (oneways.some(o => Math.abs(o.at - i) < 3)) continue;
+      oneways.push({ at: i, cell: path[i], from: path[i - 1] });
+      taken.add(path[i]);
+    }
+  }
+
+  // Locks: a cell that stays shut until you have stepped on its key (always earlier on the path)
+  const locks = [];
+  if (want.has('locks')) {
+    const free = i => !nodeSet.has(path[i]) && !taken.has(path[i]);
+    const many = path.length >= 30 ? 2 : 1;
+    for (let p = 0; p < many; p++) {
+      for (let t = 0; t < 60; t++) {
+        const li = 6 + Math.floor(rng() * Math.max(1, path.length - 7));
+        const ki = 1 + Math.floor(rng() * Math.max(1, li - 4));
+        if (li >= path.length || ki > li - 4) continue;
+        if (!free(li) || !free(ki)) continue;
+        locks.push({ lock: path[li], key: path[ki] });
+        taken.add(path[li]); taken.add(path[ki]);
+        break;
+      }
+    }
+  }
 
   // Obstacles: beside the path, never on it, never touching a node
   const obstacles = [];
@@ -81,5 +153,5 @@ function buildPuzzle({ rows, cols, baseNodes, level, diff, seed }) {
     for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
     obstacles.push(...cands.slice(0, maxObs));
   }
-  return { path, nodeCells, obstacles, totalNodes, rng };
+  return { path, nodeCells, obstacles, totalNodes, rng, portals, oneways: oneways.map(o => ({ cell: o.cell, from: o.from })), locks };
 }

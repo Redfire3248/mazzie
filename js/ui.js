@@ -20,7 +20,7 @@ function show(id) {
   document.body.dataset.screen = id;
   // Any real screen means loading is over (safety net for every sign-in path)
   document.getElementById('connecting').classList.add('hidden');
-  if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); }
+  if (id === 'menu') { updateDailyBtn(); _setupContinueBtn(); updateMenuProfile(); renderPiecesRow(); }
   if ((id === 'menu' || id === 'battle-mode') && typeof updateRejoinBtns === 'function') updateRejoinBtns();
   if ((id === 'lobby' || id === 'menu') && typeof heartbeat === 'function') heartbeat();   // friends see your room right away
   if (el && typeof fitText === 'function') { requestAnimationFrame(() => fitText(el)); setTimeout(() => fitText(el), 350); }   // shrink long titles to fit

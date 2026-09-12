@@ -1349,3 +1349,40 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .emote-rise.big{animation-duration:3.7s;}
 .er-watch{display:inline-flex;color:var(--cyan);margin-left:1px;}
 .er-watch .ic{width:11px;height:11px;}
+
+/* ── Puzzle pieces ── */
+.pieces-wrap{margin-top:10px;display:flex;flex-direction:column;gap:7px;}
+.pieces-lbl{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);}
+.pieces-lbl .ic{width:13px;height:13px;}
+.pieces-lbl small{text-transform:none;letter-spacing:.3px;opacity:.65;}
+.pieces-row{display:flex;gap:7px;flex-wrap:wrap;}
+.piece-chip{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border-radius:12px;background:var(--cell);border:1px solid var(--cb);color:var(--dim);font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s;}
+.piece-chip .ic{width:15px;height:15px;}
+.piece-chip.on{color:var(--acc);border-color:rgba(var(--acc-rgb),.55);background:linear-gradient(120deg,rgba(var(--acc-rgb),.16),var(--cell));}
+.piece-chip:active{transform:scale(.96);}
+/* Portals: a tinted ring, twins share a colour */
+.cell.portal{border-color:var(--pt)!important;box-shadow:inset 0 0 0 1px var(--pt),0 0 12px -2px var(--pt);}
+.cell.portal .pc-mark{color:var(--pt);animation:ptSpin 6s linear infinite;}
+@keyframes ptSpin{to{transform:rotate(360deg);}}
+.pc-mark{display:flex;align-items:center;justify-content:center;width:100%;height:100%;}
+.pc-mark .ic{width:58%;height:58%;}
+/* One-way: a bright arrow showing the only way in, plus a bar on that edge */
+.cell.oneway{border-color:rgba(var(--gold-rgb),.45)!important;}
+.cell.oneway::after{content:'';position:absolute;width:0;height:0;filter:drop-shadow(0 0 4px rgba(var(--gold-rgb),.8));}
+.cell.oneway::before{content:'';position:absolute;background:var(--gold);opacity:.75;border-radius:2px;}
+.cell.oneway[data-ow="up"]::after{top:3px;left:50%;margin-left:-7px;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:8px solid var(--gold);}
+.cell.oneway[data-ow="down"]::after{bottom:3px;left:50%;margin-left:-7px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid var(--gold);}
+.cell.oneway[data-ow="left"]::after{left:3px;top:50%;margin-top:-7px;border-top:7px solid transparent;border-bottom:7px solid transparent;border-right:8px solid var(--gold);}
+.cell.oneway[data-ow="right"]::after{right:3px;top:50%;margin-top:-7px;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:8px solid var(--gold);}
+.cell.oneway[data-ow="up"]::before{bottom:0;left:22%;right:22%;height:3px;}
+.cell.oneway[data-ow="down"]::before{top:0;left:22%;right:22%;height:3px;}
+.cell.oneway[data-ow="left"]::before{right:0;top:22%;bottom:22%;width:3px;}
+.cell.oneway[data-ow="right"]::before{left:0;top:22%;bottom:22%;width:3px;}
+.cell.oneway.active::after{filter:none;}
+/* Locks + keys */
+.cell.lock-cell .pc-mark{color:var(--danger);}
+.cell.lock-cell.shut{border-color:rgba(var(--danger-rgb),.5)!important;background:rgba(var(--danger-rgb),.07);}
+.cell.lock-cell:not(.shut) .pc-mark{color:var(--acc);opacity:.5;}
+.cell.key-cell .pc-mark{color:var(--gold);}
+.cell.key-cell.taken .pc-mark{opacity:.35;}
+.cell.active .pc-mark{color:#07070e;}

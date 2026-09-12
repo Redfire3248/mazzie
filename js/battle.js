@@ -235,9 +235,13 @@ const MODIFIERS = {
   mirror: { name: 'Mirror',        icon: 'mirror',  desc: 'Left and right are swapped' },
   spin:   { name: 'Spinning',      icon: 'spinner', desc: 'The board slowly turns' },
   ghost:  { name: 'Ghost Path',    icon: 'ghost',   desc: 'Your trail is invisible' },
-  fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is shown' }
+  fog:    { name: 'Fog',           icon: 'fog',     desc: 'Only the next number is shown' },
+  // Puzzle pieces (see PIECES in js/puzzle.js) — these change the board itself
+  portal: { name: 'Portals',       icon: 'orb',     desc: 'Two linked cells: step on one, come out the other' },
+  oneway: { name: 'One-Way',       icon: 'arrowR',  desc: 'Arrow cells can only be entered from one side' },
+  locks:  { name: 'Locks & Keys',  icon: 'lock',    desc: 'Locked cells open only once you take their key' }
 };
-const cleanMods = m => (Array.isArray(m) ? m : []).filter(k => MODIFIERS[k]).slice(0, 8);
+const cleanMods = m => (Array.isArray(m) ? m : []).filter(k => MODIFIERS[k]).slice(0, 12);
 function setMods(list) { battleMods = cleanMods(list); partyMode = battleMods.includes('events'); abilitiesEnabled = battleMods.includes('boosts'); }
 function toggleMod(k) {
   if (!isHost || !MODIFIERS[k]) return;
@@ -879,18 +883,23 @@ function renderMiniBoardForPlayer(pid) {
     const el = document.createElement('div');
     el.className = 'cell';
     el.style.width = el.style.height = cs + 'px';
+    if (portalMap.has(i)) { el.classList.add('portal'); el.style.setProperty('--pt', cells[i].style.getPropertyValue('--pt')); }
+    if (onewayFrom.has(i)) { el.classList.add('oneway'); el.dataset.ow = cells[i].dataset.ow; }
+    if (lockPairs.some(p => p.lock === i)) el.classList.add('lock-cell', ...(pSet.has(lockPairs.find(p => p.lock === i).key) ? [] : ['shut']));
+    if (lockPairs.some(p => p.key === i)) el.classList.add('key-cell');
     if (obstacleSet.has(i)) el.classList.add('obstacle');
     else if (!visible.has(i)) el.classList.add('hidden-cell');
     else if (i === head) el.classList.add('active', 'path-head');
     else if (pSet.has(i)) el.classList.add('active');
     const num = cells[i] && cells[i].dataset.num;
     if (num) { el.dataset.num = num; el.innerHTML = `<div class="node" style="font-size:${Math.max(8, Math.round(cs * 0.3))}px">${num}</div>`; }
+    else if (cells[i] && cells[i].querySelector('.pc-mark')) el.innerHTML = cells[i].innerHTML;
     frag.appendChild(el);
   }
   wrap.innerHTML = ''; wrap.appendChild(frag);
   if (path.length > 1) {
     const c = i => [pad + (i % cols) * (cs + gap) + cs / 2, pad + Math.floor(i / cols) * (cs + gap) + cs / 2];
-    const d = path.map((i, k) => (k ? 'L' : 'M') + c(i).join(' ')).join(' ');
+    const d = path.map((i, k) => (k && gridAdj(path[k - 1], i) ? 'L' : 'M') + c(i).join(' ')).join(' ');
     const W = pad * 2 + cols * cs + (cols - 1) * gap, Hh = pad * 2 + rows * cs + (rows - 1) * gap;
     const gid = 'spg' + String(pid).replace(/[^a-z0-9]/gi, '');
     const spin = t.spin ? `<animateTransform attributeName="gradientTransform" type="rotate" from="0 ${W / 2} ${Hh / 2}" to="360 ${W / 2} ${Hh / 2}" dur="3s" repeatCount="indefinite"/>` : '';

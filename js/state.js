@@ -25,6 +25,10 @@ let level = 1, timerInt, elapsedSec = 0, timerMs = 0, timerFrozen = false;
 let selfFreezeUntil = 0;
 let gLeft = 0, gTop = 0, boardOffX = 0, boardOffY = 0;
 let solutionPath = [];
+// ── Puzzle pieces on the current board ──
+let portalMap  = new Map();    // cell → its linked twin
+let onewayFrom = new Map();    // cell → the only cell you may enter it from
+let lockPairs  = [];           // [{ lock, key }]
 let dailyMode = false;
 
 // ── Boosts / abilities ──

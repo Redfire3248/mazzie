@@ -5,6 +5,27 @@
 // ── Entry points ──
 function randSeed() { return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0; }
 
+// ── Puzzle pieces the player picked (solo keeps its own list; rooms use the host's modifiers) ──
+function soloPieces() { try { return cleanPieces(JSON.parse(localStorage.getItem('mz_pieces') || '[]')); } catch (e) { return []; } }
+function setSoloPieces(list) { try { localStorage.setItem('mz_pieces', JSON.stringify(cleanPieces(list))); } catch (e) {} }
+function togglePiece(k) {
+  const cur = soloPieces();
+  const on = !cur.includes(k);
+  setSoloPieces(on ? [...cur, k] : cur.filter(x => x !== k));
+  renderPiecesRow(); sfx('tap');
+  if (on && MODIFIERS[k]) pushToast(MODIFIERS[k].name + ': ' + MODIFIERS[k].desc, 'info', MODIFIERS[k].icon);
+}
+// The daily board must be identical for everybody, so it never takes pieces
+function activePieces() { return battleActive ? cleanPieces(battleMods) : dailyMode ? [] : soloPieces(); }
+function renderPiecesRow() {
+  const row = document.getElementById('pieces-row'); if (!row) return;
+  const on = soloPieces();
+  row.innerHTML = PIECES.map(k => {
+    const m = MODIFIERS[k];
+    return `<button class="piece-chip${on.includes(k) ? ' on' : ''}" onclick="togglePiece('${k}')" title="${m.desc}">${ic(m.icon)}<span>${m.name}</span></button>`;
+  }).join('');
+}
+
 function startFresh(diff) {
   dailyMode = false; level = 1;
   initialSeed = randSeed();
@@ -136,6 +157,7 @@ function generate() {
   g.innerHTML = ''; g.classList.remove('fogged', 'frosted');
   cells = []; hiddenSet.clear(); pathIndices = []; pathSet = new Set(); curHigh = 0;
   solutionPath = []; obstacleSet = new Set(); pickupMap = new Map();
+  portalMap = new Map(); onewayFrom = new Map(); lockPairs = [];
   inputLockedUntil = 0; shieldUntil = 0; _headEl = null;
   initSvg();
   g.style.gridTemplateColumns = `repeat(${cols},${cellSize}px)`;
@@ -154,7 +176,7 @@ function generate() {
   const seed = battleActive
     ? (battleSeed ^ Math.imul(battleRound, 0x9e3779b9)) >>> 0
     : (initialSeed ^ Math.imul(level, 0x6c62272e)) >>> 0;
-  const pz = buildPuzzle({ rows, cols, baseNodes, level, diff: currentDiff, seed });   // js/puzzle.js
+  const pz = buildPuzzle({ rows, cols, baseNodes, level, diff: currentDiff, seed, pieces: activePieces() });   // js/puzzle.js
   const path = pz.path, nodeCells = pz.nodeCells, rng = pz.rng;
   totalNodes    = pz.totalNodes;
   solvableCount = path.length;
@@ -171,6 +193,9 @@ function generate() {
     cells[ci].dataset.num = k + 1;
     cells[ci].innerHTML   = `<div class="node">${k + 1}</div>`;
   });
+
+  // ── Puzzle pieces ──
+  buildPieces(pz);
 
   // ── Boost pickups (same seed → same spots for every racer) ──
   if (boostsActive()) placePickups(rng, path, new Set(nodeCells));
@@ -247,10 +272,18 @@ function isAdj(a, b) {
   return Math.abs(Math.floor(a / cols) - Math.floor(b / cols)) + Math.abs(a % cols - b % cols) === 1;
 }
 
+// Portals count as neighbours; everything else still has to be next door
+function isLinked(a, b) { return isAdj(a, b) || (portalMap.get(a) === b && !obstacleSet.has(b)); }
+const gridAdj = (a, b) => Math.abs(Math.floor(a / cols) - Math.floor(b / cols)) + Math.abs(a % cols - b % cols) === 1;
+function lockKeyOf(c) { const p = lockPairs.find(x => x.lock === c); return p ? p.key : -1; }
+
 // Can the path legally step from the current head onto `to`?
 function canStep(to) {
   const h = headIdx();
-  if (h < 0 || to < 0 || to >= cells.length || !isAdj(h, to)) return false;
+  if (h < 0 || to < 0 || to >= cells.length || !isLinked(h, to)) return false;
+  if (onewayFrom.has(to) && onewayFrom.get(to) !== h) return false;          // one-way: wrong side
+  const key = lockKeyOf(to);
+  if (key >= 0 && !pathSet.has(key)) return false;                            // locked: key not taken yet
   if (hiddenSet.has(to) || obstacleSet.has(to) || pathSet.has(to)) return false;
   const v = cellNum(to);
   if (v && v !== curHigh + 1) return false;
@@ -262,6 +295,12 @@ function canStep(to) {
 // Try to walk from head to `target`, filling in cells a fast swipe skipped.
 function tryReach(target) {
   const h = headIdx(); if (h < 0) return false;
+  // Portal hop: the twin is across the board, so step straight onto it
+  if (portalMap.get(h) === target) {
+    if (!canStep(target)) return false;
+    push(target, true); if (checkWin()) return true;
+    sfx('ability'); afterPathChange(); return true;
+  }
   const hr = Math.floor(h / cols), hc = h % cols, tr = Math.floor(target / cols), tc = target % cols;
   const dr = tr - hr, dc = tc - hc;
   if (Math.abs(dr) + Math.abs(dc) > 5) return false;
@@ -355,7 +394,15 @@ function pop(batch) {
 }
 function undoStep() { if (!canPlay() || pathIndices.length === 0) return; pop(); sfx('back'); }
 
-function afterPathChange() { updateHead(); redrawPath(); updateFillBar(); queueProgress(); markNextNode(); }
+function afterPathChange() { updateHead(); redrawPath(); updateFillBar(); queueProgress(); markNextNode(); refreshLocks(); }
+// Locked cells open the moment their key is on your trail (and shut again if you back over it)
+function refreshLocks() {
+  lockPairs.forEach(p => {
+    const open = pathSet.has(p.key);
+    if (cells[p.lock]) cells[p.lock].classList.toggle('shut', !open);
+    if (cells[p.key])  cells[p.key].classList.toggle('taken', open);
+  });
+}
 // Fog modifier: only the next number stays readable
 function markNextNode() {
   document.querySelectorAll('#grid .cell.next-node').forEach(c => c.classList.remove('next-node'));
@@ -433,7 +480,7 @@ function cellCenter(idx) {
 function pathD(list) {
   if (list.length < 2) return '';
   let d = '';
-  list.forEach((idx, i) => { const p = cellCenter(idx); d += (i ? ' L' : 'M') + p.x + ',' + p.y; });
+  list.forEach((idx, i) => { const p = cellCenter(idx); d += (i && gridAdj(list[i - 1], idx) ? ' L' : (i ? ' M' : 'M')) + p.x + ',' + p.y; });
   return d;
 }
 let _drawQueued = false;
@@ -637,3 +684,36 @@ function onViewportResize() {
 }
 window.addEventListener('resize', onViewportResize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
+
+// ══════════════════════════════════════════════════
+// PUZZLE PIECES — draw them on the board (rules live in canStep / tryReach)
+// ══════════════════════════════════════════════════
+const PORTAL_TINTS = ['#c084fc', '#48dbfb'];
+function dirOf(from, to) {
+  if (to === from - cols) return 'up';
+  if (to === from + cols) return 'down';
+  return to === from - 1 ? 'left' : 'right';
+}
+function buildPieces(pz) {
+  (pz.portals || []).forEach((pair, k) => {
+    const [a, b] = pair;
+    portalMap.set(a, b); portalMap.set(b, a);
+    pair.forEach(c => {
+      const el = cells[c]; if (!el) return;
+      el.classList.add('portal');
+      el.style.setProperty('--pt', PORTAL_TINTS[k % PORTAL_TINTS.length]);
+      if (!el.dataset.num) el.innerHTML = '<div class="pc-mark">' + ic('orb') + '</div>';
+    });
+  });
+  (pz.oneways || []).forEach(o => {
+    onewayFrom.set(o.cell, o.from);
+    const el = cells[o.cell]; if (!el) return;
+    el.classList.add('oneway');
+    el.dataset.ow = dirOf(o.from, o.cell);
+  });
+  (pz.locks || []).forEach(p => {
+    lockPairs.push(p);
+    if (cells[p.lock]) { cells[p.lock].classList.add('lock-cell', 'shut'); if (!cells[p.lock].dataset.num) cells[p.lock].innerHTML = '<div class="pc-mark">' + ic('lock') + '</div>'; }
+    if (cells[p.key])  { cells[p.key].classList.add('key-cell');           if (!cells[p.key].dataset.num)  cells[p.key].innerHTML  = '<div class="pc-mark">' + ic('key')  + '</div>'; }
+  });
+}
