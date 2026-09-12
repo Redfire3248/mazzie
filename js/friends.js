@@ -105,6 +105,7 @@ async function refreshPresence(full) {
 async function refreshFriendsNow(btn) {
   if (!friendsReady()) { pushToast('Sign in online to see friends', 'warn'); return; }
   if (btn) btn.classList.add('spin');
+  if (typeof clearDenyCache === 'function') clearDenyCache();
   _profiles = {};                                   // forget what we had and read it all again
   await refreshPresence(true);
   if (btn) setTimeout(() => btn.classList.remove('spin'), 400);

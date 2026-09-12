@@ -31,6 +31,21 @@ function authMode(){ return !fbUrl() ? 'local' : fbCfg() ? 'secure' : 'legacy'; 
 // Signed out of a secure database? Every call would come back 401, so don't make it.
 // (That flood of 401s was also what stopped friends' profiles from ever loading.)
 let _signedOut = false, _deniedRow = 0;
+// A path the rules refuse stays refused until the rules change — stop asking for a while
+// instead of firing the same doomed request every few seconds (that was the 401 flood).
+const _denyUntil = {}, DENY_COOLDOWN_MS = 5 * 60000;
+const denyKey = p => '/' + String(p || '').split('/')[1];
+let _rulesWarned = false;
+// Checking what is wrong, or a refresh the player asked for, must never be throttled
+function clearDenyCache() { Object.keys(_denyUntil).forEach(k => delete _denyUntil[k]); _rulesWarned = false; }
+function warnStaleRules(path) {
+  if (_rulesWarned) return;
+  _rulesWarned = true;
+  console.warn('MAZZIE: the database refused ' + path + ' even though you are signed in. '
+    + 'Your published rules are older than this version of the game. '
+    + 'Fix: Firebase console -> Realtime Database -> Rules -> paste database.rules.json from the repo -> Publish.');
+  pushToast('Friend profiles are blocked by your database rules — see the console', 'warn', 'alert');
+}
 const isMyPath = p => !!(currentAccount && currentAccount.id && new RegExp('^/(accounts|profiles|online)/' + currentAccount.id + '(/|$)').test(p));
 function markSignedOut() {
   if (_signedOut) return;
@@ -50,6 +65,7 @@ async function dbUrl(path, force) {
 const DB_TIMEOUT_MS = 9000;
 async function dbReq(method, path, data, retried) {
   if (!fbUrl()) throw new Error('NO_CONFIG');
+  if (Date.now() < (_denyUntil[denyKey(path)] || 0)) throw new Error('DENIED');   // still in the doghouse
   let r;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const t = ctl ? setTimeout(() => ctl.abort(), DB_TIMEOUT_MS) : null;
@@ -62,8 +78,10 @@ async function dbReq(method, path, data, retried) {
   }
   finally { if (t) clearTimeout(t); }
   if (r.status === 401 || r.status === 403) {
-    // A stale ID token looks exactly like this. Ask for a fresh one and try once more.
-    if (!retried && _authUser) return dbReq(method, path, data, true);
+    // A stale ID token looks like this too, but only for your OWN data — for anything else
+    // a refusal is the rules talking, and a fresh token will not change their mind.
+    if (!retried && _authUser && isMyPath(path)) return dbReq(method, path, data, true);
+    if (_authUser) { _denyUntil[denyKey(path)] = Date.now() + DENY_COOLDOWN_MS; warnStaleRules(path); }
     // Only your OWN data being refused means the session is gone; being refused
     // someone else's account is just the rules doing their job.
     if (isMyPath(path) && ++_deniedRow >= 2) markSignedOut();

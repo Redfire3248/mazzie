@@ -151,6 +151,7 @@ const CMDS = {
     if (r.missing.length) tWarn('an old copy is cached — hard-refresh (Ctrl+Shift+R)');
   } },
   doctor: { desc:'Check why admin tools might be refused', async run() {
+    clearDenyCache();                       // diagnose for real, never from a cached refusal
     const mode = authMode();
     tInfo('auth mode      ' + mode);
     if (mode !== 'secure') return tWarn('admin tools need secure mode (firebaseConfig.apiKey in config.js)');
@@ -169,7 +170,7 @@ const CMDS = {
       termPrint('       inside it add   ' + key + ' : true   (dots become commas)', 'dim');
     }
     if (!dbAdmin) return;
-    const checks = [['/online', 'online list'], ['/broadcast', 'world messages'], ['/gifts/' + currentAccount.id, 'gift inbox'], ['/friends/' + currentAccount.id, 'friends list'], ['/friendReq/' + currentAccount.id, 'friend requests'], ['/invites/' + currentAccount.id, 'room invites']];
+    const checks = [['/online', 'online list'], ['/broadcast', 'world messages'], ['/gifts/' + currentAccount.id, 'gift inbox'], ['/friends/' + currentAccount.id, 'friends list'], ['/friendReq/' + currentAccount.id, 'friend requests'], ['/invites/' + currentAccount.id, 'room invites'], ['/profiles/' + currentAccount.id, 'player profiles']];
     let stale = false;
     for (const [p, what] of checks) {
       try { await dbGet(p); tOk('rules: ' + pad(what, 14) + 'ok'); }
