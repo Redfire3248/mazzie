@@ -119,7 +119,7 @@ function renderCrates() {
   const el = document.getElementById('store-crates'); if (!el) return;
   const gifts = giftList();
   el.innerHTML =
-      (gifts.length ? `<button class="key-banner gift" onclick="openGift()">${ic('gift')}<span><b>${gifts.length} gift${gifts.length > 1 ? 's' : ''} waiting</b><small>From ${escapeHtml(gifts[0].fromName)}${gifts.length > 1 ? ' and others' : ''} · tap to open</small></span>${ic('chevR')}</button>` : '')
+      (gifts.length ? `<button class="key-banner gift" onclick="openAllGifts()">${ic('gift')}<span><b>${gifts.length} gift${gifts.length > 1 ? 's' : ''} waiting</b><small>From ${escapeHtml(gifts[0].fromName)}${gifts.length > 1 ? ' and others' : ''} · tap to open ${gifts.length > 1 ? 'them all' : ''}</small></span>${ic('chevR')}</button>` : '')
     + Object.entries(CRATES).filter(([id]) => crateVisible(id)).map(([id, c]) => { const k = getKeys(id), cost = crateCost(id, 1); return `
       <button class="crate-card t-${c.tone}" onclick="openCrateSheet('${id}')">
         ${k ? `<span class="crate-keys">${ic('key')}${k}</span>` : ''}
@@ -425,7 +425,7 @@ function finishReveal(ctx) {
     `<button class="btn secondary" onclick="closeCrate()">Close</button>`
     + (n === 1 && !best.dupe ? `<button class="btn secondary" onclick="equipDrop('${best.set}','${best.item.id}')">${ic('check')}Equip</button>` : '')
     + (ctx.again() ? `<button class="btn primary" onclick="openCrates('${id}',${n},{})">${ic('refresh')}Again</button>` : '')
-    + (opts.gift && giftList().length ? `<button class="btn primary" onclick="openGift()">${ic('gift')}Next gift</button>` : '');
+    + (opts.gift && giftList().length ? `<button class="btn primary" onclick="${giftList().length > 1 ? 'openAllGifts()' : 'openGift()'}">${ic('gift')}${giftList().length > 1 ? 'Open all ' + giftList().length : 'Next gift'}</button>` : '');
   _crateBusy = false;
 }
 function closeCrate() {
@@ -455,16 +455,19 @@ const giftList = () => Object.entries(_gifts).map(([id, g]) => ({ id, ...g })).f
 function onGiftsChanged(all) {
   const prev = _gifts;
   _gifts = all && typeof all === 'object' ? all : {};
-  Object.entries(_gifts).forEach(([id, g]) => {
-    if (prev[id] || !g || !CRATES[g.crate]) return;
+  // Ten gifts at once used to mean ten popups — announce the whole batch in one go instead
+  const fresh = Object.entries(_gifts).filter(([id, g]) => !prev[id] && g && CRATES[g.crate]).map(([, g]) => g);
+  if (fresh.length) {
+    const names = [...new Set(fresh.map(g => cleanName(g.fromName || 'Someone')))];
+    const who = names.length === 1 ? names[0] : names.length === 2 ? names.join(' and ') : names[0] + ' and ' + (names.length - 1) + ' others';
+    const msg = fresh.find(g => g.msg);
+    const what = fresh.length === 1 ? CRATES[fresh[0].crate].name : fresh.length + ' crates';
     sfx('reward'); buzz([20, 40, 20]);
-    const who = cleanName(g.fromName || 'Someone');
-    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + who, title: CRATES[g.crate].name,
-      sub: g.msg ? '"' + String(g.msg).slice(0, 60) + '"' : 'Open it from your Inbox', ms: 5000 });
-    // A line that stays put too, so a gift is never missed while you are mid-board
-    pushToast(who + ' sent you a ' + CRATES[g.crate].name + (g.msg ? ' — "' + String(g.msg).slice(0, 40) + '"' : ''), 'acc', 'gift');
-    if (typeof addChatMsg === 'function' && typeof inBattleSession === 'function' && inBattleSession()) addChatMsg(who + ' sent you a gift', null, true);
-  });
+    showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + who, title: what,
+      sub: msg ? '"' + String(msg.msg).slice(0, 60) + '"' : 'Open them from your Inbox', ms: 5000 });
+    pushToast(who + ' sent you ' + what + (msg ? ' — "' + String(msg.msg).slice(0, 40) + '"' : ''), 'acc', 'gift');
+    if (typeof addChatMsg === 'function' && typeof inBattleSession === 'function' && inBattleSession()) addChatMsg(who + ' sent you ' + what, null, true);
+  }
   if (isScreen('store')) renderCrates();
   if (isScreen('inbox')) renderInbox();
   updateInboxBadge();
@@ -497,8 +500,48 @@ function renderInbox() {
         ${g.msg ? `<em class="ib-msg">"${escapeHtml(String(g.msg).slice(0, 60))}"</em>` : ''}</span>
       <span class="ib-open">${ic('gift')}Open</span>
     </button>`;
-  }).join('') + (gifts.length > 1 ? `<button class="btn primary ib-all" onclick="openGiftById('${gifts[0].id}')">${ic('gift')}Open them one by one</button>` : '');
+  }).join('') + (gifts.length > 1 ? `<button class="btn primary ib-all" onclick="openAllGifts()">${ic('gift')}Open all ${gifts.length}</button>` : '');
   hydrateIcons(box);
+}
+// Every waiting gift in one opening — however many, whatever crates they came from
+async function openAllGifts() {
+  if (_crateBusy) return;
+  const gifts = giftList(); if (!gifts.length) return;
+  if (gifts.length === 1) return openGiftById(gifts[0].id);
+  if (!isScreen('store')) openStore();
+  const del = {};
+  gifts.forEach(g => { del['gifts/' + currentAccount.id + '/' + g.id] = null; });
+  try { await dbPatch('/', del); }
+  catch (e) { pushToast('Could not open them — check your internet', 'warn'); return; }
+  gifts.forEach(g => delete _gifts[g.id]);
+  updateInboxBadge();
+
+  // Roll every gift against its own crate, then show them together
+  const drops = [];
+  gifts.forEach(g => {
+    const crate = CRATES[g.crate], pool = cratePool(crate);
+    const pre = g.item ? String(g.item).split(':') : null;
+    const preItem = pre && COSMETIC_SETS[pre[0]] && _find(COSMETIC_SETS[pre[0]], pre[1]);
+    if (preItem) { grantItem(pre[0], preItem.id); drops.push({ set: pre[0], item: preItem, rar: rarityOf(preItem).id, dupe: false, refund: 0 }); return; }
+    const d = rollWithPity(crate, pool, g.crate);
+    const rar = rarityOf(d.item).id, dupe = isUnlocked(d.item, d.set), refund = dupe ? DUPE_REFUND[rar] : 0;
+    if (dupe) addCoins(refund); else grantItem(d.set, d.item.id);
+    drops.push({ ...d, rar, dupe, refund });
+  });
+  writeSave({ cratesOpened: (loadSave().cratesOpened | 0) + gifts.length });
+  updateCoinUI(); syncAccountToCloud().catch(() => {});
+
+  const names = [...new Set(gifts.map(g => cleanName(g.fromName || 'Someone')))];
+  const crate = CRATES[gifts[gifts.length - 1].crate];
+  _crateBusy = true;
+  const ctx = window._crateCtx = {
+    id: gifts[0].crate, n: gifts.length, opts: { gift: true, all: true },
+    crate: { ...crate, name: 'Gifts' }, pool: cratePool(crate), drops,
+    payNote: 'From ' + (names.length > 2 ? names.slice(0, 2).join(', ') + ' +' + (names.length - 2) : names.join(' & ')),
+    again: () => false
+  };
+  if (quickOpen() || gifts.length > 10) showGrid(ctx, true); else showStack(ctx);
+  renderInbox();
 }
 function openGiftById(id) {
   const g = giftList().find(x => x.id === id) || giftList()[0];
