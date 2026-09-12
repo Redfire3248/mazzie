@@ -100,16 +100,20 @@ function useAbility(kind) {
       return true;
     }
     case 'dash': {
-      const k = matchedPrefix();
-      while (pathIndices.length > k) pop(true);
-      if (pathIndices.length === 0) push(solutionPath[0], true);
+      // Only ever goes forward: it never rewinds a path that took its own route
+      if (!pathIndices.length) { const one = cells.findIndex(c => c.dataset.num === '1'); if (one >= 0) push(one, true); }
       let n = 0;
-      while (n < 4 && pathIndices.length < solutionPath.length) {
-        const next = solutionPath[pathIndices.length];
-        if (!canStep(next)) break;
+      while (n < 4) {
+        const h = headIdx(); if (h < 0) break;
+        // The step the solution takes from here, if that still works; otherwise any legal step
+        const hi = solutionPath.indexOf(h);
+        const wanted = hi >= 0 ? solutionPath[hi + 1] : undefined;
+        const next = (wanted !== undefined && canStep(wanted)) ? wanted : nbrs(h).find(c => canStep(c));
+        if (next === undefined) break;
         push(next, true); n++;
         if (checkWin()) return true;
       }
+      if (!n) { pushToast('Nowhere to dash from here', 'warn', 'bolt'); return false; }   // not used up
       afterPathChange();
       document.getElementById('grid').classList.add('dashing');
       setTimeout(() => document.getElementById('grid').classList.remove('dashing'), 400);
