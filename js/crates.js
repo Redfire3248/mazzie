@@ -119,7 +119,8 @@ function renderCrates() {
   const el = document.getElementById('store-crates'); if (!el) return;
   const gifts = giftList();
   el.innerHTML =
-      (gifts.length ? `<button class="key-banner gift" onclick="openAllGifts()">${ic('gift')}<span><b>${gifts.length} gift${gifts.length > 1 ? 's' : ''} waiting</b><small>From ${escapeHtml(gifts[0].fromName)}${gifts.length > 1 ? ' and others' : ''} · tap to open ${gifts.length > 1 ? 'them all' : ''}</small></span>${ic('chevR')}</button>` : '')
+      (gifts.length ? (() => { const gr = giftGroups(); const who = escapeHtml(cleanName(gr[0].fromName || 'someone'));
+        return `<button class="key-banner gift" onclick="openAllGifts()">${ic('gift')}<span><b>${gifts.length} crate${gifts.length > 1 ? 's' : ''} waiting</b><small>From ${who}${gr.length > 1 ? ' and others' : ''} · tap to open${gifts.length > 1 ? ' them all' : ''}</small></span>${ic('chevR')}</button>`; })() : '')
     + Object.entries(CRATES).filter(([id]) => crateVisible(id)).map(([id, c]) => { const k = getKeys(id), cost = crateCost(id, 1); return `
       <button class="crate-card t-${c.tone}" onclick="openCrateSheet('${id}')">
         ${k ? `<span class="crate-keys">${ic('key')}${k}</span>` : ''}
@@ -450,18 +451,50 @@ function equipDrop(set, id) {
 // ══════════════════════════════════════════════════
 let _gifts = {};
 const giftList = () => Object.entries(_gifts).map(([id, g]) => ({ id, ...g })).filter(g => CRATES[g.crate]).sort((a, b) => a.at - b.at);
+// The rules charge for one crate per write, so "gift 5 crates" really is five records.
+// To the player that is one present, so they are grouped by sender + crate + message.
+function giftGroups() {
+  const by = new Map();
+  giftList().forEach(g => {
+    const key = (g.from || g.fromName || '?') + '|' + g.crate + '|' + (g.msg || '') + '|' + (g.item ? g.item : '');
+    if (!by.has(key)) by.set(key, { key, crate: g.crate, from: g.from, fromName: g.fromName, msg: g.msg, at: g.at, gifts: [] });
+    const grp = by.get(key);
+    grp.gifts.push(g);
+    grp.at = Math.min(grp.at, g.at || grp.at);
+  });
+  return [...by.values()].sort((a, b) => a.at - b.at);
+}
 
 // Called by live.js whenever /gifts/<me> changes
+let _giftAnnounceT = null, _giftQueue = [];
 function onGiftsChanged(all) {
   const prev = _gifts;
   _gifts = all && typeof all === 'object' ? all : {};
-  // Ten gifts at once used to mean ten popups — announce the whole batch in one go instead
-  const fresh = Object.entries(_gifts).filter(([id, g]) => !prev[id] && g && CRATES[g.crate]).map(([, g]) => g);
-  if (fresh.length) {
+  // Five crates arrive as five separate writes, each waking this up. Collect them for a
+  // moment and announce the lot once, instead of five popups in a row.
+  const justIn = Object.entries(_gifts).filter(([id, g]) => !prev[id] && g && CRATES[g.crate]).map(([, g]) => g);
+  if (justIn.length) {
+    _giftQueue.push(...justIn);
+    clearTimeout(_giftAnnounceT);
+    _giftAnnounceT = setTimeout(announceGifts, 1200);
+  }
+  if (isScreen('store')) renderCrates();
+  if (isScreen('inbox')) renderInbox();
+  updateInboxBadge();
+  const si = document.getElementById('store-info');
+  if (si && giftList().length) { si.innerText = giftList().length + ' gift' + (giftList().length > 1 ? 's' : '') + '!'; si.classList.add('done'); }
+}
+function announceGifts() {
+  const fresh = _giftQueue; _giftQueue = [];
+  if (!fresh.length) return;
+  {
     const names = [...new Set(fresh.map(g => cleanName(g.fromName || 'Someone')))];
     const who = names.length === 1 ? names[0] : names.length === 2 ? names.join(' and ') : names[0] + ' and ' + (names.length - 1) + ' others';
     const msg = fresh.find(g => g.msg);
-    const what = fresh.length === 1 ? CRATES[fresh[0].crate].name : fresh.length + ' crates';
+    const kinds = new Set(fresh.map(g => g.crate));
+    const what = fresh.length === 1 ? CRATES[fresh[0].crate].name
+      : kinds.size === 1 ? fresh.length + ' × ' + CRATES[fresh[0].crate].name
+      : fresh.length + ' crates';
     sfx('reward'); buzz([20, 40, 20]);
     showReward({ icon: 'gift', tone: 'gold', kicker: 'Gift from ' + who, title: what,
       sub: msg ? '"' + String(msg.msg).slice(0, 60) + '"' : 'Open them from your Inbox', ms: 5000 });
@@ -469,11 +502,6 @@ function onGiftsChanged(all) {
     if (typeof notifyUser === 'function') notifyUser('MAZZIE', who + ' sent you ' + what, 'gift');
     if (typeof addChatMsg === 'function' && typeof inBattleSession === 'function' && inBattleSession()) addChatMsg(who + ' sent you ' + what, null, true);
   }
-  if (isScreen('store')) renderCrates();
-  if (isScreen('inbox')) renderInbox();
-  updateInboxBadge();
-  const si = document.getElementById('store-info');
-  if (si && giftList().length) { si.innerText = giftList().length + ' gift' + (giftList().length > 1 ? 's' : '') + '!'; si.classList.add('done'); }
 }
 // ══════════════════════════════════════════════════
 // INBOX — every gift waiting for you, with who sent it
@@ -488,26 +516,33 @@ function openInbox() { if (typeof pollGifts === 'function') pollGifts(); show('i
 function renderInbox() {
   const box = document.getElementById('inbox-list'); if (!box) return;
   const gifts = giftList();
-  document.getElementById('inbox-count').innerText = gifts.length ? gifts.length + ' waiting' : '';
+  document.getElementById('inbox-count').innerText = gifts.length ? gifts.length + ' crate' + (gifts.length > 1 ? 's' : '') + ' waiting' : '';
   if (!gifts.length) {
     box.innerHTML = `<div class="search-empty">${ic('mail')}Nothing here yet. Gifts from other players land in this box.</div>`;
     return;
   }
-  box.innerHTML = gifts.map(g => {
-    const c = CRATES[g.crate];
-    return `<button class="inbox-row t-${c.tone}" onclick="openGiftById('${g.id}')">
-      <span class="ib-art">${crateArt(c.tone)}</span>
-      <span class="ib-txt"><b>${escapeHtml(c.name)}</b><small>from ${escapeHtml(cleanName(g.fromName || 'someone'))}${g.at ? ' · ' + ago(Date.now() - g.at) : ''}</small>
-        ${g.msg ? `<em class="ib-msg">"${escapeHtml(String(g.msg).slice(0, 60))}"</em>` : ''}</span>
-      <span class="ib-open">${ic('gift')}Open</span>
+  const groups = giftGroups();
+  box.innerHTML = groups.map(grp => {
+    const c = CRATES[grp.crate], n = grp.gifts.length;
+    return `<button class="inbox-row t-${c.tone}" onclick="openGiftGroup('${escapeHtml(grp.key)}')">
+      <span class="ib-art">${crateArt(c.tone)}${n > 1 ? `<b class="ib-n">×${n}</b>` : ''}</span>
+      <span class="ib-txt"><b>${escapeHtml(c.name)}${n > 1 ? ' × ' + n : ''}</b><small>from ${escapeHtml(cleanName(grp.fromName || 'someone'))}${grp.at ? ' · ' + ago(Date.now() - grp.at) : ''}</small>
+        ${grp.msg ? `<em class="ib-msg">"${escapeHtml(String(grp.msg).slice(0, 60))}"</em>` : ''}</span>
+      <span class="ib-open">${ic('gift')}Open${n > 1 ? ' all' : ''}</span>
     </button>`;
-  }).join('') + (gifts.length > 1 ? `<button class="btn primary ib-all" onclick="openAllGifts()">${ic('gift')}Open all ${gifts.length}</button>` : '');
+  }).join('') + (groups.length > 1 ? `<button class="btn primary ib-all" onclick="openAllGifts()">${ic('gift')}Open everything (${gifts.length})</button>` : '');
   hydrateIcons(box);
 }
 // Every waiting gift in one opening — however many, whatever crates they came from
-async function openAllGifts() {
+function openGiftGroup(key) {
+  const grp = giftGroups().find(g => g.key === key) || giftGroups()[0];
+  if (!grp) return;
+  return openGiftSet(grp.gifts);
+}
+async function openAllGifts() { return openGiftSet(giftList()); }
+async function openGiftSet(gifts) {
   if (_crateBusy) return;
-  const gifts = giftList(); if (!gifts.length) return;
+  if (!gifts || !gifts.length) return;
   if (gifts.length === 1) return openGiftById(gifts[0].id);
   if (!isScreen('store')) openStore();
   const del = {};
@@ -533,11 +568,12 @@ async function openAllGifts() {
   updateCoinUI(); syncAccountToCloud().catch(() => {});
 
   const names = [...new Set(gifts.map(g => cleanName(g.fromName || 'Someone')))];
+  const kinds = new Set(gifts.map(g => g.crate));
   const crate = CRATES[gifts[gifts.length - 1].crate];
   _crateBusy = true;
   const ctx = window._crateCtx = {
     id: gifts[0].crate, n: gifts.length, opts: { gift: true, all: true },
-    crate: { ...crate, name: 'Gifts' }, pool: cratePool(crate), drops,
+    crate: { ...crate, name: kinds.size === 1 ? crate.name : 'Gifts' }, pool: cratePool(crate), drops,
     payNote: 'From ' + (names.length > 2 ? names.slice(0, 2).join(', ') + ' +' + (names.length - 2) : names.join(' & ')),
     again: () => false
   };

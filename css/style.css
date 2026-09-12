@@ -1550,3 +1550,7 @@ button.fr-ava,button.fr-txt{text-align:left;}
 .install-btn .ib-txt b{font-size:13px;}
 .install-btn .ib-txt small{font-family:var(--mono);font-size:10px;color:var(--dim);}
 #set-install-btn[disabled]{opacity:.5;}
+
+/* How many crates are in one present */
+.ib-art{position:relative;}
+.ib-n{position:absolute;right:-3px;bottom:-3px;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 4px;border-radius:7px;background:var(--gold);color:#07070e;}
